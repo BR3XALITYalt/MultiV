@@ -34,6 +34,7 @@ BASE_URL = "https://txity.radiodiscussion.org"
 CONTROL_URL = "wss://txity.radiodiscussion.org/ws/control"
 USER_AGENT = "TXITPY/0.1 (+https://github.com/BR3XALITYalt/TXITPY)"
 HTTP_TIMEOUT = 12
+MAX_STATION_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 @dataclass(slots=True)
@@ -423,6 +424,28 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
     return metrics, stations
 
 
+def fetch_station_image(url: str) -> bytes:
+    """Fetch a bounded image from an approved TXITY or Discord media host."""
+    safe_url = normalize_media_url(url)
+    if not safe_url:
+        raise ValueError("Station image URL is not from an approved host.")
+
+    request = Request(
+        safe_url,
+        headers={"User-Agent": USER_AGENT, "Accept": "image/*"},
+    )
+    with urlopen(request, timeout=HTTP_TIMEOUT) as response:
+        if not normalize_media_url(response.geturl()):
+            raise ValueError("Station image redirected to an unsupported host.")
+        content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
+        if not content_type.startswith("image/"):
+            raise ValueError("Station media URL did not return an image.")
+        data = response.read(MAX_STATION_IMAGE_BYTES + 1)
+        if len(data) > MAX_STATION_IMAGE_BYTES:
+            raise ValueError("Station image is larger than the 5 MB limit.")
+        return data
+
+
 def describe_status_socket_error(error: BaseException) -> str:
     """Describe a WebSocket failure without exposing credentials in its URL."""
     details = re.sub(
@@ -729,14 +752,17 @@ def build_app() -> None:
     auth_restore_started = False
     auth_enabled = False
     users_listing_received = False
-    station_rows: list[dict[str, str]] = []
-    station_tree: ttk.Treeview | None = None
+    station_rows: list[dict[str, Any]] = []
     station_search_var = tk.StringVar(root, "")
+    station_cards_frame: tk.Frame | None = None
+    selected_station_id = ""
+    image_cache: dict[tuple[str, int], Any] = {}
+    image_loading: set[str] = set()
+    image_labels: dict[str, list[tuple[tk.Label, int]]] = {}
     current_page = "overview"
     shell_frame: tk.Frame | None = None
     content_frame: tk.Frame | None = None
     nav_frame: tk.Frame | None = None
-    auth_status_label: tk.Label | None = None
 
     def apply_current_theme() -> None:
         nonlocal palette
@@ -835,6 +861,101 @@ def build_app() -> None:
             radius=20,
         )
 
+    def request_station_image(url: str) -> None:
+        if not url or url in image_loading:
+            return
+        image_loading.add(url)
+
+        def worker() -> None:
+            try:
+                data = fetch_station_image(url)
+                client.events.put({"kind": "station_image", "url": url, "data": data})
+            except Exception as exc:
+                client.events.put({
+                    "kind": "station_image_error",
+                    "url": url,
+                    "text": safe_error_text(str(exc), max_chars=300),
+                })
+
+        threading.Thread(
+            target=worker,
+            daemon=True,
+            name="txity-station-image",
+        ).start()
+
+    def make_image_label(
+        parent: tk.Misc,
+        url: str,
+        *,
+        size: int,
+        placeholder: str = "TX",
+        radius: int = 14,
+    ) -> tk.Label:
+        surface = parent.cget("bg")
+        label = tk.Label(
+            parent,
+            text=placeholder,
+            font=("Segoe UI", max(16, size // 5), "bold"),
+            fg=palette["onSurfaceVariant"],
+            bg=palette["surfaceContainerHigh"],
+            width=max(5, size // 9),
+            height=max(3, size // 18),
+            relief="flat",
+            borderwidth=0,
+            anchor="center",
+        )
+        if not url:
+            return label
+
+        key = (url, size)
+        photo = image_cache.get(key)
+        if photo is not None:
+            label.configure(image=photo, text="", width=0, height=0, bg=surface)
+            label.image = photo
+            return label
+
+        image_labels.setdefault(url, []).append((label, size))
+        request_station_image(url)
+        return label
+
+    def apply_station_image(url: str, data: bytes) -> None:
+        image_loading.discard(url)
+        waiting = image_labels.pop(url, [])
+        if not waiting:
+            return
+        try:
+            from io import BytesIO
+            from PIL import Image, ImageTk
+
+            source = Image.open(BytesIO(data))
+            source.load()
+        except Exception as exc:
+            print(f"[TXITPY] Station image could not be decoded: {safe_error_text(str(exc), 200)}", file=sys.stderr, flush=True)
+            return
+
+        for label, size in waiting:
+            try:
+                if not label.winfo_exists():
+                    continue
+                image = source.copy()
+                image.thumbnail((size, size), Image.Resampling.LANCZOS)
+                photo = ImageTk.PhotoImage(image)
+                image_cache[(url, size)] = photo
+                label.configure(image=photo, text="", width=0, height=0, bg=palette["surfaceContainerHigh"])
+                label.image = photo
+            except tk.TclError:
+                continue
+
+    def bind_station_card(widget: tk.Widget, station_id: str) -> None:
+        widget.configure(cursor="hand2")
+        widget.bind(
+            "<Button-1>",
+            lambda _event, target=station_id: open_station(target),
+            add="+",
+        )
+        for child in widget.winfo_children():
+            bind_station_card(child, station_id)
+
     def set_auth_status(message: str) -> None:
         auth_status_var.set(message)
 
@@ -881,43 +1002,128 @@ def build_app() -> None:
         current_page = page
         build_shell()
 
+    def open_station(station_id: str) -> None:
+        nonlocal selected_station_id, current_page
+        selected_station_id = station_id
+        current_page = "station_detail"
+        build_shell()
+
     def update_station_tree() -> None:
-        if station_tree is None:
+        """Refresh the visible station-card grid."""
+        if station_cards_frame is None:
             return
         try:
-            if not station_tree.winfo_exists():
+            if not station_cards_frame.winfo_exists():
                 return
         except tk.TclError:
             return
 
-        query = station_search_var.get().strip().casefold()
-        for child in station_tree.get_children():
-            station_tree.delete(child)
+        for child in station_cards_frame.winfo_children():
+            child.destroy()
 
-        shown = 0
+        query = station_search_var.get().strip().casefold()
+        visible = []
         for row in station_rows:
-            searchable = " ".join(str(value) for value in row.values()).casefold()
-            if query and query not in searchable:
-                continue
-            station_tree.insert(
-                "",
-                "end",
-                values=(
-                    row.get("station", ""),
-                    row.get("operator", ""),
-                    row.get("frequency", ""),
-                    row.get("mode", ""),
-                    row.get("on_air", ""),
-                    row.get("rating", ""),
-                    row.get("description", ""),
-                ),
-            )
-            shown += 1
+            searchable = " ".join(str(value) for value in (
+                row.get("station", ""),
+                row.get("operator", ""),
+                row.get("frequency", ""),
+                row.get("mode", ""),
+                row.get("description", ""),
+            )).casefold()
+            if not query or query in searchable:
+                visible.append(row)
 
         station_count_var.set(
-            f"{shown} of {len(station_rows)} stations"
+            f"{len(visible)} of {len(station_rows)} stations"
             if query else f"{len(station_rows)} stations"
         )
+
+        if not visible:
+            empty = make_card(station_cards_frame, padding=22)
+            empty.pack(fill="x", padx=8, pady=8)
+            message = "No stations match that search." if query else "No stations are currently listed."
+            make_label(
+                empty,
+                message,
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w")
+            return
+
+        for column in range(2):
+            station_cards_frame.grid_columnconfigure(column, weight=1, uniform="station-card")
+
+        for index, row in enumerate(visible):
+            station_id = str(row.get("id", ""))
+            card = make_card(station_cards_frame, padding=10)
+            card.grid(
+                row=index // 2,
+                column=index % 2,
+                sticky="nsew",
+                padx=8,
+                pady=8,
+            )
+            card.configure(cursor="hand2")
+
+            content = tk.Frame(card, bg=palette["surfaceContainerLow"])
+            content.pack(fill="both", expand=True)
+
+            logo_url = row.get("logo_url") or ""
+            image = make_image_label(content, logo_url, size=112)
+            image.pack(side="left", padx=(0, 14), pady=4)
+
+            details = tk.Frame(content, bg=palette["surfaceContainerLow"])
+            details.pack(side="left", fill="both", expand=True)
+
+            make_label(
+                details,
+                str(row.get("station", "Unknown station")),
+                font=("Segoe UI", 13, "bold"),
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w")
+            description = str(row.get("description") or "No description yet.")
+            make_label(
+                details,
+                description,
+                font=("Segoe UI", 9, "normal"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+                wraplength=260,
+            ).pack(anchor="w", pady=(4, 7))
+            make_label(
+                details,
+                f"Discord: {row.get('operator') or 'Unknown'}",
+                font=("Segoe UI", 8, "normal"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w")
+
+            meta = tk.Frame(content, bg=palette["surfaceContainerLow"])
+            meta.pack(side="right", fill="y", padx=(10, 2))
+            make_label(
+                meta,
+                str(row.get("frequency") or "Frequency unknown"),
+                font=("Segoe UI", 12, "bold"),
+                color=palette["primary"],
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="e", pady=(4, 8))
+            make_label(
+                meta,
+                str(row.get("rating") or "Not rated"),
+                font=("Segoe UI", 9, "bold"),
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="e", pady=(0, 6))
+            make_label(
+                meta,
+                f"{row.get('mode') or 'Mode unknown'} · {row.get('on_air') or 'On-air time unknown'}",
+                font=("Segoe UI", 8, "normal"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+                justify="right",
+            ).pack(anchor="e")
+
+            bind_station_card(card, station_id)
 
     def refresh_station_list() -> None:
         if not discord_authenticated:
@@ -994,6 +1200,30 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
             wraplength=440,
         ).pack(anchor="w", pady=(20, 0))
+
+    def create_scrollable_page(parent: tk.Frame) -> tuple[tk.Frame, tk.Canvas]:
+        shell = tk.Frame(parent, bg=palette["background"])
+        shell.pack(fill="both", expand=True)
+        canvas = tk.Canvas(
+            shell,
+            background=palette["background"],
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        scrollbar = ttk.Scrollbar(shell, orient="vertical", command=canvas.yview)
+        page = tk.Frame(canvas, background=palette["background"])
+        window_id = canvas.create_window((0, 0), window=page, anchor="nw")
+
+        def update_region(_event=None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            canvas.itemconfigure(window_id, width=canvas.winfo_width())
+
+        page.bind("<Configure>", update_region)
+        canvas.bind("<Configure>", update_region)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        return page, canvas
 
     def show_overview(parent: tk.Frame) -> None:
         canvas = tk.Canvas(
@@ -1100,24 +1330,22 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(9, 0))
 
     def show_stations(parent: tk.Frame) -> None:
-        nonlocal station_tree
+        nonlocal station_cards_frame
 
-        page = tk.Frame(parent, bg=palette["background"])
-        page.pack(fill="both", expand=True)
-
+        page, canvas = create_scrollable_page(parent)
         make_label(
             page,
-            "Station directory",
-            font=("Segoe UI", 25, "bold"),
+            "Stations",
+            font=("Segoe UI", 27, "bold"),
             background=palette["background"],
-        ).pack(anchor="w", pady=(8, 2))
+        ).pack(anchor="w", pady=(6, 2))
         make_label(
             page,
-            "Live public station information from TXITY.",
+            "Live transmitters running on TXITY.",
             font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
-        ).pack(anchor="w", pady=(0, 16))
+        ).pack(anchor="w", pady=(0, 17))
 
         controls = tk.Frame(page, bg=palette["background"])
         controls.pack(fill="x", pady=(0, 10))
@@ -1155,7 +1383,7 @@ def build_app() -> None:
         ).pack(side="left", padx=(10, 0))
 
         status_bar = tk.Frame(page, bg=palette["background"])
-        status_bar.pack(fill="x", pady=(0, 9))
+        status_bar.pack(fill="x", pady=(2, 10))
         make_label(
             status_bar,
             variable=station_status_var,
@@ -1171,61 +1399,287 @@ def build_app() -> None:
             background=palette["background"],
         ).pack(side="right")
 
-        table_card = make_card(page, padding=10)
-        table_card.pack(fill="both", expand=True)
+        station_cards_frame = tk.Frame(canvas, bg=palette["background"])
+        canvas_window = canvas.create_window((0, 0), window=station_cards_frame, anchor="nw")
 
-        table_frame = tk.Frame(table_card, bg=palette["surfaceContainerLow"])
-        table_frame.pack(fill="both", expand=True)
+        def resize_cards(event=None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            canvas.itemconfigure(canvas_window, width=canvas.winfo_width())
 
-        columns = (
-            "station",
-            "operator",
-            "frequency",
-            "mode",
-            "on_air",
-            "rating",
-            "description",
-        )
-        station_tree = ttk.Treeview(
-            table_frame,
-            columns=columns,
-            show="headings",
-            selectmode="browse",
-            style="Material.Treeview",
-        )
-        headings = {
-            "station": ("Station", 160, "w"),
-            "operator": ("Operator", 135, "w"),
-            "frequency": ("Frequency", 110, "w"),
-            "mode": ("Mode", 95, "center"),
-            "on_air": ("On air", 85, "center"),
-            "rating": ("Rating", 115, "center"),
-            "description": ("Description", 340, "w"),
-        }
-        for key, (title, width, anchor) in headings.items():
-            station_tree.heading(key, text=title)
-            station_tree.column(key, width=width, minwidth=70, anchor=anchor, stretch=key == "description")
-
-        vertical = ttk.Scrollbar(
-            table_frame,
-            orient="vertical",
-            command=station_tree.yview,
-        )
-        horizontal = ttk.Scrollbar(
-            table_frame,
-            orient="horizontal",
-            command=station_tree.xview,
-        )
-        station_tree.configure(
-            yscrollcommand=vertical.set,
-            xscrollcommand=horizontal.set,
-        )
-        station_tree.grid(row=0, column=0, sticky="nsew")
-        vertical.grid(row=0, column=1, sticky="ns")
-        horizontal.grid(row=1, column=0, sticky="ew")
-        table_frame.grid_rowconfigure(0, weight=1)
-        table_frame.grid_columnconfigure(0, weight=1)
+        station_cards_frame.bind("<Configure>", resize_cards)
+        canvas.bind("<Configure>", resize_cards)
         update_station_tree()
+
+    def show_station_detail(parent: tk.Frame) -> None:
+        row = next(
+            (item for item in station_rows if str(item.get("id", "")) == selected_station_id),
+            None,
+        )
+        if row is None:
+            make_button(parent, "Back to stations", lambda: navigate("stations"), kind="tonal").pack(anchor="w")
+            make_label(
+                parent,
+                "This station is no longer in the current listing.",
+                color=palette["onSurfaceVariant"],
+                background=palette["background"],
+            ).pack(anchor="w", pady=18)
+            return
+
+        page, _canvas = create_scrollable_page(parent)
+        make_button(
+            page,
+            "← Back to stations",
+            lambda: navigate("stations"),
+            kind="text",
+            padx=10,
+            pady=7,
+        ).pack(anchor="w", pady=(5, 12))
+
+        make_label(
+            page,
+            "LIVE STATION",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["primary"],
+            background=palette["background"],
+        ).pack(anchor="w")
+        make_label(
+            page,
+            str(row.get("station", "Unknown station")),
+            font=("Segoe UI", 28, "bold"),
+            background=palette["background"],
+            wraplength=900,
+        ).pack(anchor="w", pady=(2, 1))
+        short_description = str(row.get("description") or "No short description has been added.")
+        make_label(
+            page,
+            short_description,
+            font=("Segoe UI", 11, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["background"],
+            wraplength=900,
+        ).pack(anchor="w", pady=(0, 16))
+
+        profile = make_card(page, padding=20)
+        profile.pack(fill="x", pady=(0, 15))
+        upper = tk.Frame(profile, bg=palette["surfaceContainerLow"])
+        upper.pack(fill="x")
+
+        logo = make_image_label(upper, str(row.get("logo_url") or ""), size=176, placeholder="TXITY")
+        logo.pack(side="left", padx=(0, 20), pady=(2, 14))
+
+        heading = tk.Frame(upper, bg=palette["surfaceContainerLow"])
+        heading.pack(side="left", fill="both", expand=True)
+        make_label(
+            heading,
+            str(row.get("frequency") or "Frequency not reported"),
+            font=("Segoe UI", 18, "bold"),
+            color=palette["primary"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(4, 8))
+        make_label(
+            heading,
+            f"{row.get('mode') or 'Mode not reported'}  ·  {row.get('on_air') or 'On-air time not reported'}",
+            font=("Segoe UI", 10, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 8))
+        make_label(
+            heading,
+            f"★ {row.get('rating_average'):.2f} ({row.get('rating_count', 0)})"
+            if isinstance(row.get("rating_average"), (int, float)) and row.get("rating_count")
+            else "Not rated yet",
+            font=("Segoe UI", 11, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w")
+        make_label(
+            heading,
+            f"♡ {row.get('likes', 0)} likes",
+            font=("Segoe UI", 10, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(7, 0))
+
+        divider = tk.Frame(profile, bg=palette["outlineVariant"], height=1)
+        divider.pack(fill="x", pady=(4, 14))
+
+        owner = tk.Frame(profile, bg=palette["surfaceContainerLow"])
+        owner.pack(fill="x")
+        avatar_url = str(row.get("avatar_url") or "")
+        avatar = make_image_label(
+            owner,
+            avatar_url,
+            size=42,
+            placeholder="D",
+        )
+        avatar.pack(side="left", padx=(0, 10))
+        make_label(
+            owner,
+            f"Discord user: {row.get('operator') or 'Unknown'}",
+            font=("Segoe UI", 10, "normal"),
+            background=palette["surfaceContainerLow"],
+        ).pack(side="left", anchor="center")
+
+        profile_details = str(row.get("details_text") or "").strip()
+        if profile_details:
+            make_label(
+                profile,
+                profile_details,
+                font=("Segoe UI", 10, "normal"),
+                background=palette["surfaceContainerLow"],
+                wraplength=820,
+                justify="left",
+            ).pack(anchor="w", pady=(16, 2))
+
+        page_layout = row.get("page_layout")
+        if isinstance(page_layout, dict) and page_layout.get("blocks"):
+            layout_card = make_card(page, padding=12)
+            layout_card.pack(fill="x", pady=(0, 15))
+            make_label(
+                layout_card,
+                "Station page",
+                font=("Segoe UI", 15, "bold"),
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w", pady=(0, 10))
+            layout_height = page_layout.get("height", 420)
+            layout_height = max(320, min(1_200, int(layout_height)))
+            layout = tk.Frame(
+                layout_card,
+                bg=palette["surfaceContainerLowest"],
+                height=layout_height,
+            )
+            layout.pack(fill="x")
+            layout.pack_propagate(False)
+            for block in page_layout["blocks"]:
+                block_type = block.get("type", "text")
+                x = max(0.0, min(100.0, float(block.get("x", 8))))
+                y = max(0.0, min(100.0, float(block.get("y", 8))))
+                width = max(5.0, min(100.0, float(block.get("width", 84))))
+                height = max(8.0, min(900.0, float(block.get("height", 72))))
+                if block_type == "separator":
+                    tk.Frame(layout, bg=palette["outlineVariant"], height=2).place(
+                        relx=x / 100, rely=y / 100, relwidth=width / 100, height=2
+                    )
+                elif block_type == "image" and block.get("image_url"):
+                    image_block = make_image_label(
+                        layout,
+                        str(block.get("image_url")),
+                        size=min(360, max(80, int(width * 5))),
+                        placeholder="Image",
+                    )
+                    image_block.place(
+                        relx=x / 100,
+                        rely=y / 100,
+                        relwidth=width / 100,
+                        height=min(300, height),
+                    )
+                else:
+                    font_name = str(block.get("font") or "Segoe UI")
+                    if font_name not in {"Lexend", "Segoe UI", "Georgia", "Courier New", "Impact", "system-ui"}:
+                        font_name = "Segoe UI"
+                    font_size = int(block.get("font_size", 18))
+                    font_weight = int(block.get("font_weight", 400))
+                    font_style = "bold" if font_weight >= 600 else "normal"
+                    text_align = str(block.get("align") or "left")
+                    text_widget = make_label(
+                        layout,
+                        str(block.get("text") or ""),
+                        font=(font_name if font_name != "system-ui" else "Segoe UI", font_size, font_style),
+                        background=palette["surfaceContainerLowest"],
+                        justify=text_align,
+                        anchor="center" if text_align == "center" else ("e" if text_align == "right" else "w"),
+                        wraplength=620,
+                    )
+                    text_widget.place(
+                        relx=x / 100,
+                        rely=y / 100,
+                        relwidth=width / 100,
+                        height=min(300, height),
+                    )
+        else:
+            details_text = profile_details or "No extra station details yet."
+            details_card = make_card(page, padding=18)
+            details_card.pack(fill="x", pady=(0, 15))
+            make_label(
+                details_card,
+                "Station details",
+                font=("Segoe UI", 15, "bold"),
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w", pady=(0, 8))
+            make_label(
+                details_card,
+                details_text,
+                font=("Segoe UI", 10, "normal"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+                wraplength=840,
+            ).pack(anchor="w")
+
+        gallery_urls = [
+            url for url in row.get("image_urls", [])
+            if isinstance(url, str) and url and url != row.get("logo_url")
+        ]
+        if gallery_urls:
+            gallery_card = make_card(page, padding=16)
+            gallery_card.pack(fill="x", pady=(0, 15))
+            make_label(
+                gallery_card,
+                "Images",
+                font=("Segoe UI", 15, "bold"),
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w", pady=(0, 10))
+            gallery = tk.Frame(gallery_card, bg=palette["surfaceContainerLow"])
+            gallery.pack(anchor="w")
+            for url in gallery_urls[:6]:
+                make_image_label(gallery, url, size=140, placeholder="Image").pack(
+                    side="left",
+                    padx=(0, 10),
+                )
+
+        comments = row.get("comments") if isinstance(row.get("comments"), list) else []
+        comments_card = make_card(page, padding=18)
+        comments_card.pack(fill="x", pady=(0, 22))
+        make_label(
+            comments_card,
+            f"Comments ({row.get('comment_count', len(comments))})",
+            font=("Segoe UI", 16, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 12))
+        if not comments:
+            make_label(
+                comments_card,
+                "No comments have been posted.",
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w")
+        else:
+            for comment in comments[:30]:
+                comment_row = tk.Frame(comments_card, bg=palette["surfaceContainerLow"])
+                comment_row.pack(fill="x", pady=(0, 12))
+                comment_avatar = make_image_label(
+                    comment_row,
+                    str(comment.get("avatar_url") or ""),
+                    size=40,
+                    placeholder="D",
+                )
+                comment_avatar.pack(side="left", padx=(0, 10))
+                comment_body = tk.Frame(comment_row, bg=palette["surfaceContainerLow"])
+                comment_body.pack(side="left", fill="x", expand=True)
+                comment_title = str(comment.get("author") or "TXITY user")
+                timestamp = str(comment.get("timestamp") or "")
+                make_label(
+                    comment_body,
+                    f"{comment_title}  {timestamp}".strip(),
+                    font=("Segoe UI", 9, "bold"),
+                    background=palette["surfaceContainerLow"],
+                ).pack(anchor="w")
+                make_label(
+                    comment_body,
+                    str(comment.get("text") or ""),
+                    font=("Segoe UI", 9, "normal"),
+                    color=palette["onSurfaceVariant"],
+                    background=palette["surfaceContainerLow"],
+                    wraplength=790,
+                ).pack(anchor="w", pady=(3, 0))
 
     def show_discord(parent: tk.Frame) -> None:
         page = tk.Frame(parent, bg=palette["background"])
@@ -1295,11 +1749,13 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(18, 0))
 
     def build_shell() -> None:
-        nonlocal shell_frame, content_frame, nav_frame, station_tree
+        nonlocal shell_frame, content_frame, nav_frame, station_cards_frame
 
         for child in root.winfo_children():
             child.destroy()
 
+        station_cards_frame = None
+        nav_frame = None
         shell_frame = tk.Frame(root, bg=palette["background"])
         shell_frame.pack(fill="both", expand=True)
 
@@ -1308,7 +1764,7 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
             outside=palette["background"],
             outline=palette["outlineVariant"],
-            padding=14,
+            padding=12,
             radius=22,
         )
         topbar.configure(height=68)
@@ -1321,66 +1777,24 @@ def build_app() -> None:
             font=("Segoe UI", 17, "bold"),
             color=palette["primary"],
             background=palette["surfaceContainerLow"],
-        ).pack(side="left")
-        make_label(
-            topbar,
-            "Desktop",
-            font=("Segoe UI", 10, "normal"),
-            color=palette["onSurfaceVariant"],
-            background=palette["surfaceContainerLow"],
-        ).pack(side="left", padx=(10, 0))
-
-        make_button(
-            topbar,
-            "Light mode" if theme_mode == "dark" else "Dark mode",
-            toggle_theme,
-            kind="tonal",
-            padx=12,
-            pady=7,
-        ).pack(side="right")
+        ).pack(side="left", padx=(2, 12))
 
         if discord_authenticated:
-            make_label(
-                topbar,
-                variable=connection_var,
-                font=("Segoe UI", 9, "normal"),
-                color=palette["onSurfaceVariant"],
-                background=palette["surface"],
-            ).pack(side="right", padx=(0, 16))
+            navigation = tk.Frame(topbar, bg=palette["surfaceContainerLow"])
+            navigation.pack(side="left", fill="y")
 
-            body = tk.Frame(shell_frame, bg=palette["background"])
-            body.pack(fill="both", expand=True)
-
-            nav_frame = RoundedSurface(
-                body,
-                background=palette["surfaceContainerLow"],
-                outside=palette["background"],
-                outline=palette["outlineVariant"],
-                width=190,
-                padding=12,
-                radius=22,
-            )
-            nav_frame.pack(side="left", fill="y", padx=(12, 8), pady=12)
-            nav_frame.configure(width=190)
-            nav_frame.pack_propagate(False)
-
-            make_label(
-                nav_frame,
-                "WORKSPACE",
-                font=("Segoe UI", 8, "bold"),
-                color=palette["onSurfaceVariant"],
-                background=palette["surfaceContainerLow"],
-            ).pack(anchor="w", padx=8, pady=(4, 12))
-
-            navigation = (
+            destinations = (
                 ("Overview", "overview"),
                 ("Stations", "stations"),
                 ("Discord", "discord"),
             )
-            for label, destination in navigation:
-                selected = current_page == destination
-                button = RoundedButton(
-                    nav_frame,
+            for label, destination in destinations:
+                selected = (
+                    current_page == destination
+                    or (destination == "stations" and current_page == "station_detail")
+                )
+                nav_button = RoundedButton(
+                    navigation,
                     label,
                     lambda target=destination: navigate(target),
                     background=(
@@ -1404,29 +1818,62 @@ def build_app() -> None:
                     focus_color=palette["primary"],
                     font=("Segoe UI", 10, "bold" if selected else "normal"),
                     padding_x=14,
-                    padding_y=11,
+                    padding_y=9,
                     radius=15,
-                    anchor="w",
-                    min_width=145,
                 )
-                button.pack(fill="x", pady=2)
+                nav_button.pack(side="left", padx=2, pady=2)
+
+            make_button(
+                topbar,
+                "Open TXITY",
+                lambda: webbrowser.open(BASE_URL),
+                kind="text",
+                padx=10,
+                pady=8,
+            ).pack(side="left", padx=(8, 0))
+
+            make_button(
+                topbar,
+                "Light mode" if theme_mode == "dark" else "Dark mode",
+                toggle_theme,
+                kind="tonal",
+                padx=12,
+                pady=7,
+            ).pack(side="right", padx=(8, 2))
+
+            make_label(
+                topbar,
+                variable=connection_var,
+                font=("Segoe UI", 8, "normal"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).pack(side="right", padx=(6, 8))
 
             content_frame = tk.Frame(
-                body,
+                shell_frame,
                 bg=palette["background"],
                 padx=24,
-                pady=20,
+                pady=12,
             )
-            content_frame.pack(side="left", fill="both", expand=True)
+            content_frame.pack(fill="both", expand=True)
 
             if current_page == "stations":
                 show_stations(content_frame)
+            elif current_page == "station_detail":
+                show_station_detail(content_frame)
             elif current_page == "discord":
                 show_discord(content_frame)
             else:
                 show_overview(content_frame)
         else:
-            nav_frame = None
+            make_button(
+                topbar,
+                "Light mode" if theme_mode == "dark" else "Dark mode",
+                toggle_theme,
+                kind="tonal",
+                padx=12,
+                pady=7,
+            ).pack(side="right")
             content_frame = tk.Frame(
                 shell_frame,
                 bg=palette["background"],
@@ -1525,6 +1972,9 @@ def build_app() -> None:
 
             elif kind == "users_listing":
                 station_rows = event.get("rows", [])
+                image_cache.clear()
+                image_loading.clear()
+                image_labels.clear()
                 apply_users_metrics(event.get("metrics", {}))
                 station_status_var.set(
                     f"Loaded {len(station_rows)} stations from TXITY users.json."
@@ -1541,6 +1991,18 @@ def build_app() -> None:
                     file=sys.stderr,
                     flush=True,
                 )
+
+            elif kind == "station_image":
+                url = event.get("url")
+                data = event.get("data")
+                if isinstance(url, str) and isinstance(data, bytes):
+                    apply_station_image(url, data)
+
+            elif kind == "station_image_error":
+                url = event.get("url")
+                if isinstance(url, str):
+                    image_loading.discard(url)
+                    image_labels.pop(url, None)
 
             elif kind == "stations_error":
                 details = safe_error_text(
