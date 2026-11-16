@@ -66,14 +66,15 @@ def _run_command(
 def _patch_decdrm_output_validation(plan_file: Path) -> bool:
     """Allow TXITPY to consume returned samples without an extra output sink."""
     plan_source = plan_file.read_text(encoding="utf-8")
+    newline = chr(10)
     output_check = (
-        '    if out.file.is_none() && out.device.is_none() {\\n'
-        '        p.push("output: set ' + chr(96) + 'file' + chr(96) + ' and/or ' + chr(96) + 'device' + chr(96) + '");\\n'
-        '    }'
+        "    if out.file.is_none() && out.device.is_none() {" + newline
+        + '        p.push("output: set ' + chr(96) + 'file' + chr(96) + ' and/or ' + chr(96) + 'device' + chr(96) + '");' + newline
+        + "    }"
     )
     marker = "TXITPY consumes the samples returned by Station::transmit_frame()"
     if output_check in plan_source:
-        plan_source = plan_source.replace(output_check, "    // " + marker + "\\n", 1)
+        plan_source = plan_source.replace(output_check, "    // " + marker + chr(10), 1)
         plan_file.write_text(plan_source, encoding="utf-8")
         return True
     if marker in plan_source:
@@ -98,7 +99,7 @@ def ensure_drm_encoder(on_log: Callable[[str], None] | None = None) -> Path:
         )
 
     rust_version = _run_command(["rustc", "--version"]).strip()
-    match = re.search(r"rustc (\\d+)\\.(\\d+)", rust_version)
+    match = re.search("rustc ([0-9]+)[.]([0-9]+)", rust_version)
     if not match or (int(match.group(1)), int(match.group(2))) < (1, 88):
         raise RuntimeError(
             f"DRM mode needs Rust 1.88 or newer; found: {rust_version or 'unknown version'}."
