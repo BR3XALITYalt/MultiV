@@ -518,7 +518,9 @@ def build_app() -> None:
     from tkinter import ttk
     from material_theme import apply_tk_theme, rounded_widget_classes
 
-    RoundedSurface, RoundedButton = rounded_widget_classes(tk)\n\n    client = TxityClient()
+    RoundedSurface, RoundedButton = rounded_widget_classes(tk)
+
+    client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
 
     theme_mode = _system_theme_mode()
