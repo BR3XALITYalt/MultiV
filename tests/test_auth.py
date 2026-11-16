@@ -11,7 +11,7 @@ from discord_auth import (
     is_auth_token,
     user_from_txity_token,
 )
-from discord_auth_browser import token_from_storage
+from discord_auth_browser import safe_error_text, token_from_storage
 
 
 def fake_txity_token(payload):
@@ -96,6 +96,18 @@ class DiscordAuthValidationTests(unittest.TestCase):
             "exp": time.time() - 60,
         })
         self.assertIsNone(token_from_storage("https://txity.radiodiscussion.org", token))
+
+
+    def test_error_diagnostics_redact_urls_and_credentials(self):
+        error = RuntimeError(
+            "failed https://example.test/path?state=secretvalue "
+            "authToken=abcdef0123456789abcdef0123456789"
+        )
+        message = safe_error_text(error)
+        self.assertNotIn("secretvalue", message)
+        self.assertNotIn("abcdef0123456789abcdef0123456789", message)
+        self.assertIn("[URL redacted]", message)
+        self.assertIn("authToken=[redacted]", message)
 
     def test_auth_route_defaults_to_txity_route(self):
         manager = DiscordAuthManager(Queue())
