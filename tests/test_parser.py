@@ -1,6 +1,6 @@
 import unittest
 
-from main import format_frequency, parse_stations
+from main import describe_status_socket_error, format_frequency, parse_stations
 
 
 class StationParserTests(unittest.TestCase):
@@ -40,6 +40,24 @@ class StationParserTests(unittest.TestCase):
         self.assertEqual(format_frequency(7_250_000), "7.250 MHz")
         self.assertEqual(format_frequency(12_500), "12.5 kHz")
         self.assertEqual(format_frequency("invalid"), "Not reported")
+
+    def test_websocket_error_hides_credentials_in_socket_url(self):
+        class HandshakeError(Exception):
+            status_code = 403
+            status_message = "Forbidden"
+
+            def __str__(self):
+                return (
+                    "Handshake rejected at "
+                    "wss://example.test/ws?authToken=secret-token"
+                    "&sessionSecret=secret-session"
+                )
+
+        message = describe_status_socket_error(HandshakeError())
+        self.assertIn("HTTP 403 Forbidden", message)
+        self.assertIn("[WebSocket URL redacted]", message)
+        self.assertNotIn("secret-token", message)
+        self.assertNotIn("secret-session", message)
 
 
 if __name__ == "__main__":
