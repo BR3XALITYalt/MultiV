@@ -2,14 +2,14 @@
 
 ## Product
 
-TXITPY is a Windows desktop client for TXITY's simulated radio-broadcast service. The main tasks are checking server state, finding stations, managing a Discord session, and configuring a virtual audio stream.
+TXITPY is a Windows desktop client for TXITY's simulated radio-broadcast service. The main tasks are checking TXITY service status, finding stations, managing a Discord session, and configuring a virtual audio stream.
 
 ## Design read
 
 Reading this as: a desktop operations client for TXITY users, using native Tkinter controls and a Material 3-inspired visual language, with ENERGY 2 / RHYTHM 2 / MOTION 1.
 
 - **Energy 2:** the blue primary color marks the main action and keyboard focus. The rest of the interface stays quiet enough for status values and configuration fields to lead.
-- **Rhythm 2:** each page follows its task. The overview groups server metrics, Stations uses image-led station records, and Transmit separates station identity, signal settings, audio processing, input, CW, and connection state.
+- **Rhythm 2:** each page follows its task. Transmit is the opening screen and groups station identity, signal settings, audio processing, input, CW, and connection state. Stations uses image-led station records.
 - **Motion 1:** use native hover, focus, and pressed feedback. Scrolling follows the user's input without decorative easing or looping animation.
 
 ## Visual decisions
