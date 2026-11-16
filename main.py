@@ -618,7 +618,16 @@ def build_app() -> None:
                 elif kind == "auth_browser":
                     auth_browser_status.set(str(event.get("text", "")))
                 elif kind == "auth_error":
-                    auth_browser_status.set(str(event.get("text", "Sign-in browser error")))
+                    details = safe_error_text(
+                        str(event.get("text", "Sign-in browser error")),
+                        max_chars=16_000,
+                    )
+                    print(
+                        f"\\n[TXITPY Discord sign-in error]\\n{details}\\n",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    auth_browser_status.set(details)
                 elif kind in {"error", "socket_error"}:
                     summary.set(str(event.get("text", "Network error")))
                     if kind == "socket_error":
@@ -642,20 +651,10 @@ if __name__ == "__main__":
             filename="application-errors.log",
         )
         message = (
-            "TXITPY could not open its main application window.\n\n"
+            "\n[TXITPY main window startup error]\n"
             f"Exception: {type(exc).__name__}: {safe_error_text(exc)}\n\n"
             f"Traceback:\n{details}"
         )
         if log_path is not None:
             message += f"\n\nFull diagnostic log: {log_path}"
-
-        try:
-            import tkinter as tk
-            from tkinter import messagebox
-
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showerror("TXITPY startup error", message, parent=root)
-            root.destroy()
-        except Exception:
-            print(message, file=sys.stderr)
+        print(message, file=sys.stderr, flush=True)
