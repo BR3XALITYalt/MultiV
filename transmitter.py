@@ -1309,10 +1309,7 @@ class TxityTransmitter:
                         self.events.put({
                             "kind": "tx_state",
                             "state": "transmitting",
-                            "text": (
-                                "PTT requested; waiting for TXITY status confirmation."
-                                if needs_audio else "PTT requested; waiting for TXITY status confirmation."
-                            ),
+                            "text": "PTT requested; waiting for TXITY status confirmation.",
                         })
                         transmission_announced = True
                     else:
