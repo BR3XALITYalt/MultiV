@@ -25,6 +25,59 @@ DECDRM_COMMIT = "05845c9a754309b86d4985b25b1c3a787b988104"
 DECDRM_VERSION = "0.7.1"
 DRM_PLAYLIST_EXTENSIONS = frozenset({".flac", ".mp3", ".ogg"})
 
+DRM_LANGUAGES = (
+    "No language specified",
+    "Arabic",
+    "Bengali",
+    "Chinese (Mandarin)",
+    "Dutch",
+    "English",
+    "French",
+    "German",
+    "Hindi",
+    "Japanese",
+    "Javanese",
+    "Korean",
+    "Portuguese",
+    "Russian",
+    "Spanish",
+    "Other language",
+)
+
+DRM_PROGRAMME_TYPES = (
+    "No programme type",
+    "News",
+    "Current Affairs",
+    "Information",
+    "Sport",
+    "Education",
+    "Drama",
+    "Culture",
+    "Science",
+    "Varied",
+    "Pop Music",
+    "Rock Music",
+    "Easy Listening Music",
+    "Light Classical",
+    "Serious Classical",
+    "Other Music",
+    "Weather/meteorology",
+    "Finance/Business",
+    "Children's programmes",
+    "Social Affairs",
+    "Religion",
+    "Phone In",
+    "Travel",
+    "Leisure",
+    "Jazz Music",
+    "Country Music",
+    "National Music",
+    "Oldies Music",
+    "Folk Music",
+    "Documentary",
+    "Not used",
+)
+
 
 def _cache_root() -> Path:
     if os.name == "nt":
@@ -724,13 +777,44 @@ def write_drm_station_config(
     station_name: str,
     input_device_name: str | None = None,
     playlist_url: str | None = None,
+    service_label: str | None = None,
+    service_id: str = "0xB30001",
+    language: str = "English",
+    programme_type: str = "No programme type",
+    iso_language: str = "",
+    iso_country: str = "",
 ) -> Path:
     """Write a one-service, 4.5 kHz DRM30 station configuration."""
     if bool(input_device_name) == bool(playlist_url):
         raise ValueError("Choose exactly one DRM audio input: microphone or playlist.")
 
-    label = "".join(character for character in str(station_name or "TXITPY") if character.isprintable())
+    raw_label = service_label if service_label is not None and str(service_label).strip() else station_name
+    label = "".join(character for character in str(raw_label or "TXITPY") if character.isprintable())
     label = label.strip()[:16] or "TXITPY"
+
+    service_id_text = str(service_id or "").strip()
+    if service_id_text.lower().startswith("0x"):
+        service_id_text = service_id_text[2:]
+    if not re.fullmatch(r"[0-9a-fA-F]{1,6}", service_id_text):
+        raise ValueError("DRM service ID must be 1 to 6 hexadecimal digits, optionally prefixed with 0x.")
+    service_id_value = int(service_id_text, 16)
+
+    selected_language = str(language or "").strip()
+    if selected_language not in DRM_LANGUAGES:
+        raise ValueError("Choose a valid DRM service language.")
+
+    selected_programme_type = str(programme_type or "").strip()
+    if selected_programme_type not in DRM_PROGRAMME_TYPES:
+        raise ValueError("Choose a valid DRM programme type.")
+
+    selected_iso_language = str(iso_language or "").strip().lower()
+    if selected_iso_language and not re.fullmatch(r"[a-z]{3}", selected_iso_language):
+        raise ValueError("ISO language must be a three-letter code, such as eng.")
+
+    selected_iso_country = str(iso_country or "").strip().upper()
+    if selected_iso_country and not re.fullmatch(r"[A-Z]{2}", selected_iso_country):
+        raise ValueError("Country code must be a two-letter ISO 3166 code, such as US.")
+
     lines = [
         "[channel]",
         'mode = "B"',
@@ -750,9 +834,15 @@ def write_drm_station_config(
         "",
         "[[service]]",
         f"label = {_toml_string(label)}",
-        "id = 0xB30001",
-        'language = "English"',
-        'programme_type = "Pop Music"',
+        f"id = 0x{service_id_value:06X}",
+        f"language = {_toml_string(selected_language)}",
+        f"programme_type = {_toml_string(selected_programme_type)}",
+    ]
+    if selected_iso_language:
+        lines.append(f"iso_language = {_toml_string(selected_iso_language)}")
+    if selected_iso_country:
+        lines.append(f"iso_country = {_toml_string(selected_iso_country)}")
+    lines.extend([
         "",
         "[service.audio]",
         'codec = "he-aac"',
