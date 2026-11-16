@@ -61,7 +61,7 @@ WATCHER_SCRIPT = r"""
         }).catch(() => {
             document.title = "TXITPY sign-in could not be completed";
         });
-    }, 300);
+    }, 1000);
 })();
 """
 
@@ -258,10 +258,32 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         window.events.shown += on_shown
-        window.events.loaded += on_loaded
+        page_loaded = threading.Event()
+
+        def on_page_loaded(loaded_window) -> None:
+            page_loaded.set()
+            on_loaded(loaded_window)
+
+        window.events.loaded += on_page_loaded
     except Exception as exc:
         bridge.report_startup_failure("register-window-events", exc)
         return 1
+
+    def report_slow_page_load() -> None:
+        if page_loaded.wait(30):
+            return
+        message = (
+            "The sign-in browser window opened, but the webpage did not finish "
+            "loading within 30 seconds. The WebView2 renderer may be stalled."
+        )
+        print(f"[TXITPY browser warning] {message}", file=sys.stderr, flush=True)
+        write_diagnostic_text("page-load-timeout", message)
+
+    threading.Thread(
+        target=report_slow_page_load,
+        daemon=True,
+        name="txity-page-load-watchdog",
+    ).start()
 
     try:
         renderer = "edgechromium" if sys.platform == "win32" else None
