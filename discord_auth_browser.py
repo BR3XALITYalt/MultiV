@@ -192,24 +192,40 @@ def main(argv: list[str] | None = None) -> int:
     if len(args) != 3:
         return 2
 
+    def report_stage(message: str) -> None:
+        print(f"[TXITPY] {message}", file=sys.stderr, flush=True)
+
+    report_stage("Embedded browser helper process started.")
+    os.environ["PYWEBVIEW_LOG"] = "debug"
     login_url, callback_url, state = args
     bridge = AuthBridge(callback_url, state)
 
+    report_stage("Importing pywebview.")
     try:
         import webview
     except Exception as exc:
         bridge.report_startup_failure("import-webview", exc)
         return 1
 
+    try:
+        from importlib.metadata import version
+        installed_version = version("pywebview")
+    except Exception:
+        installed_version = "unknown"
+    report_stage(f"pywebview {installed_version} imported successfully.")
+
     local_app_data = os.environ.get("LOCALAPPDATA")
     profile_root = Path(local_app_data) if local_app_data else Path.home()
     profile_path = profile_root / "TXITPY" / "BrowserProfile"
+    report_stage(f"Preparing browser profile at {profile_path}.")
     try:
         profile_path.mkdir(parents=True, exist_ok=True)
     except Exception as exc:
         bridge.report_startup_failure("create-browser-profile", exc)
         return 1
+    report_stage("Browser profile is ready.")
 
+    report_stage("Creating the Discord sign-in browser window.")
     try:
         window = webview.create_window(
             "Sign in to TXITY",
@@ -225,15 +241,20 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     bridge.window = window
+    report_stage("Browser window object created.")
+
+    window_shown = threading.Event()
+    page_loaded = threading.Event()
+
+    def on_initialized(renderer_name) -> None:
+        report_stage(f"pywebview initialized renderer: {renderer_name}.")
 
     def on_shown() -> None:
-        print(
-            "[TXITPY] Embedded sign-in window shown; waiting for the page to load.",
-            file=sys.stderr,
-            flush=True,
-        )
+        window_shown.set()
+        report_stage("Embedded sign-in window is visible; waiting for Discord login to load.")
 
     def on_loaded(loaded_window) -> None:
+        page_loaded.set()
         try:
             current_url = loaded_window.get_current_url() or ""
             parsed_url = urlsplit(current_url)
@@ -257,32 +278,34 @@ def main(argv: list[str] | None = None) -> int:
             write_diagnostic("inject-auth-watcher", exc)
 
     try:
+        window.events.initialized += on_initialized
         window.events.shown += on_shown
-        page_loaded = threading.Event()
-
-        def on_page_loaded(loaded_window) -> None:
-            page_loaded.set()
-            on_loaded(loaded_window)
-
-        window.events.loaded += on_page_loaded
+        window.events.loaded += on_loaded
     except Exception as exc:
         bridge.report_startup_failure("register-window-events", exc)
         return 1
 
-    def report_slow_page_load() -> None:
-        if page_loaded.wait(30):
+    def report_browser_stall() -> None:
+        if not window_shown.wait(20):
+            message = (
+                "The browser process started, but pywebview did not show its window "
+                "within 20 seconds. The GUI renderer may be blocked during startup."
+            )
+            print(f"[TXITPY browser warning] {message}", file=sys.stderr, flush=True)
+            write_diagnostic_text("window-show-timeout", message)
             return
-        message = (
-            "The sign-in browser window opened, but the webpage did not finish "
-            "loading within 30 seconds. The WebView2 renderer may be stalled."
-        )
-        print(f"[TXITPY browser warning] {message}", file=sys.stderr, flush=True)
-        write_diagnostic_text("page-load-timeout", message)
+        if not page_loaded.wait(30):
+            message = (
+                "The sign-in window appeared, but the TXITY webpage did not finish "
+                "loading within 30 seconds."
+            )
+            print(f"[TXITPY browser warning] {message}", file=sys.stderr, flush=True)
+            write_diagnostic_text("page-load-timeout", message)
 
     threading.Thread(
-        target=report_slow_page_load,
+        target=report_browser_stall,
         daemon=True,
-        name="txity-page-load-watchdog",
+        name="txity-browser-stall-watchdog",
     ).start()
 
     try:
@@ -293,11 +316,9 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             webview_version = "unknown"
 
-        print(
-            f"[TXITPY] Starting pywebview {webview_version}; "
-            f"renderer={renderer or 'platform default'}.",
-            file=sys.stderr,
-            flush=True,
+        report_stage(
+            f"Calling webview.start with pywebview {webview_version}; "
+            f"renderer={renderer or 'platform default'}."
         )
         webview.start(
             gui=renderer,
@@ -309,6 +330,7 @@ def main(argv: list[str] | None = None) -> int:
         bridge.report_startup_failure("start-webview", exc)
         return 1
 
+    report_stage("pywebview event loop exited normally.")
     return 0
 
 if __name__ == "__main__":
