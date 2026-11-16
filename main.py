@@ -28,7 +28,12 @@ from discord_auth import (
     write_diagnostic,
     write_diagnostic_text,
 )
-from transmitter import TxityTransmitter, build_transmit_config, list_audio_inputs
+from transmitter import (
+    TxityTransmitter,
+    build_transmit_config,
+    list_audio_inputs,
+    list_loopback_devices,
+)
 
 BASE_URL = "https://txity.radiodiscussion.org"
 CONTROL_URL = "wss://txity.radiodiscussion.org/ws/control"
@@ -967,10 +972,15 @@ def build_app() -> None:
     tx_description_var = tk.StringVar(root, "")
     tx_frequency_var = tk.StringVar(root, "7.250 MHz")
     tx_mode_var = tk.StringVar(root, "AM")
+    tx_mode_help_var = tk.StringVar(root, "AM uses a carrier with upper and lower sidebands.")
     tx_power_var = tk.StringVar(root, "50")
-    tx_audio_input_var = tk.StringVar(root, "System default")
+    tx_audio_source_var = tk.StringVar(root, "Microphone / line input")
+    tx_audio_device_var = tk.StringVar(root, "System default")
+    tx_audio_device_label_var = tk.StringVar(root, "Input device")
+    tx_audio_input_var = tx_audio_device_var
     tx_cw_text_var = tk.StringVar(root, "CQ CQ DE TXITY")
     tx_cw_wpm_var = tk.StringVar(root, "18")
+    tx_cw_loop_var = tk.BooleanVar(root, True)
     tx_allow_overlap_var = tk.BooleanVar(root, False)
     tx_logo_url_var = tk.StringVar(root, "")
     tx_details_var = tk.StringVar(root, "")
@@ -1778,14 +1788,26 @@ def build_app() -> None:
                 station_dbm=tx_power_var.get(),
                 allow_overlap=tx_allow_overlap_var.get(),
                 auth_token=client.auth_token,
-                cw_text=tx_cw_text_var.get(),
+                    cw_text=tx_cw_text_var.get(),
                 cw_wpm=tx_cw_wpm_var.get(),
+                cw_loop=tx_cw_loop_var.get(),
                 station_logo_url=tx_logo_url_var.get(),
                 station_details=tx_details_var.get(),
                 station_page_layout=tx_page_layout_var.get(),
             )
-            device = tx_audio_device_ids.get(tx_audio_input_var.get())
-            transmitter.start(config, input_device=device)
+            audio_source = (
+                "loopback"
+                if tx_audio_source_var.get() == "Desktop audio (output loopback)"
+                else "mic"
+            )
+            selected_device = tx_audio_device_ids.get(tx_audio_device_var.get())
+            if config["mode"] != "CW" and selected_device is None and audio_source == "loopback":
+                raise ValueError("Select a desktop output device for loopback capture.")
+            transmitter.start(
+                config,
+                input_device=selected_device,
+                audio_source=audio_source,
+            )
             tx_status_var.set("Preparing transmission...")
             update_transmit_button()
         except Exception as exc:
@@ -1797,36 +1819,39 @@ def build_app() -> None:
         nonlocal tx_transmit_button
 
         page, _canvas = create_scrollable_page(parent)
+
+        hero = tk.Frame(page, bg=palette["background"])
+        hero.pack(fill="x", pady=(6, 16))
         make_label(
-            page,
-            "Transmit",
-            font=("Segoe UI", 27, "bold"),
+            hero,
+            "TXITY",
+            font=("Segoe UI", 28, "bold"),
             background=palette["background"],
-        ).pack(anchor="w", pady=(6, 2))
+        ).pack(side="left")
         make_label(
-            page,
-            "Configure a station and stream microphone audio to TXITY.",
-            font=("Segoe UI", 10, "normal"),
+            hero,
+            "Transmit",
+            font=("Segoe UI", 11, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
-        ).pack(anchor="w", pady=(0, 16))
-
-        station_card = make_card(page, padding=16)
-        station_card.pack(fill="x", pady=(0, 12))
+        ).pack(side="left", padx=(12, 0), pady=(9, 0))
         make_label(
-            station_card,
-            "Station configuration",
-            font=("Segoe UI", 15, "bold"),
-            background=palette["surfaceContainerLow"],
-        ).pack(anchor="w", pady=(0, 12))
+            hero,
+            variable=connection_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["background"],
+        ).pack(side="right", pady=(10, 0))
 
-        fields = tk.Frame(station_card, bg=palette["surfaceContainerLow"])
-        fields.pack(fill="x")
-        fields.grid_columnconfigure(0, weight=1, uniform="tx-fields")
-        fields.grid_columnconfigure(1, weight=1, uniform="tx-fields")
-
-        def add_tx_entry(label: str, variable: tk.StringVar, row: int, column: int) -> None:
-            wrapper = tk.Frame(fields, bg=palette["surfaceContainerLow"])
+        def add_tx_entry(
+            parent_frame: tk.Misc,
+            label: str,
+            variable: tk.StringVar,
+            *,
+            column: int,
+            row: int,
+        ) -> None:
+            wrapper = tk.Frame(parent_frame, bg=palette["surfaceContainerLow"])
             wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
             make_label(
                 wrapper,
@@ -1850,69 +1875,139 @@ def build_app() -> None:
                 highlightbackground=palette["outlineVariant"],
                 highlightcolor=palette["primary"],
             )
-            entry.pack(fill="x", ipady=6)
+            entry.pack(fill="x", ipady=7)
 
-        add_tx_entry("Station name (required)", tx_station_name_var, 0, 0)
-        add_tx_entry("Short description", tx_description_var, 0, 1)
-        add_tx_entry("Transmit frequency", tx_frequency_var, 1, 0)
-        add_tx_entry("Station power (dBm)", tx_power_var, 1, 1)
-        add_tx_entry("CW message", tx_cw_text_var, 2, 0)
-        add_tx_entry("CW speed (5-60 WPM)", tx_cw_wpm_var, 2, 1)
+        def style_tx_combobox(widget: ttk.Combobox) -> None:
+            style = ttk.Style(root)
+            style.configure(
+                "TXITY.Transmit.TCombobox",
+                fieldbackground=palette["surfaceContainerLowest"],
+                background=palette["surfaceContainerHigh"],
+                foreground=palette["onSurface"],
+                arrowcolor=palette["onSurface"],
+                bordercolor=palette["outlineVariant"],
+                lightcolor=palette["outlineVariant"],
+                darkcolor=palette["outlineVariant"],
+                padding=(10, 8),
+            )
+            style.map(
+                "TXITY.Transmit.TCombobox",
+                fieldbackground=[
+                    ("readonly", palette["surfaceContainerLowest"]),
+                    ("disabled", palette["surfaceContainer"]),
+                ],
+                foreground=[
+                    ("readonly", palette["onSurface"]),
+                    ("disabled", palette["onSurfaceVariant"]),
+                ],
+            )
+            widget.configure(style="TXITY.Transmit.TCombobox", font=("Segoe UI", 11))
 
-        mode_frame = tk.Frame(fields, bg=palette["surfaceContainerLow"])
-        mode_frame.grid(row=3, column=0, sticky="ew", padx=6, pady=6)
+        station_card = make_card(page, padding=16)
+        station_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            station_card,
+            "Station",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 10))
+
+        station_fields = tk.Frame(station_card, bg=palette["surfaceContainerLow"])
+        station_fields.pack(fill="x")
+        station_fields.grid_columnconfigure(0, weight=1, uniform="station-fields")
+        station_fields.grid_columnconfigure(1, weight=1, uniform="station-fields")
+        add_tx_entry(station_fields, "Station name (required)", tx_station_name_var, column=0, row=0)
+        add_tx_entry(station_fields, "Short description", tx_description_var, column=1, row=0)
+        add_tx_entry(station_fields, "Transmit frequency", tx_frequency_var, column=0, row=1)
+
+        signal_card = make_card(page, padding=16)
+        signal_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            signal_card,
+            "Signal settings",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 10))
+
+        signal_fields = tk.Frame(signal_card, bg=palette["surfaceContainerLow"])
+        signal_fields.pack(fill="x")
+        signal_fields.grid_columnconfigure(0, weight=3, uniform="signal-fields")
+        signal_fields.grid_columnconfigure(1, weight=2, uniform="signal-fields")
+
+        mode_frame = tk.Frame(signal_fields, bg=palette["surfaceContainerLow"])
+        mode_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
         make_label(
             mode_frame,
-            "Signal mode",
-            font=("Segoe UI", 9, "bold"),
+            "Signal type",
+            font=("Segoe UI", 10, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
-        ).pack(anchor="w", pady=(0, 4))
+        ).pack(anchor="w", pady=(0, 5))
         mode_picker = ttk.Combobox(
             mode_frame,
             textvariable=tx_mode_var,
             values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "CW"),
             state="readonly",
+            height=7,
         )
-        mode_picker.pack(fill="x", ipady=3)
+        mode_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(mode_picker)
 
-        input_frame = tk.Frame(fields, bg=palette["surfaceContainerLow"])
-        input_frame.grid(row=3, column=1, sticky="ew", padx=6, pady=6)
-        make_label(
-            input_frame,
-            "Microphone / line input",
-            font=("Segoe UI", 9, "bold"),
+        mode_help = make_label(
+            mode_frame,
+            variable=tx_mode_help_var,
+            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
-        ).pack(anchor="w", pady=(0, 4))
-
-        tx_audio_device_ids.clear()
-        tx_audio_device_ids["System default"] = None
-        device_values = ["System default"]
-        try:
-            for device_id, device_name in list_audio_inputs():
-                display = f"{device_id}: {device_name}"
-                tx_audio_device_ids[display] = device_id
-                device_values.append(display)
-        except Exception as exc:
-            tx_status_var.set(
-                f"Audio devices unavailable: {safe_error_text(str(exc), 250)}. CW mode remains available."
-            )
-        if tx_audio_input_var.get() not in tx_audio_device_ids:
-            tx_audio_input_var.set("System default")
-        input_picker = ttk.Combobox(
-            input_frame,
-            textvariable=tx_audio_input_var,
-            values=device_values,
-            state="readonly",
+            wraplength=570,
         )
-        input_picker.pack(fill="x", ipady=3)
+        mode_help.pack(anchor="w", pady=(6, 0))
 
-        profile_frame = tk.Frame(station_card, bg=palette["surfaceContainerLow"])
-        profile_frame.pack(fill="x", pady=(10, 2))
-        overlap = tk.Checkbutton(
-            profile_frame,
-            text="Allow frequency sharing with other stations that also enable sharing",
+        def update_mode_help(_event=None) -> None:
+            descriptions = {
+                "AM": "AM — normal AM with carrier.",
+                "USB": "USB — upper sideband.",
+                "LSB": "LSB — lower sideband.",
+                "USB+C": "USB+C — upper sideband with carrier.",
+                "LSB+C": "LSB+C — lower sideband with carrier.",
+                "DSB": "DSB — double-sideband suppressed carrier.",
+                "CW": "CW — carrier only. The microphone and desktop audio sources are not used.",
+            }
+            tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
+        mode_picker.bind("<<ComboboxSelected>>", update_mode_help)
+        update_mode_help()
+
+        power_frame = tk.Frame(signal_fields, bg=palette["surfaceContainerLow"])
+        power_frame.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
+        make_label(
+            power_frame,
+            "Station power",
+            font=("Segoe UI", 10, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 6))
+        power_scale = tk.Scale(
+            power_frame,
+            variable=tx_power_var,
+            from_=-140,
+            to=53,
+            resolution=1,
+            orient="horizontal",
+            showvalue=True,
+            highlightthickness=0,
+            borderwidth=0,
+            relief="flat",
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            troughcolor=palette["surfaceContainerHighest"],
+            activebackground=palette["primary"],
+            font=("Segoe UI", 9),
+        )
+        power_scale.pack(fill="x", expand=True, pady=(1, 0))
+
+        sharing = tk.Checkbutton(
+            signal_card,
+            text="Allow shared frequency overlap with stations that also enable sharing",
             variable=tx_allow_overlap_var,
             bg=palette["surfaceContainerLow"],
             fg=palette["onSurface"],
@@ -1923,25 +2018,168 @@ def build_app() -> None:
             bd=0,
             anchor="w",
         )
-        overlap.pack(anchor="w")
+        sharing.pack(anchor="w", padx=6, pady=(8, 0))
 
         audio_card = make_card(page, padding=16)
         audio_card.pack(fill="x", pady=(0, 12))
         make_label(
             audio_card,
-            "Audio pipeline",
+            "Audio source",
             font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
-        ).pack(anchor="w")
+        ).pack(anchor="w", pady=(0, 10))
+
+        audio_fields = tk.Frame(audio_card, bg=palette["surfaceContainerLow"])
+        audio_fields.pack(fill="x")
+        audio_fields.grid_columnconfigure(0, weight=1, uniform="audio-fields")
+        audio_fields.grid_columnconfigure(1, weight=1, uniform="audio-fields")
+
+        source_frame = tk.Frame(audio_fields, bg=palette["surfaceContainerLow"])
+        source_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            source_frame,
+            "Audio source",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        source_picker = ttk.Combobox(
+            source_frame,
+            textvariable=tx_audio_source_var,
+            values=("Microphone / line input", "Desktop audio (output loopback)"),
+            state="readonly",
+            height=4,
+        )
+        source_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(source_picker)
+
+        device_frame = tk.Frame(audio_fields, bg=palette["surfaceContainerLow"])
+        device_frame.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
+        make_label(
+            device_frame,
+            variable=tx_audio_device_label_var,
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        device_picker = ttk.Combobox(
+            device_frame,
+            textvariable=tx_audio_device_var,
+            values=("System default",),
+            state="readonly",
+            height=8,
+        )
+        device_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(device_picker)
+
+        def refresh_audio_devices(_event=None) -> None:
+            tx_audio_device_ids.clear()
+            selected_source = tx_audio_source_var.get()
+            if selected_source == "Desktop audio (output loopback)":
+                tx_audio_device_label_var.set("Desktop output device")
+                try:
+                    devices = list_loopback_devices()
+                except Exception as exc:
+                    devices = []
+                    details = safe_error_text(str(exc), 300)
+                    tx_status_var.set(details)
+                    print(f"[TXITPY] Desktop audio device discovery failed: {details}", file=sys.stderr, flush=True)
+                values = []
+                for device_id, device_name in devices:
+                    tx_audio_device_ids[device_name] = device_id
+                    values.append(device_name)
+                if not values:
+                    values = ["No desktop loopback devices found"]
+                    tx_audio_device_var.set(values[0])
+                    device_picker.configure(values=values)
+                    return
+            else:
+                tx_audio_device_label_var.set("Microphone / line input")
+                tx_audio_device_ids["System default"] = None
+                values = ["System default"]
+                try:
+                    for device_id, device_name in list_audio_inputs():
+                        display = f"{device_id}: {device_name}"
+                        tx_audio_device_ids[display] = device_id
+                        values.append(display)
+                except Exception as exc:
+                    details = safe_error_text(str(exc), 300)
+                    tx_status_var.set(details)
+                    print(f"[TXITPY] Microphone device discovery failed: {details}", file=sys.stderr, flush=True)
+
+            device_picker.configure(values=values)
+            if tx_audio_device_var.get() not in tx_audio_device_ids:
+                tx_audio_device_var.set(values[0])
+
+        source_picker.bind("<<ComboboxSelected>>", refresh_audio_devices)
+        refresh_button = make_button(
+            audio_card,
+            "Refresh audio devices",
+            refresh_audio_devices,
+            kind="tonal",
+            padx=12,
+            pady=7,
+        )
+        refresh_button.pack(anchor="w", padx=6, pady=(8, 2))
+
         make_label(
             audio_card,
-            "Microphone modes stream mono Float32 PCM at 48 kHz in 512-sample (2,048-byte) frames. "
-            "CW mode uses the TXITY control message and does not open a microphone or audio socket.",
+            "Desktop audio uses Windows WASAPI loopback to capture the selected playback device. "
+            "Stereo playback is downmixed to mono and converted to 48 kHz Float32 for TXITY. "
+            "Use microphone / line input for a physical input device.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=850,
-        ).pack(anchor="w", pady=(7, 0))
+        ).pack(anchor="w", padx=6, pady=(7, 0))
+
+        cw_card = make_card(page, padding=16)
+        cw_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            cw_card,
+            "CW message",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 8))
+        cw_fields = tk.Frame(cw_card, bg=palette["surfaceContainerLow"])
+        cw_fields.pack(fill="x")
+        cw_fields.grid_columnconfigure(0, weight=3, uniform="cw-fields")
+        cw_fields.grid_columnconfigure(1, weight=1, uniform="cw-fields")
+        add_tx_entry(cw_fields, "Message", tx_cw_text_var, column=0, row=0)
+        add_tx_entry(cw_fields, "Speed (5-60 WPM)", tx_cw_wpm_var, column=1, row=0)
+        cw_loop = tk.Checkbutton(
+            cw_card,
+            text="Repeat CW message",
+            variable=tx_cw_loop_var,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerHighest"],
+            highlightthickness=0,
+            bd=0,
+            anchor="w",
+        )
+        cw_loop.pack(anchor="w", padx=6, pady=(8, 0))
+
+        connect_card = make_card(page, padding=16)
+        connect_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            connect_card,
+            "How to connect",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w")
+        make_label(
+            connect_card,
+            "TXITY provides a virtual SDR++ Server feed. Connect your SDR++ client to the "
+            "server endpoint shown by TXITY, then start the transmission here. TXITPY sends "
+            "audio to TXITY's virtual service and does not control local RF hardware.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(6, 0))
 
         status_card = make_card(page, padding=16)
         status_card.pack(fill="x", pady=(0, 12))
@@ -1971,7 +2209,7 @@ def build_app() -> None:
 
         make_label(
             page,
-            "TXITPY sends audio only to TXITY's virtual service. It does not control physical radio hardware.",
+            "TXITPY streams selected audio only to TXITY's virtual service.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
