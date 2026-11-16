@@ -12,7 +12,9 @@ from transmitter import (
     DRM_PREROLL_FRAMES,
     SUPPORTED_MODES,
     LIVE_AUDIO_SILENCE_GRACE_SECONDS,
-    CONTROL_RECONNECT_GRACE_SECONDS,
+    RECONNECT_INITIAL_DELAY_SECONDS,
+    RECONNECT_MAX_DELAY_SECONDS,
+    reconnect_delay,
     begin_windows_system_awake,
     end_windows_system_awake,
     should_send_live_audio_silence,
@@ -84,8 +86,13 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertFalse(should_send_live_audio_silence(10.0, 10.05))
         self.assertTrue(should_send_live_audio_silence(10.0, 10.101))
 
-    def test_control_reconnect_grace_allows_short_disconnects(self):
-        self.assertEqual(CONTROL_RECONNECT_GRACE_SECONDS, 20.0)
+    def test_reconnect_delay_grows_then_stays_bounded(self):
+        self.assertEqual(RECONNECT_INITIAL_DELAY_SECONDS, 1.0)
+        self.assertEqual(RECONNECT_MAX_DELAY_SECONDS, 15.0)
+        self.assertEqual(
+            [reconnect_delay(attempt) for attempt in range(1, 8)],
+            [1.0, 2.0, 4.0, 8.0, 15.0, 15.0, 15.0],
+        )
 
     def test_windows_awake_request_cleanup_resets_execution_state(self):
         states = []
