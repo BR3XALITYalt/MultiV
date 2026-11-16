@@ -21,7 +21,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
-from audio_playlist import collect_audio_files
+from audio_playlist import (
+    build_playlist_snapshot,
+    collect_audio_files,
+    normalize_audio_sources,
+)
 from discord_auth import (
     DiscordAuthManager,
     clean_discord_user,
@@ -1046,9 +1050,27 @@ def build_app() -> None:
     tx_audio_device_label_var = tk.StringVar(root, "Input device")
     tx_audio_input_var = tx_audio_device_var
     saved_playlist_files = saved_tx_settings.get("playlist_files", [])
-    tx_playlist_files = collect_audio_files(
-        saved_playlist_files if isinstance(saved_playlist_files, list) else []
+    saved_playlist_sources = saved_tx_settings.get("playlist_sources")
+    if not isinstance(saved_playlist_sources, list):
+        saved_playlist_sources = saved_playlist_files
+    tx_playlist_sources = normalize_audio_sources(
+        saved_playlist_sources if isinstance(saved_playlist_sources, list) else []
     )
+    saved_playlist_exclusions = saved_tx_settings.get("playlist_excluded_files", [])
+    tx_playlist_excluded_files = {
+        str(Path(item).expanduser().resolve(strict=False)).casefold()
+        for item in saved_playlist_exclusions
+        if isinstance(item, str) and item.strip()
+    } if isinstance(saved_playlist_exclusions, list) else set()
+    tx_playlist_files, tx_playlist_signature = build_playlist_snapshot(
+        tx_playlist_sources,
+        tx_playlist_excluded_files,
+    )
+    playlist_watch_lock = threading.Lock()
+    playlist_watch_revision = 0
+    playlist_watch_signature = tx_playlist_signature
+    playlist_watch_stop = threading.Event()
+    playlist_ui_refresh_callback: Any = None
     tx_playlist_shuffle_var = tk.BooleanVar(root, saved_bool("playlist_shuffle", False))
     tx_playlist_loop_var = tk.BooleanVar(root, saved_bool("playlist_loop", False))
     tx_playlist_status_var = tk.StringVar(root, "No playlist loaded.")
@@ -1093,6 +1115,8 @@ def build_app() -> None:
             "audio_source": tx_audio_source_var.get(),
             "audio_device": tx_audio_device_var.get(),
             "playlist_files": list(tx_playlist_files),
+            "playlist_sources": list(tx_playlist_sources),
+            "playlist_excluded_files": sorted(tx_playlist_excluded_files),
             "playlist_shuffle": tx_playlist_shuffle_var.get(),
             "playlist_loop": tx_playlist_loop_var.get(),
             "cw_text": tx_cw_text_var.get(),
@@ -1152,6 +1176,29 @@ def build_app() -> None:
             except tk.TclError:
                 pass
         settings_save_after_id = root.after(450, save_tx_settings_now)
+
+    def refresh_playlist_from_sources(*, save: bool = True) -> tuple[int, int]:
+        nonlocal playlist_watch_revision, playlist_watch_signature
+        with playlist_watch_lock:
+            sources = list(tx_playlist_sources)
+            excluded = set(tx_playlist_excluded_files)
+        refreshed_files, signature = build_playlist_snapshot(sources, excluded)
+        previous = {path.casefold() for path in tx_playlist_files}
+        current = {path.casefold() for path in refreshed_files}
+        added = len(current - previous)
+        removed = len(previous - current)
+        tx_playlist_files[:] = refreshed_files
+        with playlist_watch_lock:
+            playlist_watch_revision += 1
+            playlist_watch_signature = signature
+        if playlist_ui_refresh_callback is not None:
+            try:
+                playlist_ui_refresh_callback()
+            except tk.TclError:
+                pass
+        if save:
+            schedule_tx_settings_save()
+        return added, removed
 
     tx_setting_variables = (
         tx_station_name_var, tx_description_var, tx_frequency_var, tx_mode_var,
@@ -1571,6 +1618,7 @@ def build_app() -> None:
         build_shell()
 
     def on_shutdown() -> None:
+        playlist_watch_stop.set()
         transmitter.stop(wait=1.0)
         client.disconnect()
         save_tx_settings_now()
