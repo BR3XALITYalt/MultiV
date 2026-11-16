@@ -346,13 +346,12 @@ def _clean_station_comments(value: Any) -> list[dict[str, str]]:
         if not isinstance(item, dict):
             continue
 
-        user = item.get("user")
-        if not isinstance(user, dict):
-            user = item.get("author")
-        if not isinstance(user, dict):
-            user = item.get("discordUser")
-        if not isinstance(user, dict):
-            user = {}
+        user = {}
+        for nested_key in ("user", "author", "discordUser", "discord_user"):
+            candidate_user = item.get(nested_key)
+            if isinstance(candidate_user, dict) and candidate_user:
+                user = candidate_user
+                break
 
         author = (
             first_text(item, "discordUsername", "username", "authorName", "name", limit=80)
@@ -372,15 +371,26 @@ def _clean_station_comments(value: Any) -> list[dict[str, str]]:
                 "avatar_url",
                 "authorAvatarUrl",
                 "avatar",
+                "discordAvatar",
+                "discord_avatar",
                 limit=512,
             )
             if avatar_value:
                 break
 
-        avatar_user_id = (
-            first_text(item, "discordId", "userId", "authorId", limit=24)
-            or first_text(user, "discordId", "userId", "id", limit=24)
-        )
+        avatar_user_id = ""
+        for source in (item, user):
+            for field_name in ("discordId", "userId", "authorId", "id"):
+                candidate_id = source.get(field_name) if isinstance(source, dict) else None
+                if (
+                    isinstance(candidate_id, (str, int))
+                    and not isinstance(candidate_id, bool)
+                    and str(candidate_id).isdigit()
+                ):
+                    avatar_user_id = str(candidate_id)
+                    break
+            if avatar_user_id:
+                break
         avatar_url = discord_avatar_url(avatar_value, avatar_user_id)
         comments.append({
             "author": author,
@@ -449,7 +459,7 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
             profile_details = raw_details.strip()
         elif isinstance(raw_details, dict):
             profile_details = ""
-            for field_name in ("text", "description", "content", "body", "about"):
+            for field_name in ("text", "description", "shortDescription", "summary", "content", "body", "about"):
                 candidate = raw_details.get(field_name)
                 if isinstance(candidate, str) and candidate.strip():
                     profile_details = candidate.strip()
@@ -508,7 +518,10 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
             profile_details=profile_details.strip()[:4_000],
             discord_id=str(item.get("discordId", ""))[:40] if item.get("discordId") is not None else "",
             avatar_url=discord_avatar_url(
-                item.get("discordAvatarUrl") or item.get("avatarUrl") or item.get("avatar"),
+                item.get("discordAvatarUrl")
+                or item.get("avatarUrl")
+                or item.get("discordAvatar")
+                or item.get("avatar"),
                 item.get("discordId") or item.get("userId"),
             ),
             image_urls=image_urls,
