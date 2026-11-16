@@ -140,6 +140,7 @@ jobs:
           level_dbfs = -12.0
           """
 
+          selected_protection = None
           for protection in range(4):
               config = base.replace(
                   "protection_b = 0",
@@ -156,14 +157,42 @@ jobs:
                   capture_output=True,
                   check=False,
               )
-              print(f"64-QAM protection_b={protection}:")
+              print(f"64-QAM HE-AAC protection_b={protection}:")
               if result.stdout:
                   print(result.stdout, end="")
               if result.stderr:
                   print(result.stderr, end="")
               if result.returncode == 0:
-                  print(f"Selected 64-QAM protection_b={protection}.")
-                  sys.exit(0)
+                  selected_protection = protection
+                  print(f"Selected 64-QAM protection_b={protection} for HE-AAC.")
+                  break
 
-          raise SystemExit("No tested 64-QAM protection level can carry the HE-AAC service.")
+          if selected_protection is None:
+              raise SystemExit("No tested 64-QAM protection level can carry the HE-AAC service.")
+
+          xhe_config = base.replace(
+              'codec = "he-aac"\ncore_rate = 12000',
+              'codec = "xhe-aac"',
+          ).replace(
+              "protection_b = 0",
+              f"protection_b = {selected_protection}",
+          )
+          Path("drm-validation.toml").write_text(xhe_config, encoding="utf-8")
+          xhe_result = subprocess.run(
+              [
+                  "cargo", "run", "--release", "-q",
+                  "-p", "txitpy-drm-bridge", "--",
+                  "--check", "drm-validation.toml",
+              ],
+              text=True,
+              capture_output=True,
+              check=False,
+          )
+          print("64-QAM xHE-AAC test-tone validation:")
+          if xhe_result.stdout:
+              print(xhe_result.stdout, end="")
+          if xhe_result.stderr:
+              print(xhe_result.stderr, end="")
+          if xhe_result.returncode != 0:
+              raise SystemExit("The xHE-AAC test-tone configuration did not validate.")
           PY
