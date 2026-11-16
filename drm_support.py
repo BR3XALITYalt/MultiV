@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import platform
 import random
@@ -779,6 +780,8 @@ def write_drm_station_config(
     station_name: str,
     input_device_name: str | None = None,
     playlist_url: str | None = None,
+    tone_hz: float | None = None,
+    tone_level_dbfs: float = -12.041,
     service_label: str | None = None,
     service_id: str = "0xB30001",
     language: str = "English",
@@ -789,8 +792,22 @@ def write_drm_station_config(
     interleaving: str = "long",
 ) -> Path:
     """Write a one-service, 4.5 kHz DRM30 station configuration."""
-    if bool(input_device_name) == bool(playlist_url):
-        raise ValueError("Choose exactly one DRM audio input: microphone or playlist.")
+    input_count = sum((bool(input_device_name), bool(playlist_url), tone_hz is not None))
+    if input_count != 1:
+        raise ValueError("Choose exactly one DRM audio input: microphone, playlist, or test tone.")
+
+    tone_frequency = None
+    tone_level = None
+    if tone_hz is not None:
+        try:
+            tone_frequency = float(tone_hz)
+            tone_level = float(tone_level_dbfs)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("The DRM test tone settings must be numeric.") from exc
+        if not math.isfinite(tone_frequency) or not 0.0 < tone_frequency < 12_000.0:
+            raise ValueError("The DRM test tone frequency must be between 0 and 12000 Hz.")
+        if not math.isfinite(tone_level) or tone_level > 0.0:
+            raise ValueError("The DRM test tone level must be a finite value at or below 0 dBFS.")
 
     raw_label = service_label if service_label is not None and str(service_label).strip() else station_name
     label = "".join(character for character in str(raw_label or "TXITPY") if character.isprintable())
@@ -875,6 +892,11 @@ def write_drm_station_config(
     ])
     if playlist_url:
         lines.extend((f"url = {_toml_string(playlist_url)}", "stream_titles = false"))
+    elif tone_frequency is not None and tone_level is not None:
+        lines.extend((
+            f"tone_hz = {tone_frequency:.6g}",
+            f"level_dbfs = {tone_level:.6g}",
+        ))
     else:
         lines.append(f"device = {_toml_string(input_device_name or 'default')}")
 
