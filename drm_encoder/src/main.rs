@@ -75,7 +75,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             return Err(error.into());
         }
     };
-    eprintln!("DRM channel plan:\\n{}", plan.describe(&config));
+    eprintln!("DRM channel plan:\n{}", plan.describe(&config));
     let mut station = match Station::with_plan_and_stop(config, plan, stop.clone()) {
         Ok(station) => station,
         Err(error) => {
