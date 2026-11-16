@@ -927,47 +927,57 @@ class TxityClient:
 
         try:
             while not self.stop_event.is_set():
-                with self.auth_lock:
-                    auth_token = self.auth_token
-                query_values = {
-                    "session": self.session_id,
-                    "sessionSecret": self.session_secret,
-                }
-                if auth_token:
-                    query_values["authToken"] = auth_token
-                socket_url = f"{CONTROL_URL}?{urlencode(query_values)}"
-                ws = websocket.WebSocketApp(
-                    socket_url,
-                    on_open=on_open,
-                    on_message=on_message,
-                    on_error=on_error,
-                    on_close=on_close,
-                )
-                with self.auth_lock:
-                    current_token = self.auth_token
-                    self.ws = ws
-                if current_token != auth_token:
-                    self.reconnect_event.set()
-                    ws.close()
-                ws.run_forever(
-                    origin=BASE_URL,
-                    ping_interval=25,
-                    ping_timeout=10,
-                    reconnect=0,
-                )
-                if self.ws is ws:
-                    self.ws = None
+                ws: websocket.WebSocketApp | None = None
+                try:
+                    with self.auth_lock:
+                        auth_token = self.auth_token
+                    query_values = {
+                        "session": self.session_id,
+                        "sessionSecret": self.session_secret,
+                    }
+                    if auth_token:
+                        query_values["authToken"] = auth_token
+                    socket_url = f"{CONTROL_URL}?{urlencode(query_values)}"
+                    ws = websocket.WebSocketApp(
+                        socket_url,
+                        on_open=on_open,
+                        on_message=on_message,
+                        on_error=on_error,
+                        on_close=on_close,
+                    )
+                    with self.auth_lock:
+                        current_token = self.auth_token
+                        self.ws = ws
+                    if current_token != auth_token:
+                        self.reconnect_event.set()
+                        ws.close()
+                    ws.run_forever(
+                        origin=BASE_URL,
+                        ping_interval=25,
+                        ping_timeout=10,
+                        reconnect=0,
+                    )
+                except Exception as exc:
+                    if not self.stop_event.is_set():
+                        details = describe_status_socket_error(exc)
+                        write_diagnostic_text("status-websocket-client-error", details)
+                        self.events.put({"kind": "socket_error", "text": details})
+                finally:
+                    if ws is not None:
+                        with self.auth_lock:
+                            if self.ws is ws:
+                                self.ws = None
+
                 if not self.stop_event.is_set():
-                    self.events.put({"kind": "connection", "text": "Reconnecting status connection..."})
+                    self.events.put({
+                        "kind": "connection",
+                        "text": "TXITY control connection lost; reconnecting...",
+                    })
                     if self.reconnect_event.wait(4):
                         self.reconnect_event.clear()
-        except Exception as exc:
-            if not self.stop_event.is_set():
-                details = describe_status_socket_error(exc)
-                write_diagnostic_text("status-websocket-client-error", details)
-                self.events.put({"kind": "socket_error", "text": details})
         finally:
-            self.ws = None
+            with self.auth_lock:
+                self.ws = None
 
 
 
