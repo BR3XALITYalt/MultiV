@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import secrets
 import sys
 import threading
@@ -26,6 +27,7 @@ from discord_auth import (
     is_auth_token,
     safe_error_text,
     write_diagnostic,
+    write_diagnostic_text,
 )
 
 BASE_URL = "https://txity.radiodiscussion.org"
@@ -153,6 +155,26 @@ def fetch_text(url: str) -> str:
         return response.read().decode(encoding, errors="replace")
 
 
+def describe_status_socket_error(error: BaseException) -> str:
+    """Describe a WebSocket failure without exposing credentials in its URL."""
+    details = re.sub(
+        r"(?i)wss?://[^\\s'\\"<>]+",
+        "[WebSocket URL redacted]",
+        str(error),
+    )
+    details = safe_error_text(details, max_chars=1_200)
+
+    status_code = getattr(error, "status_code", None)
+    status_message = getattr(error, "status_message", None)
+    if status_code is not None:
+        status = f"HTTP {status_code}"
+        if status_message:
+            status += f" {safe_error_text(str(status_message), max_chars=200)}"
+        return f"WebSocket handshake rejected ({status}). {details}".strip()
+
+    return f"{type(error).__name__}: {details}"
+
+
 class TxityClient:
     """Perform network I/O off the GUI thread and publish results via a queue."""
 
@@ -251,6 +273,8 @@ class TxityClient:
         # Reuse this app session across reconnects. TXITY itself supplies the
         # signed token after the official Discord flow completes.
 
+        status_received = threading.Event()
+
         def on_open(ws: websocket.WebSocketApp) -> None:
             self.events.put({
                 "kind": "connection",
@@ -277,16 +301,29 @@ class TxityClient:
             except json.JSONDecodeError:
                 return
             if isinstance(data, dict) and data.get("type") == "status":
+                if not status_received.is_set():
+                    status_received.set()
+                    self.events.put({
+                        "kind": "connection",
+                        "text": "Connected; receiving live TXITY status.",
+                    })
                 self.events.put({"kind": "status", "data": data})
 
         def on_error(_ws: websocket.WebSocketApp, error: Any) -> None:
-            if not self.stop_event.is_set():
-                # Never include a WebSocket URL or its authToken in error text.
-                self.events.put({"kind": "socket_error", "text": "The TXITY status connection failed."})
+            if self.stop_event.is_set():
+                return
+            details = describe_status_socket_error(error)
+            write_diagnostic_text("status-websocket-error", details)
+            self.events.put({"kind": "socket_error", "text": details})
 
-        def on_close(_ws: websocket.WebSocketApp, _code: Any, _reason: Any) -> None:
-            if not self.stop_event.is_set():
-                self.events.put({"kind": "connection", "text": "Status connection closed"})
+        def on_close(_ws: websocket.WebSocketApp, code: Any, reason: Any) -> None:
+            if self.stop_event.is_set():
+                return
+            close_text = f"Status WebSocket closed (code: {code!r}"
+            if reason:
+                close_text += f", reason: {safe_error_text(str(reason), max_chars=300)}"
+            close_text += ")."
+            self.events.put({"kind": "connection", "text": close_text})
 
         try:
             while not self.stop_event.is_set():
@@ -324,9 +361,11 @@ class TxityClient:
                     self.events.put({"kind": "connection", "text": "Reconnecting status connection..."})
                     if self.reconnect_event.wait(4):
                         self.reconnect_event.clear()
-        except Exception:
+        except Exception as exc:
             if not self.stop_event.is_set():
-                self.events.put({"kind": "socket_error", "text": "The TXITY status connection failed."})
+                details = describe_status_socket_error(exc)
+                write_diagnostic_text("status-websocket-client-error", details)
+                self.events.put({"kind": "socket_error", "text": details})
         finally:
             self.ws = None
 
@@ -582,7 +621,9 @@ def build_app() -> None:
                     break
                 kind = event.get("kind")
                 if kind == "connection":
-                    connection.set(str(event.get("text", "")))
+                    text = str(event.get("text", ""))
+                    connection.set(text)
+                    print(f"[TXITPY] {text}", file=sys.stderr, flush=True)
                 elif kind == "status":
                     apply_status(event.get("data", {}))
                     updated.set("Live status received")
@@ -649,6 +690,11 @@ def build_app() -> None:
                     summary.set(str(event.get("text", "Network error")))
                     if kind == "socket_error":
                         connection.set("Live status unavailable; station directory can still be refreshed")
+                        print(
+                            f"[TXITPY] Status WebSocket error: {safe_error_text(str(event.get('text', 'Unknown error')), max_chars=1_500)}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
 
         shell.schedule.every(250, drain_events)
         shell.schedule.every(60_000, client.refresh_stations)
