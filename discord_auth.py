@@ -270,10 +270,14 @@ class DiscordAuthManager:
                     return
 
                 if path == "/failure":
-                    message = (
-                        "The embedded sign-in window could not start. "
-                        "Install the Microsoft Edge WebView2 Runtime, then restart TXITPY."
-                    )
+                    raw_message = payload.get("message")
+                    if isinstance(raw_message, str):
+                        message = "".join(
+                            character for character in raw_message[:1800]
+                            if character.isprintable() or character in "\\n\\t"
+                        )
+                    else:
+                        message = "The embedded sign-in window could not start."
                     if not manager._fail(state, message):
                         self._json(400, {"ok": False, "error": "This sign-in request is no longer active."})
                         return
