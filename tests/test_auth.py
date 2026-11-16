@@ -8,10 +8,12 @@ from discord_auth import (
     AUTH_START_URL,
     DiscordAuthManager,
     clean_discord_user,
+    format_exception_details,
     is_auth_token,
+    safe_error_text,
     user_from_txity_token,
 )
-from discord_auth_browser import safe_error_text, token_from_storage
+from discord_auth_browser import token_from_storage
 
 
 def fake_txity_token(payload):
@@ -108,6 +110,27 @@ class DiscordAuthValidationTests(unittest.TestCase):
         self.assertNotIn("abcdef0123456789abcdef0123456789", message)
         self.assertIn("[URL redacted]", message)
         self.assertIn("authToken=[redacted]", message)
+
+    def test_verbose_exception_details_include_traceback_and_redact_secrets(self):
+        try:
+            raise RuntimeError(
+                "failed https://example.test/path?state=secretvalue "
+                'authToken="abcdef0123456789abcdef0123456789"'
+            )
+        except RuntimeError as exc:
+            details = format_exception_details(exc)
+
+        self.assertIn("Traceback (most recent call last)", details)
+        self.assertIn("RuntimeError", details)
+        self.assertIn("line", details)
+        self.assertNotIn("secretvalue", details)
+        self.assertNotIn("abcdef0123456789abcdef0123456789", details)
+        self.assertIn("[URL redacted]", details)
+        self.assertIn("authToken=[redacted]", details)
+
+    def test_safe_error_text_preserves_line_breaks(self):
+        details = safe_error_text("first line\nsecond line")
+        self.assertIn("first line\nsecond line", details)
 
     def test_auth_route_defaults_to_txity_route(self):
         manager = DiscordAuthManager(Queue())
