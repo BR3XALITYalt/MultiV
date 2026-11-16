@@ -42,6 +42,7 @@ from transmitter import (
     list_audio_inputs,
     list_loopback_devices,
     parse_rf_frequency,
+    tx_status_diagnostic_snapshot,
 )
 
 BASE_URL = "https://txity.radiodiscussion.org"
@@ -1267,6 +1268,9 @@ def build_app() -> None:
     server_band_max_hz: int | None = None
     tx_negative_status_reason: str | None = None
     tx_negative_status_count = 0
+    tx_ptt_confirmed = False
+    tx_last_status_signature: str | None = None
+    tx_terminal_server_message: str | None = None
     station_search_var = tk.StringVar(root, "")
     station_cards_frame: tk.Frame | None = None
     selected_station_id = ""
@@ -3860,6 +3864,7 @@ def build_app() -> None:
     def apply_status(data: dict[str, Any]) -> None:
         nonlocal server_band_min_hz, server_band_max_hz
         nonlocal tx_negative_status_reason, tx_negative_status_count
+        nonlocal tx_ptt_confirmed, tx_last_status_signature, tx_terminal_server_message
         low, high = data.get("bandMinHz"), data.get("bandMaxHz")
         if isinstance(low, (int, float)) and isinstance(high, (int, float)):
             server_band_min_hz = int(low)
@@ -3869,7 +3874,34 @@ def build_app() -> None:
             server_band_max_hz = None
         update_frequency_check()
 
+        if transmitter.is_busy:
+            try:
+                request_frequency_hz = parse_rf_frequency(tx_frequency_var.get())
+            except ValueError:
+                request_frequency_hz = None
+            diagnostic = tx_status_diagnostic_snapshot(
+                data,
+                request_frequency_hz=request_frequency_hz,
+                request_mode=tx_mode_var.get(),
+                allow_overlap=tx_allow_overlap_var.get(),
+            )
+            signature = json.dumps(diagnostic, ensure_ascii=False, sort_keys=True)
+            if signature != tx_last_status_signature:
+                tx_last_status_signature = signature
+                print(
+                    f"[TXITPY] TXITY status snapshot: {signature}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
         if transmitter.is_busy and data.get("ptt") is True:
+            if not tx_ptt_confirmed:
+                tx_ptt_confirmed = True
+                print(
+                    "[TXITPY] TXITY confirmed PTT for the active request.",
+                    file=sys.stderr,
+                    flush=True,
+                )
             tx_negative_status_reason = None
             tx_negative_status_count = 0
             tx_status_var.set("TXITY confirms that the station is transmitting.")
@@ -3902,7 +3934,17 @@ def build_app() -> None:
                         tx_negative_status_reason = reason_key
                         tx_negative_status_count = 1
                     if tx_negative_status_count >= 2:
-                        message = f"Transmission blocked by TXITY: {reason_text}."
+                        if tx_ptt_confirmed:
+                            message = (
+                                "TXITY reported that PTT stopped after confirming the transmission: "
+                                f"{reason_text} (reason code {reason_key})."
+                            )
+                        else:
+                            message = (
+                                "TXITY did not confirm the PTT request: "
+                                f"{reason_text} (reason code {reason_key})."
+                            )
+                        tx_terminal_server_message = message
                         tx_status_var.set(message)
                         print(f"[TXITPY] {message}", file=sys.stderr, flush=True)
                         transmitter.stop()
@@ -3952,6 +3994,7 @@ def build_app() -> None:
         nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows, current_page, tx_profile_initialized
         nonlocal users_listing_received
         nonlocal tx_negative_status_reason, tx_negative_status_count
+        nonlocal tx_ptt_confirmed, tx_last_status_signature, tx_terminal_server_message
         while True:
             try:
                 event = client.events.get_nowait()
@@ -3969,10 +4012,20 @@ def build_app() -> None:
 
             elif kind == "tx_state":
                 state = str(event.get("state") or "")
-                if state in {"starting", "stopped"}:
+                if state == "starting":
                     tx_negative_status_reason = None
                     tx_negative_status_count = 0
-                tx_status_var.set(str(event.get("text") or state))
+                    tx_ptt_confirmed = False
+                    tx_last_status_signature = None
+                    tx_terminal_server_message = None
+                elif state == "stopped":
+                    tx_negative_status_reason = None
+                    tx_negative_status_count = 0
+                    tx_ptt_confirmed = False
+                if state == "stopped" and tx_terminal_server_message:
+                    tx_status_var.set(tx_terminal_server_message)
+                else:
+                    tx_status_var.set(str(event.get("text") or state))
                 if tx_audio_source_var.get() == "Audio playlist":
                     if state == "transmitting":
                         tx_playlist_status_var.set("Connected. Loading the first track...")
