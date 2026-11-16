@@ -1,68 +1,47 @@
 # TXITPY
 
-Use TXITPY with TXITY, a simulated radio service. Sign in with Discord to browse virtual stations, configure your station, and send audio to the service.
+TXITPY connects to TXITY. Sign in with Discord to browse stations, manage your station, and send audio to the virtual service.
 
-## Features
+## Install
 
-- Browse station listings, profiles, images, and comments.
-- Send microphone audio, Windows desktop audio, or playlist audio.
-- Play MP3, WAV, FLAC, OGG, and AIFF files with shuffle and loop options.
-- Send a configured Morse-code message in CW mode.
-- Adjust AGC, input gain, tone, and mode-specific bandwidth settings.
-- Save station details and transmission preferences between launches.
-- Minimize the TXITPY window to the Windows system tray and select its icon to restore it.
+You need Python 3.12 or newer. Windows users also need Microsoft Edge WebView2 Runtime.
 
-Use TXITPY with TXITY's virtual service. Do not connect the app to physical radio equipment.
-
-## Requirements
-
-- Python 3.12 or newer.
-- Microsoft Edge WebView2 Runtime on Windows.
-- A microphone or supported audio files for audio input.
-- A Windows playback device for desktop-audio capture.
-
-## Install and run
-
-Open a terminal in the TXITPY folder and run:
+Open a terminal in the TXITPY folder:
 
 ```bash
 python -m pip install -r requirements.txt
 python main.py
 ```
 
-On your first launch, sign in with Discord. TXITY must have secure Discord sign-in enabled.
+Sign in with Discord when TXITPY opens. TXITY must have secure Discord sign-in enabled.
 
-## Send audio
+## Transmit
 
-Open **Transmit**. Enter your station name, frequency, and mode, then choose an audio source:
+Open **Transmit** and enter your station name, frequency, and mode. Choose an audio source:
 
-- **Microphone:** Choose an available microphone or input device.
-- **Desktop audio:** On Windows, choose the playback device whose sound you want to capture.
-- **Audio playlist:** Add audio files or folders. Select **Shuffle playlist** or **Loop playlist** to change playback.
+- **Microphone:** Select an input device.
+- **Desktop audio:** Select a Windows playback device.
+- **Playlist:** Add audio files or folders.
 
-Select **Start Transmission** to connect to TXITY. Select **Stop Transmission** when you finish.
+Select **Start Transmission** to begin and **Stop Transmission** to finish.
 
-### Playlist playback
+TXITPY supports MP3, WAV, FLAC, OGG, and AIFF playlists. Use **Shuffle playlist** or **Loop playlist** as needed. TXITPY reads audio ahead during playback to reduce gaps. Imported folders refresh when files change; playlist changes take effect the next time you start playback.
 
-Add MP3, WAV, FLAC, OGG, or AIFF files. Add a folder to include its tracks and keep the playlist in sync with changes on disk. TXITPY refreshes imported folders when you add, remove, rename, or edit files. Changes take effect the next time you start playback.
+For CW, choose **CW** as the mode and enter a message and speed in the **CW message** section. Select **Repeat CW message** to keep it playing.
 
-TXITPY reads playlist audio ahead while playback runs. Before transmission starts, it fills about 2.7 seconds of audio. During playback, it keeps up to about 5.5 seconds queued. This buffer gives the decoder time to read upcoming audio and helps prevent gaps.
+## Stations
 
-### CW mode
+Open **Stations** to browse the directory. Select a station to view its profile and comments.
 
-Choose **CW** as the transmission mode. Enter your message and speed in the **CW message** section. Select **Repeat CW message** to send it continuously.
+## Sign-in and settings
 
-## Browse stations
+TXITPY keeps your Discord session between launches. Select **Disconnect Discord** to clear it.
 
-Open **Stations** to browse the station directory. Select a station card to view its profile, station details, and comments.
-
-## Sign-in and saved settings
-
-Keep Discord connected to reuse your TXITY sign-in between launches. Select **Disconnect Discord** in TXITPY to clear the saved browser session.
-
-Use the following paths to find your station and transmission preferences:
+TXITPY saves station and transmission preferences here:
 
 - **Windows:** `%APPDATA%\TXITPY\transmit-settings.json`
-- **Linux and macOS:** `$XDG_CONFIG_HOME/TXITPY/transmit-settings.json`, or `~/.config/TXITPY/transmit-settings.json` when `XDG_CONFIG_HOME` is not set.
+- **Linux and macOS:** `$XDG_CONFIG_HOME/TXITPY/transmit-settings.json`, or `~/.config/TXITPY/transmit-settings.json`
 
-The preferences file does not contain Discord session tokens.
+The settings file does not store Discord session tokens.
+
+On Windows, minimize TXITPY to put it in the system tray. Select the tray icon to reopen the window.
