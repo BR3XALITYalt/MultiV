@@ -477,6 +477,11 @@ class DiscordAuthManager:
             for line in stream:
                 detail = safe_error_text(line.rstrip("\r\n"), max_chars=3_000)
                 if detail:
+                    print(
+                        f"[TXITPY embedded browser] {detail}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                     write_diagnostic_text("browser-output", detail)
         except Exception as exc:
             write_diagnostic("capture-browser-output", exc)
