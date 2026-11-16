@@ -368,19 +368,25 @@ def _clean_station_comments(value: Any) -> list[dict[str, str]]:
         if not text_value:
             continue
 
-        avatar_value = ""
+        avatar_value: Any = ""
+        avatar_fields = (
+            "discordAvatarUrl",
+            "avatarUrl",
+            "avatar_url",
+            "authorAvatarUrl",
+            "avatar",
+            "discordAvatar",
+            "discord_avatar",
+        )
         for source in (item, user):
-            avatar_value = first_text(
-                source,
-                "discordAvatarUrl",
-                "avatarUrl",
-                "avatar_url",
-                "authorAvatarUrl",
-                "avatar",
-                "discordAvatar",
-                "discord_avatar",
-                limit=512,
-            )
+            for field_name in avatar_fields:
+                candidate_avatar = source.get(field_name) if isinstance(source, dict) else None
+                if (
+                    (isinstance(candidate_avatar, str) and candidate_avatar.strip())
+                    or isinstance(candidate_avatar, dict)
+                ):
+                    avatar_value = candidate_avatar
+                    break
             if avatar_value:
                 break
 
@@ -1164,7 +1170,7 @@ def build_app() -> None:
                     file=sys.stderr,
                     flush=True,
                 )
-            except tk.TclError as exc:
+            except Exception as exc:
                 print(
                     f"[TXITPY] Image apply error: {role} ({display_url}): "
                     f"{safe_error_text(str(exc), 200)}",
