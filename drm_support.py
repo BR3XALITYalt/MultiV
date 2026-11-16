@@ -228,6 +228,25 @@ def _download_visual_studio_build_tools(
     return installer
 
 
+def _visual_studio_build_tools_command(
+    installer: Path,
+    existing_installation: Path | None = None,
+) -> list[str]:
+    """Build the installer command without modifying unrelated Visual Studio editions."""
+    command = [str(installer)]
+    if existing_installation is not None and existing_installation.name.casefold() == "buildtools":
+        command.extend(["modify", "--installPath", str(existing_installation)])
+    command.extend([
+        "--wait",
+        "--passive",
+        "--norestart",
+        "--add",
+        VISUAL_STUDIO_WORKLOAD,
+        "--includeRecommended",
+    ])
+    return command
+
+
 def _install_visual_studio_cpp_tools(
     on_log: Callable[[str], None] | None = None,
 ) -> None:
@@ -238,17 +257,10 @@ def _install_visual_studio_cpp_tools(
     installer = _download_visual_studio_build_tools(on_log)
     existing_installation = _visual_studio_installation_path(require_cpp=False)
 
-    command = [str(installer)]
-    if existing_installation is not None:
-        command.extend(["modify", "--installPath", str(existing_installation)])
-    command.extend([
-        "--wait",
-        "--passive",
-        "--norestart",
-        "--add",
-        VISUAL_STUDIO_WORKLOAD,
-        "--includeRecommended",
-    ])
+    command = _visual_studio_build_tools_command(
+        installer,
+        existing_installation,
+    )
 
     if on_log:
         on_log(
