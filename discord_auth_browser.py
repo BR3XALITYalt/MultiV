@@ -104,6 +104,45 @@ class AuthBridge:
         except Exception as exc:
             write_diagnostic("send-failure-to-parent", exc)
 
+    def no_session(self) -> dict[str, bool]:
+        """Notify TXITPY that the persistent browser profile has no valid session."""
+        with self._lock:
+            if self._finished:
+                return {"ok": False}
+            self._finished = True
+
+        payload = json.dumps({
+            "state": self.state,
+            "code": "no-stored-session",
+        }).encode("utf-8")
+        request = Request(
+            self.failure_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=5) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            accepted = isinstance(result, dict) and result.get("ok") is True
+            if accepted:
+                print(
+                    "[TXITPY] No saved Discord session was found.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            return {"ok": accepted}
+        except Exception as exc:
+            write_diagnostic("report-missing-session", exc)
+            return {"ok": False}
+        finally:
+            window = self._window
+            if window is not None:
+                try:
+                    window.destroy()
+                except Exception as exc:
+                    write_diagnostic("close-restore-window", exc)
+
     def complete(self, origin: str, token: str) -> dict[str, bool]:
         """Forward a valid token read from TXITY's own origin."""
         if token_from_storage(origin, token) is None:
@@ -201,7 +240,7 @@ class AuthBridge:
 
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
-    if len(args) != 3:
+    if len(args) not in (3, 4):
         return 2
 
     def report_stage(message: str) -> None:
@@ -209,7 +248,11 @@ def main(argv: list[str] | None = None) -> int:
 
     report_stage("Embedded browser helper process started.")
     os.environ["PYWEBVIEW_LOG"] = "debug"
-    login_url, callback_url, state = args
+    login_url, callback_url, state = args[:3]
+    mode = args[3] if len(args) == 4 else "login"
+    if mode not in {"login", "restore"}:
+        return 2
+    restore_only = mode == "restore"
     bridge = AuthBridge(callback_url, state)
 
     report_stage("Importing pywebview.")
@@ -237,16 +280,21 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     report_stage("Browser profile is ready.")
 
-    report_stage("Creating the Discord sign-in browser window.")
+    report_stage(
+        "Creating a hidden TXITY session-check window."
+        if restore_only
+        else "Creating the Discord sign-in browser window."
+    )
     try:
         window = webview.create_window(
-            "Sign in to TXITY",
+            "Restore TXITY session" if restore_only else "Sign in to TXITY",
             url=login_url,
             js_api=bridge,
             width=920,
             height=760,
             min_size=(640, 560),
             background_color="#000000",
+            hidden=restore_only,
         )
     except Exception as exc:
         bridge.report_startup_failure("create-window", exc)
@@ -257,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
 
     window_shown = threading.Event()
     page_loaded = threading.Event()
+    restore_timeout_started = threading.Event()
 
     def on_initialized(renderer_name) -> None:
         report_stage(f"pywebview initialized renderer: {renderer_name}.")
@@ -279,6 +328,11 @@ def main(argv: list[str] | None = None) -> int:
             )
             write_diagnostic_text("page-loaded", page_location or "URL unavailable")
             page_window.run_js(WATCHER_SCRIPT)
+            if restore_only and not restore_timeout_started.is_set():
+                restore_timeout_started.set()
+                restore_timer = threading.Timer(12, bridge.no_session)
+                restore_timer.daemon = True
+                restore_timer.start()
         except Exception as exc:
             # Navigation can race script injection, so keep the window open
             # and report the underlying browser error.
@@ -299,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     def report_browser_stall() -> None:
-        if not window_shown.wait(20):
+        if not restore_only and not window_shown.wait(20):
             message = (
                 "The browser process started, but pywebview did not show its window "
                 "within 20 seconds. The GUI renderer may be blocked during startup."
