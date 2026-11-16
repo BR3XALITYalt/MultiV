@@ -514,9 +514,9 @@ def build_app() -> None:
     auth_manager = DiscordAuthManager(client.events)
 
     theme_mode = _system_theme_mode()
-    palette = apply_tk_theme(None, theme_mode)
 
     root = tk.Tk()
+    palette = apply_tk_theme(root, theme_mode)
     root.title("TXITPY | TXITY Desktop")
     root.geometry("1180x790")
     root.minsize(900, 650)
@@ -669,7 +669,7 @@ def build_app() -> None:
         auth_manager.start_login()
 
     def disconnect_discord() -> None:
-        nonlocal discord_authenticated
+        nonlocal discord_authenticated, current_page
         client.set_discord_auth(None, None)
         client.disconnect()
         discord_authenticated = False
@@ -1278,7 +1278,7 @@ def build_app() -> None:
         )
 
     def drain_events() -> None:
-        nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows
+        nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows, current_page
         while True:
             try:
                 event = client.events.get_nowait()
