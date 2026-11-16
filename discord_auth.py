@@ -144,13 +144,18 @@ class DiscordAuthManager:
 
     def configure(self, auth_url: Any, secure_enabled: Any) -> None:
         """Accept only TXITY's configured HTTPS auth route."""
-        candidate = urljoin(BASE_URL + "/", auth_url) if isinstance(auth_url, str) else AUTH_START_URL
-        parsed = urlsplit(candidate)
-        allowed = (
-            parsed.scheme == "https"
-            and parsed.hostname == "txity.radiodiscussion.org"
-            and parsed.port in (None, 443)
-        )
+        raw_url = auth_url.strip() if isinstance(auth_url, str) else ""
+        candidate = urljoin(BASE_URL + "/", raw_url) if raw_url else ""
+        try:
+            parsed = urlsplit(candidate)
+            allowed = (
+                bool(raw_url)
+                and parsed.scheme == "https"
+                and parsed.hostname == "txity.radiodiscussion.org"
+                and parsed.port in (None, 443)
+            )
+        except ValueError:
+            allowed = False
         with self._lock:
             self.auth_start_url = candidate if allowed else AUTH_START_URL
             self.secure_auth_enabled = secure_enabled is True and allowed
@@ -158,6 +163,7 @@ class DiscordAuthManager:
     def start_login(self) -> None:
         with self._lock:
             enabled = self.secure_auth_enabled
+            auth_start_url = self.auth_start_url
         if not enabled:
             self.events.put({
                 "kind": "auth_error",
@@ -172,6 +178,13 @@ class DiscordAuthManager:
         class CallbackHandler(BaseHTTPRequestHandler):
             def log_message(self, _format: str, *_args: Any) -> None:
                 return
+
+            def _is_loopback_request(self) -> bool:
+                expected_host = f"127.0.0.1:{self.server.server_port}"
+                return (
+                    self.client_address[0] == "127.0.0.1"
+                    and self.headers.get("Host", "") == expected_host
+                )
 
             def _respond(self, status: int, body: bytes, content_type: str) -> None:
                 self.send_response(status)
@@ -192,7 +205,7 @@ class DiscordAuthManager:
                 )
 
             def do_GET(self) -> None:
-                if self.client_address[0] != "127.0.0.1":
+                if not self._is_loopback_request():
                     self._json(403, {"ok": False, "error": "Loopback access only."})
                     return
                 parts = urlsplit(self.path)
@@ -216,8 +229,13 @@ class DiscordAuthManager:
                 self.wfile.write(html)
 
             def do_POST(self) -> None:
-                if self.client_address[0] != "127.0.0.1":
+                if not self._is_loopback_request():
                     self._json(403, {"ok": False, "error": "Loopback access only."})
+                    return
+                expected_origin = f"http://127.0.0.1:{self.server.server_port}"
+                request_origin = self.headers.get("Origin")
+                if request_origin and request_origin != expected_origin:
+                    self._json(403, {"ok": False, "error": "Invalid callback origin."})
                     return
                 if urlsplit(self.path).path != "/complete":
                     self._json(404, {"ok": False, "error": "Not found."})
@@ -278,7 +296,7 @@ class DiscordAuthManager:
             f"http://127.0.0.1:{server.server_port}/callback?"
             + urlencode({"state": state})
         )
-        login_url = self.auth_start_url + "?" + urlencode({"return": callback_url})
+        login_url = auth_start_url + "?" + urlencode({"return": callback_url})
 
         self.events.put({
             "kind": "auth_browser",
