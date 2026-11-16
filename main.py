@@ -2677,19 +2677,23 @@ def build_app() -> None:
         playlist_scrollbar.pack(side="right", fill="y")
         playlist_listbox.configure(yscrollcommand=playlist_scrollbar.set)
 
+        playlist_display_paths: list[str] = []
+
         def update_playlist_list() -> None:
             selected_paths = {
-                tx_playlist_files[index].casefold()
+                playlist_display_paths[index].casefold()
                 for index in playlist_listbox.curselection()
-                if 0 <= index < len(tx_playlist_files)
+                if 0 <= index < len(playlist_display_paths)
             }
             try:
                 playlist_listbox.delete(0, tk.END)
+                playlist_display_paths.clear()
                 name_counts: dict[str, int] = {}
                 for file_path in tx_playlist_files:
                     base_name = Path(file_path).name
                     name_counts[base_name.casefold()] = name_counts.get(base_name.casefold(), 0) + 1
                 for index, file_path in enumerate(tx_playlist_files):
+                    playlist_display_paths.append(file_path)
                     file_path_obj = Path(file_path)
                     display = file_path_obj.name
                     if name_counts.get(display.casefold(), 0) > 1:
