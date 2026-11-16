@@ -37,6 +37,10 @@ def _cache_root() -> Path:
 
 RUST_MINIMUM_VERSION = (1, 88)
 RUSTUP_DOWNLOAD_BASE = "https://static.rust-lang.org/rustup/dist"
+VISUAL_STUDIO_BUILD_TOOLS_URL = "https://aka.ms/vs/stable/vs_buildtools.exe"
+VISUAL_STUDIO_WORKLOAD = "Microsoft.VisualStudio.Workload.VCTools"
+VISUAL_STUDIO_CPP_COMPONENT = "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
+VISUAL_STUDIO_BUILD_TOOLS_LABEL = "Visual Studio C++ Build Tools (Desktop development with C++)"
 
 
 def _rust_bin_directory() -> Path:
@@ -95,14 +99,197 @@ def _decdrm_source_is_ready() -> bool:
     )
 
 
+def _vswhere_executable() -> Path | None:
+    """Find the Visual Studio installer discovery utility."""
+    roots = [
+        os.environ.get("ProgramFiles(x86)"),
+        os.environ.get("ProgramFiles"),
+    ]
+    for root in roots:
+        if not root:
+            continue
+        candidate = Path(root) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _visual_studio_installation_path(*, require_cpp: bool) -> Path | None:
+    """Return the newest Visual Studio installation, optionally requiring MSVC."""
+    vswhere = _vswhere_executable()
+    if vswhere is None:
+        return None
+    command = [
+        str(vswhere),
+        "-latest",
+        "-products",
+        "*",
+    ]
+    if require_cpp:
+        command.extend(["-requires", VISUAL_STUDIO_CPP_COMPONENT])
+    command.extend(["-property", "installationPath"])
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    for line in (result.stdout or "").splitlines():
+        candidate_text = line.strip()
+        if not candidate_text:
+            continue
+        candidate = Path(candidate_text)
+        if not require_cpp:
+            return candidate if candidate.is_dir() else None
+        vc_root = candidate / "VC"
+        tool_root = vc_root / "Tools" / "MSVC"
+        build_environment = vc_root / "Auxiliary" / "Build" / "vcvars64.bat"
+        if (
+            build_environment.is_file()
+            and tool_root.is_dir()
+            and any(item.is_dir() for item in tool_root.iterdir())
+        ):
+            return candidate
+    return None
+
+
+def _visual_studio_cpp_tools_ready() -> bool:
+    if os.name != "nt":
+        return True
+    return _visual_studio_installation_path(require_cpp=True) is not None
+
+
+def _download_visual_studio_build_tools(
+    on_log: Callable[[str], None] | None = None,
+) -> Path:
+    """Download the official Build Tools bootstrapper."""
+    installer_dir = _cache_root() / "installers"
+    installer_dir.mkdir(parents=True, exist_ok=True)
+    installer = installer_dir / "vs_BuildTools.exe"
+
+    if on_log:
+        on_log("Downloading Microsoft's Visual Studio C++ Build Tools installer.")
+    request = Request(
+        VISUAL_STUDIO_BUILD_TOOLS_URL,
+        headers={"User-Agent": "TXITPY/0.1"},
+    )
+    with urlopen(request, timeout=90) as response:
+        data = response.read(128 * 1024 * 1024 + 1)
+    if not data or len(data) > 128 * 1024 * 1024:
+        raise RuntimeError("The Visual Studio Build Tools installer download was empty or too large.")
+
+    temporary = installer.with_suffix(".download")
+    temporary.write_bytes(data)
+    temporary.replace(installer)
+
+    powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+    if not powershell:
+        raise RuntimeError("Windows PowerShell is required to verify the Microsoft installer signature.")
+    signature_script = (
+        "$signature = Get-AuthenticodeSignature -LiteralPath $args[0]; "
+        "if ($signature.Status -ne 'Valid' -or "
+        "$signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') { exit 1 }"
+    )
+    try:
+        result = subprocess.run(
+            [
+                powershell,
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                signature_script,
+                str(installer),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        installer.unlink(missing_ok=True)
+        raise RuntimeError(f"Could not verify the Microsoft installer signature: {exc}") from exc
+    if result.returncode != 0:
+        installer.unlink(missing_ok=True)
+        detail = (result.stderr or result.stdout or "").strip()
+        raise RuntimeError(
+            "The downloaded Visual Studio installer does not have a valid Microsoft signature."
+            + (f"\n{detail}" if detail else "")
+        )
+    return installer
+
+
+def _install_visual_studio_cpp_tools(
+    on_log: Callable[[str], None] | None = None,
+) -> None:
+    """Install the MSVC C++ workload required by the Windows DRM build."""
+    if os.name != "nt" or _visual_studio_cpp_tools_ready():
+        return
+
+    installer = _download_visual_studio_build_tools(on_log)
+    existing_installation = _visual_studio_installation_path(require_cpp=False)
+
+    command = [str(installer)]
+    if existing_installation is not None:
+        command.extend(["modify", "--installPath", str(existing_installation)])
+    command.extend([
+        "--wait",
+        "--passive",
+        "--norestart",
+        "--add",
+        VISUAL_STUDIO_WORKLOAD,
+        "--includeRecommended",
+    ])
+
+    if on_log:
+        on_log(
+            "Installing the MSVC C++ compiler and Windows SDK. "
+            "The Visual Studio Installer may request administrator approval."
+        )
+    try:
+        process = subprocess.Popen(command)
+        return_code = process.wait(timeout=4 * 60 * 60)
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError(
+            "The Visual Studio C++ Build Tools installer did not finish within four hours."
+        ) from exc
+    except OSError as exc:
+        raise RuntimeError(f"Could not start the Visual Studio Build Tools installer: {exc}") from exc
+
+    if return_code != 0:
+        raise RuntimeError(
+            f"The Visual Studio C++ Build Tools installer exited with code {return_code}."
+        )
+    if not _visual_studio_cpp_tools_ready():
+        raise RuntimeError(
+            "The Visual Studio Installer finished, but TXITPY still cannot find the MSVC x64 C++ toolchain. "
+            "Check that the Desktop development with C++ workload was installed."
+        )
+    if on_log:
+        on_log("The MSVC C++ compiler and Windows SDK are ready.")
+
+
 def _missing_native_build_tools() -> list[str]:
     missing = [
         name for name in ("git", "cmake")
         if shutil.which(name) is None
     ]
-    compiler_names = ("cl", "clang-cl") if os.name == "nt" else ("c++", "g++", "clang++")
-    if not any(shutil.which(name) for name in compiler_names):
-        missing.append("a C/C++ compiler")
+    if os.name == "nt":
+        if not _visual_studio_cpp_tools_ready():
+            missing.append(VISUAL_STUDIO_BUILD_TOOLS_LABEL)
+    else:
+        compiler_names = ("c++", "g++", "clang++")
+        if not any(shutil.which(name) for name in compiler_names):
+            missing.append("a C/C++ compiler")
     return missing
 
 
@@ -223,12 +410,20 @@ def prepare_drm_encoder(on_log: Callable[[str], None] | None = None) -> Path:
     if status["ready"]:
         return Path(str(status["encoder_path"]))
 
-    missing_tools = status["missing_build_tools"]
+    missing_tools = list(status["missing_build_tools"])
+    if (
+        os.name == "nt"
+        and VISUAL_STUDIO_BUILD_TOOLS_LABEL in missing_tools
+    ):
+        _install_visual_studio_cpp_tools(on_log)
+        status = drm_setup_status()
+        missing_tools = list(status["missing_build_tools"])
+
     if missing_tools:
         raise RuntimeError(
-            "DRM setup also requires these build tools, which were not detected: "
+            "DRM setup still needs these build tools: "
             + ", ".join(str(item) for item in missing_tools)
-            + ". Install them and restart TXITPY before selecting DRM."
+            + ". Install them, then select DRM again."
         )
 
     if not status["rust_ready"]:
@@ -310,9 +505,7 @@ def ensure_drm_encoder(on_log: Callable[[str], None] | None = None) -> Path:
     _refresh_rust_path()
     required_tools = ("git", "cargo", "rustc", "cmake")
     missing_tools = [tool for tool in required_tools if shutil.which(tool) is None]
-    compiler_names = ("cl", "clang-cl") if os.name == "nt" else ("c++", "g++", "clang++")
-    if not any(shutil.which(name) for name in compiler_names):
-        missing_tools.append("a C/C++ compiler")
+    missing_tools.extend(_missing_native_build_tools())
     if missing_tools:
         raise RuntimeError(
             "DRM mode needs Git, Rust 1.88 or newer, CMake, and a C/C++ compiler. "
