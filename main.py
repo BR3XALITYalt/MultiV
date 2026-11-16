@@ -2224,6 +2224,7 @@ def build_app() -> None:
                 audio_source = {
                     "Desktop audio (output loopback)": "loopback",
                     "Audio playlist": "playlist",
+                    "DRM test tone (1 kHz)": "tone",
                 }.get(tx_audio_source_var.get(), "mic")
             playlist_files = list(tx_playlist_files) if audio_source == "playlist" else []
             selected_device = (
@@ -3083,6 +3084,7 @@ def build_app() -> None:
                 "Microphone / line input",
                 "Desktop audio (output loopback)",
                 "Audio playlist",
+                "DRM test tone (1 kHz)",
             ),
             state="readonly",
             height=4,
@@ -3108,6 +3110,18 @@ def build_app() -> None:
         )
         device_picker.pack(fill="x", ipady=5)
         style_tx_combobox(device_picker)
+
+        test_tone_frame = tk.Frame(audio_fields, bg=palette["surfaceContainerLow"])
+        test_tone_frame.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
+        make_label(
+            test_tone_frame,
+            "DecDRM generates a steady 1 kHz sine wave at a fixed level. No microphone or playlist is used.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=380,
+        ).pack(anchor="w", pady=5)
+        test_tone_frame.grid_remove()
 
         playlist_frame = tk.Frame(audio_fields, bg=palette["surfaceContainerLow"])
         playlist_frame.grid(
@@ -3397,9 +3411,9 @@ def build_app() -> None:
         def refresh_audio_devices(_event=None) -> None:
             tx_audio_device_ids.clear()
             selected_source = tx_audio_source_var.get()
-            if selected_source == "Audio playlist":
+            if selected_source in {"Audio playlist", "DRM test tone (1 kHz)"}:
                 return
-            if selected_source == "Desktop audio (output loopback)":
+            if selected_source == "Desktop audio (output loopback"):
                 tx_audio_device_label_var.set("Desktop output device")
                 try:
                     devices = list_loopback_devices()
@@ -3447,9 +3461,27 @@ def build_app() -> None:
         refresh_button.pack(anchor="w", padx=6, pady=(8, 2))
 
         def update_audio_source_controls() -> None:
-            if tx_audio_source_var.get() == "Audio playlist":
+            base_sources = (
+                "Microphone / line input",
+                "Desktop audio (output loopback)",
+                "Audio playlist",
+            )
+            is_drm = tx_mode_var.get().strip().upper() == "DRM"
+            source_values = base_sources + (("DRM test tone (1 kHz)",) if is_drm else ())
+            source_picker.configure(values=source_values)
+            if tx_audio_source_var.get() not in source_values:
+                tx_audio_source_var.set("Microphone / line input")
+
+            selected_source = tx_audio_source_var.get()
+            test_tone_frame.grid_remove()
+            if selected_source == "Audio playlist":
                 device_frame.grid_remove()
                 playlist_frame.grid()
+                refresh_button.pack_forget()
+            elif selected_source == "DRM test tone (1 kHz)":
+                device_frame.grid_remove()
+                playlist_frame.grid_remove()
+                test_tone_frame.grid()
                 refresh_button.pack_forget()
             else:
                 playlist_frame.grid_remove()
@@ -3458,12 +3490,13 @@ def build_app() -> None:
                     refresh_button.pack(anchor="w", padx=6, pady=(8, 2))
                 refresh_audio_devices()
 
+        tx_mode_var.trace_add("write", lambda *_args: update_audio_source_controls())
         update_audio_source_controls()
 
         make_label(
             audio_card,
-            "Choose a microphone, desktop output, or playlist. Playlist files are decoded to mono 48 kHz audio. "
-            "Shuffle and loop work independently. CW mode uses its configured message instead of an audio source.",
+            "Choose a microphone, desktop output, or playlist. In DRM mode, the 1 kHz test tone isolates encoder and decoding quality from the source audio. "
+            "CW mode uses its configured message instead of an audio source.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
