@@ -17,7 +17,17 @@ SAMPLE_RATE_HZ = 48_000
 BATCH_SAMPLES = 512
 FRAME_BYTES = BATCH_SAMPLES * 4
 AUDIO_QUEUE_FRAMES = 32
+PTT_CONFIRMATION_GRACE_SECONDS = 4.0
 SUPPORTED_MODES = ("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "CW")
+DEFAULT_MODE_BANDWIDTH_HZ = {
+    "AM": 12_000,
+    "DSB": 12_000,
+    "USB": 10_000,
+    "LSB": 10_000,
+    "USB+C": 10_000,
+    "LSB+C": 10_000,
+    "CW": 500,
+}
 SUPPORTED_AUDIO_SOURCES = ("mic", "loopback")
 
 
@@ -54,6 +64,79 @@ def parse_rf_frequency(value: Any) -> int:
     if frequency <= 0:
         raise ValueError("Frequency must be greater than zero.")
     return frequency
+
+
+def mode_bandwidth_hz(mode: Any, station: dict[str, Any] | None = None) -> int:
+    """Return a TXITY channel-width estimate, preferring station-reported values."""
+    station = station if isinstance(station, dict) else {}
+    mode_name = str(mode or "AM").strip().upper()
+    field_names = ["bandwidthHz", "occupiedBandwidthHz", "rfBandwidthHz"]
+    if mode_name in {"AM", "DSB"}:
+        field_names.append("amBandwidthHz")
+    elif mode_name in {"USB", "LSB", "USB+C", "LSB+C"}:
+        field_names.append("ssbBandwidthHz")
+    elif mode_name == "CW":
+        field_names.append("cwBandwidthHz")
+
+    for field_name in field_names:
+        candidate = station.get(field_name)
+        if isinstance(candidate, (int, float)) and not isinstance(candidate, bool):
+            if math.isfinite(float(candidate)) and 0 < float(candidate) <= 2_000_000:
+                return int(round(candidate))
+    return DEFAULT_MODE_BANDWIDTH_HZ.get(mode_name, DEFAULT_MODE_BANDWIDTH_HZ["AM"])
+
+
+def find_frequency_overlaps(
+    frequency: Any,
+    mode: Any,
+    stations: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Find estimated channel overlaps with the supplied TXITY station records."""
+    target_hz = parse_rf_frequency(frequency)
+    target_width = mode_bandwidth_hz(mode)
+    target_low = target_hz - target_width / 2
+    target_high = target_hz + target_width / 2
+    overlaps: list[dict[str, Any]] = []
+
+    for station in stations:
+        if not isinstance(station, dict):
+            continue
+        other_hz = None
+        for field_name in ("frequency_hz", "frequencyHz", "rfHz"):
+            candidate = station.get(field_name)
+            if isinstance(candidate, (int, float)) and not isinstance(candidate, bool):
+                if math.isfinite(float(candidate)) and candidate > 0:
+                    other_hz = int(round(candidate))
+                    break
+        if other_hz is None:
+            candidate = station.get("frequency")
+            try:
+                other_hz = parse_rf_frequency(candidate)
+            except (TypeError, ValueError):
+                continue
+
+        other_mode = str(station.get("mode") or "AM").strip().upper()
+        other_width = mode_bandwidth_hz(other_mode, station)
+        other_low = other_hz - other_width / 2
+        other_high = other_hz + other_width / 2
+        overlap_width = min(target_high, other_high) - max(target_low, other_low)
+        if overlap_width <= 0:
+            continue
+
+        overlaps.append({
+            "station_id": str(station.get("id") or station.get("station_id") or ""),
+            "station_name": str(station.get("station") or station.get("name") or "Unknown station"),
+            "frequency_hz": other_hz,
+            "mode": other_mode,
+            "bandwidth_hz": other_width,
+            "offset_hz": abs(target_hz - other_hz),
+            "overlap_hz": int(round(overlap_width)),
+            "allow_overlap_visitors": station.get("allow_overlap_visitors", station.get("allowOverlapVisitors"))
+                if isinstance(station.get("allow_overlap_visitors", station.get("allowOverlapVisitors")), bool)
+                else None,
+        })
+
+    return sorted(overlaps, key=lambda item: (item["offset_hz"], item["station_name"].casefold()))
 
 
 def build_audio_socket_url(session_id: str, session_secret: str, auth_token: str) -> str:
@@ -268,12 +351,26 @@ class TxityTransmitter:
         self._starting = False
         self._active = False
         self._ptt_sent = False
+        self._ptt_requested_at: float | None = None
         self._audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=AUDIO_QUEUE_FRAMES)
 
     @property
     def is_busy(self) -> bool:
         with self._lock:
             return self._starting or self._active
+
+    @property
+    def server_rejection_ready(self) -> bool:
+        """Ignore stale negative status snapshots immediately after sending PTT."""
+        with self._lock:
+            requested_at = self._ptt_requested_at
+            return bool(
+                self._active
+                and self._ptt_sent
+                and not self._stop_event.is_set()
+                and requested_at is not None
+                and time.monotonic() - requested_at >= PTT_CONFIRMATION_GRACE_SECONDS
+            )
 
     def start(
         self,
@@ -293,6 +390,7 @@ class TxityTransmitter:
             self._starting = True
             self._active = False
             self._ptt_sent = False
+            self._ptt_requested_at = None
             self._thread = threading.Thread(
                 target=self._run,
                 args=(dict(config), input_device, selected_source),
@@ -497,6 +595,7 @@ class TxityTransmitter:
             ptt_sent = True
             with self._lock:
                 self._ptt_sent = True
+                self._ptt_requested_at = time.monotonic()
                 self._active = True
                 self._starting = False
             source_name = "desktop audio" if audio_source == "loopback" else "microphone audio"
@@ -579,6 +678,7 @@ class TxityTransmitter:
                 self._active = False
                 self._starting = False
                 self._ptt_sent = False
+                self._ptt_requested_at = None
                 self._thread = None
 
             self.events.put({
