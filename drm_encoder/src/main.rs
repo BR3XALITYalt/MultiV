@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use decdrm_station::{SampleFormat, SignalFormat, Station, StationConfig};
+use decdrm_station::{SampleFormat, SignalFormat, Station, StationConfig, StopHandle};
 use std::env;
 use std::error::Error;
 use std::io::{self, Write};
@@ -31,12 +31,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     // Mode B / SO0 carriers plus the 150 Hz filter margin stay below TXITY's 6 kHz edge.
     config.output.if_hz = Some(1_500.0);
 
-    let mut station = Station::new(config)?;
-    if station.output_channels() != 1 {
-        return Err("the DRM bridge requires one real-IF output channel".into());
-    }
-
-    let stop = station.stop_handle();
+    let stop = StopHandle::default();
     let watcher_stop = stop.clone();
     let watcher = thread::Builder::new()
         .name("txitpy-drm-stop-watch".into())
@@ -49,6 +44,28 @@ fn run() -> Result<(), Box<dyn Error>> {
                 thread::sleep(Duration::from_millis(50));
             }
         })?;
+
+    let plan = match config.validate() {
+        Ok(plan) => plan,
+        Err(error) => {
+            stop.stop();
+            let _ = watcher.join();
+            return Err(error.into());
+        }
+    };
+    let mut station = match Station::with_plan_and_stop(config, plan, stop.clone()) {
+        Ok(station) => station,
+        Err(error) => {
+            stop.stop();
+            let _ = watcher.join();
+            return Err(error.into());
+        }
+    };
+    if station.output_channels() != 1 {
+        stop.stop();
+        let _ = watcher.join();
+        return Err("the DRM bridge requires one real-IF output channel".into());
+    }
 
     let mut output = io::stdout().lock();
     let mut bytes = Vec::with_capacity(19_200 * 4);
