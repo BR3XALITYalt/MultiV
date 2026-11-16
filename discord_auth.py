@@ -451,20 +451,22 @@ class DiscordAuthManager:
 
         with self._lock:
             self._browser_process = process
+        output_reader = None
         if process.stdout is not None:
-            threading.Thread(
+            output_reader = threading.Thread(
                 target=self._capture_browser_output,
                 args=(process.stdout,),
                 daemon=True,
                 name="txity-browser-output",
-            ).start()
+            )
+            output_reader.start()
         self.events.put({
             "kind": "auth_browser",
             "text": "TXITY sign-in opened in the embedded browser. Waiting for Discord authorization.",
         })
         threading.Thread(
             target=self._watch_browser,
-            args=(process, state, diagnostic_offset),
+            args=(process, state, diagnostic_offset, output_reader),
             daemon=True,
             name="txity-auth-browser-monitor",
         ).start()
@@ -489,8 +491,11 @@ class DiscordAuthManager:
         process: subprocess.Popen[Any],
         state: str,
         diagnostic_offset: int,
+        output_reader: threading.Thread | None,
     ) -> None:
         exit_code = process.wait()
+        if output_reader is not None:
+            output_reader.join(timeout=2)
         with self._lock:
             if self._browser_process is process:
                 self._browser_process = None
