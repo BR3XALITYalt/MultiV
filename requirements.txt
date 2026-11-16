@@ -3,3 +3,4 @@ websocket-client>=1.8.0
 Pillow>=10.0.0
 numpy>=1.26
 sounddevice>=0.5.1
+PyAudioWPatch>=0.2.12.9; sys_platform == "win32"
