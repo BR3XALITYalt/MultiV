@@ -298,7 +298,12 @@ class TxityClient:
                     on_error=on_error,
                     on_close=on_close,
                 )
-                self.ws = ws
+                with self.auth_lock:
+                    current_token = self.auth_token
+                    self.ws = ws
+                if current_token != auth_token:
+                    self.reconnect_event.set()
+                    ws.close()
                 ws.run_forever(
                     origin=BASE_URL,
                     ping_interval=25,
