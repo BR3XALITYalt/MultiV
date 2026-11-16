@@ -136,9 +136,9 @@ def _rustup_windows_target() -> str:
     machine = platform.machine().casefold()
     if machine in {"arm64", "aarch64"}:
         return "aarch64-pc-windows-msvc"
-    if machine in {"x86_64", "amd64"} or platform.architecture()[0] == "64bit":
-        return "x86_64-pc-windows-msvc"
-    return "i686-pc-windows-msvc"
+    if platform.architecture()[0] == "32bit":
+        return "i686-pc-windows-msvc"
+    return "x86_64-pc-windows-msvc"
 
 
 def _download_verified_rustup_installer(on_log: Callable[[str], None] | None = None) -> Path:
