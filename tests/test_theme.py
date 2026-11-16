@@ -3,7 +3,7 @@ import unittest
 from material_theme import (
     MATERIAL_3_EXPRESSIVE,
     apply_tk_theme,
-    rounded_rectangle_points,
+    render_rounded_rectangle,
 )
 
 
@@ -42,24 +42,27 @@ def _contrast(first, second):
 
 
 class MaterialThemeTests(unittest.TestCase):
-    def test_rounded_rectangle_points_make_a_true_rounded_outline(self):
-        points = rounded_rectangle_points(100, 60, 16)
-        coordinates = list(zip(points[::2], points[1::2]))
+    def test_rounded_rectangle_render_has_transparent_corners(self):
+        image = render_rounded_rectangle(100, 60, 24, "#1B6EF3")
+        self.assertEqual(image.mode, "RGBA")
+        self.assertEqual(image.size, (100, 60))
+        self.assertEqual(image.getpixel((0, 0))[3], 0)
+        self.assertEqual(image.getpixel((50, 0))[3], 255)
+        self.assertEqual(image.getpixel((99, 59))[3], 0)
 
-        self.assertEqual(len(coordinates), 4 * 15)
-        self.assertAlmostEqual(min(x for x, _y in coordinates), 0)
-        self.assertAlmostEqual(max(x for x, _y in coordinates), 100)
-        self.assertAlmostEqual(min(y for _x, y in coordinates), 0)
-        self.assertAlmostEqual(max(y for _x, y in coordinates), 60)
-        self.assertAlmostEqual(coordinates[0][0], 0)
-        self.assertAlmostEqual(coordinates[0][1], 16)
-        self.assertAlmostEqual(coordinates[15][0], 84)
-        self.assertAlmostEqual(coordinates[15][1], 0)
+    def test_rounded_rectangle_render_antialiases_edges(self):
+        image = render_rounded_rectangle(100, 60, 24, "#1B6EF3")
+        alpha_values = {
+            image.getpixel((x, y))[3]
+            for x in range(0, 30)
+            for y in range(0, 30)
+        }
+        self.assertTrue(any(0 < alpha < 255 for alpha in alpha_values))
 
-    def test_rounded_rectangle_clamps_radius_to_available_dimensions(self):
-        points = rounded_rectangle_points(20, 10, 50)
-        self.assertTrue(all(0 <= value <= 20 for value in points[::2]))
-        self.assertTrue(all(0 <= value <= 10 for value in points[1::2]))
+    def test_rounded_rectangle_render_clamps_large_radius(self):
+        image = render_rounded_rectangle(20, 10, 50, "#FFFFFF")
+        self.assertEqual(image.size, (20, 10))
+        self.assertEqual(image.getpixel((10, 5))[3], 255)
 
     def test_uses_teledrive_blue_expressive_palette(self):
         self.assertEqual(MATERIAL_3_EXPRESSIVE["light"]["primary"], "#1B6EF3")
