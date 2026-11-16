@@ -870,8 +870,14 @@ class TxityTransmitter:
                 if not wait_for_control_connection():
                     return None
                 try:
+                    session_id, session_secret, auth_token = self.client.transmission_credentials()
+                    current_audio_url = build_audio_socket_url(
+                        session_id,
+                        session_secret,
+                        auth_token,
+                    )
                     connection = websocket.create_connection(
-                        audio_url,
+                        current_audio_url,
                         timeout=10,
                         origin=BASE_URL,
                         enable_multithread=True,
@@ -980,8 +986,7 @@ class TxityTransmitter:
                         input_device_name=input_name,
                     )
 
-            session_id, session_secret, auth_token = self.client.transmission_credentials()
-            audio_url = build_audio_socket_url(session_id, session_secret, auth_token)
+            self.client.transmission_credentials()
 
             if not wait_for_control_connection():
                 return
@@ -1214,6 +1219,8 @@ class TxityTransmitter:
                     and current_generation != last_control_generation
                 ):
                     control_configured = False
+                    if needs_audio:
+                        close_audio_connection()
 
                 if needs_audio and not audio_connection_is_open(audio_socket):
                     if audio_socket is not None:
