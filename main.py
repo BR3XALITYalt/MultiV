@@ -842,7 +842,7 @@ def build_app() -> None:
             font=("Segoe UI", 10, "bold" if kind == "primary" else "normal"),
             padding_x=padx,
             padding_y=pady,
-            radius=15,
+            radius=19,
         )
 
     def make_card(
@@ -858,7 +858,7 @@ def build_app() -> None:
             outside=parent.cget("bg"),
             outline=palette["outlineVariant"],
             padding=padding,
-            radius=18,
+            radius=26,
         )
 
     def request_station_image(url: str) -> None:
@@ -1366,7 +1366,9 @@ def build_app() -> None:
             outside=palette["background"],
             outline=palette["outlineVariant"],
             padding=5,
-            radius=14,
+            padding_x=22,
+            padding_y=5,
+            radius=20,
         )
         search_shell.pack(side="left", fill="x", expand=True)
         search = tk.Entry(
@@ -1775,7 +1777,9 @@ def build_app() -> None:
             outside=palette["background"],
             outline=palette["outlineVariant"],
             padding=10,
-            radius=20,
+            padding_x=28,
+            padding_y=8,
+            radius=26,
         )
         topbar.configure(height=64)
         topbar.pack(fill="x", padx=18, pady=(12, 10))
