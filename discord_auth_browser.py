@@ -253,10 +253,11 @@ def main(argv: list[str] | None = None) -> int:
         window_shown.set()
         report_stage("Embedded sign-in window is visible; waiting for Discord login to load.")
 
-    def on_loaded(loaded_window) -> None:
+    def on_loaded(loaded_window=None) -> None:
         page_loaded.set()
+        page_window = loaded_window if loaded_window is not None else window
         try:
-            current_url = loaded_window.get_current_url() or ""
+            current_url = page_window.get_current_url() or ""
             parsed_url = urlsplit(current_url)
             page_location = parsed_url.netloc + parsed_url.path
             print(
@@ -265,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
                 flush=True,
             )
             write_diagnostic_text("page-loaded", page_location or "URL unavailable")
-            loaded_window.run_js(WATCHER_SCRIPT)
+            page_window.run_js(WATCHER_SCRIPT)
         except Exception as exc:
             # Navigation can race script injection, so keep the window open
             # and report the underlying browser error.
