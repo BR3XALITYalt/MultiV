@@ -898,11 +898,10 @@ class TxityTransmitter:
 
                 def report_playlist_preparation(file_path: str, index: int, count: int) -> None:
                     self.events.put({
-                        "kind": "tx_log",
-                        "text": (
-                            f"Preloading playlist track {index}/{count}: "
-                            f"{os.path.basename(file_path)}"
-                        ),
+                        "kind": "tx_playlist_preparing",
+                        "path": file_path,
+                        "index": index,
+                        "count": count,
                     })
 
                 playlist_cache, playlist_segments = prepare_playlist_audio_cache(
@@ -1054,7 +1053,8 @@ class TxityTransmitter:
                     last_metrics_at = now
 
         except Exception as exc:
-            self.events.put({"kind": "tx_error", "text": _safe_error(exc)})
+            if not self._stop_event.is_set():
+                self.events.put({"kind": "tx_error", "text": _safe_error(exc)})
         finally:
             playlist_completed = playlist_reached_end and not audio_thread_error
             if ptt_sent:
