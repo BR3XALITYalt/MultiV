@@ -1,6 +1,14 @@
+import base64
+import json
+import time
 import unittest
 
-from discord_auth import clean_discord_user, is_auth_token
+from discord_auth import clean_discord_user, is_auth_token, user_from_txity_token
+
+
+def fake_txity_token(payload):
+    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    return encoded + ".signature"
 
 
 class DiscordAuthValidationTests(unittest.TestCase):
@@ -37,6 +45,22 @@ class DiscordAuthValidationTests(unittest.TestCase):
     def test_rejects_incomplete_discord_identity(self):
         self.assertIsNone(clean_discord_user({"id": "123"}))
         self.assertIsNone(clean_discord_user(["not", "a", "user"]))
+
+    def test_reads_txity_first_segment_claims(self):
+        token = fake_txity_token({
+            "id": "123456789",
+            "username": "example",
+            "globalName": "Example User",
+        })
+        self.assertEqual(user_from_txity_token(token)["username"], "example")
+
+    def test_rejects_expired_txity_token(self):
+        token = fake_txity_token({
+            "id": "123456789",
+            "username": "example",
+            "exp": time.time() - 60,
+        })
+        self.assertIsNone(user_from_txity_token(token))
 
 
 if __name__ == "__main__":
