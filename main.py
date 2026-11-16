@@ -1074,7 +1074,10 @@ def build_app() -> None:
     tx_playlist_loop_var = tk.BooleanVar(root, saved_bool("playlist_loop", False))
     tx_playlist_status_var = tk.StringVar(
         root,
-        f"{len(tx_playlist_files)} tracks loaded." if tx_playlist_files else "No playlist loaded.",
+        (
+            f"{len(tx_playlist_files)} track{'s' if len(tx_playlist_files) != 1 else ''} loaded."
+            if tx_playlist_files else "No playlist loaded."
+        ),
     )
     tx_cw_text_var = tk.StringVar(root, saved_text("cw_text", "CQ CQ DE TXITPY"))
     tx_cw_wpm_var = tk.StringVar(root, saved_text("cw_wpm", "18"))
