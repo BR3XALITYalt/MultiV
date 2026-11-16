@@ -563,6 +563,46 @@ def _patch_decdrm_output_validation(plan_file: Path) -> bool:
     )
 
 
+def _clear_stale_opus_cmake_builds(
+    build_root: Path,
+    expected_generator: str,
+    *,
+    on_log: Callable[[str], None] | None = None,
+) -> int:
+    """Remove Opus CMake build directories configured with another generator."""
+    removed = 0
+    if not build_root.is_dir():
+        return removed
+
+    for cache_file in build_root.glob("decdrm-opus-sys-*/out/build/CMakeCache.txt"):
+        try:
+            cache_text = cache_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+
+        configured_generator = next(
+            (
+                line.partition("=")[2].strip()
+                for line in cache_text.splitlines()
+                if line.startswith("CMAKE_GENERATOR:INTERNAL=")
+            ),
+            "",
+        )
+        if not configured_generator or configured_generator == expected_generator:
+            continue
+
+        build_directory = cache_file.parent
+        shutil.rmtree(build_directory)
+        removed += 1
+        if on_log:
+            on_log(
+                "Cleared an old Opus build cache configured with "
+                f"{configured_generator}; rebuilding with {expected_generator}."
+            )
+
+    return removed
+
+
 def ensure_drm_encoder(on_log: Callable[[str], None] | None = None) -> Path:
     """Build the pinned DecDRM bridge once and return its executable path."""
     _refresh_rust_path()
@@ -653,6 +693,11 @@ decdrm-station = { path = "../../crates/decdrm-station" }
             if generator:
                 build_environment = os.environ.copy()
                 build_environment["CMAKE_GENERATOR"] = generator
+                _clear_stale_opus_cmake_builds(
+                    upstream / "target" / "release" / "build",
+                    generator,
+                    on_log=on_log,
+                )
                 if on_log:
                     on_log(f"Using {generator} to match the installed C++ build tools.")
 
