@@ -63,33 +63,35 @@ jobs:
 
           root = Path("decdrm")
           plan = root / "crates/decdrm-station/src/plan.rs"
-          text = plan.read_text(encoding="utf-8")
+          source = plan.read_text(encoding="utf-8")
+          newline = chr(10)
           check = (
-              "    if out.file.is_none() && out.device.is_none() {\\n"
-              "        p.push(\\"output: set \\u0060file\\u0060 and/or \\u0060device\\u0060\\");\\n"
-              "    }"
+              "    if out.file.is_none() && out.device.is_none() {" + newline
+              + '        p.push("output: set ' + chr(96) + 'file' + chr(96)
+              + ' and/or ' + chr(96) + 'device' + chr(96) + '");' + newline
+              + "    }"
           )
           marker = "TXITPY consumes the samples returned by Station::transmit_frame()"
-          if check in text:
-              plan.write_text(text.replace(check, "    // " + marker + "\\n", 1), encoding="utf-8")
-          elif marker not in text:
+          if check in source:
+              plan.write_text(source.replace(check, "    // " + marker + chr(10), 1), encoding="utf-8")
+          elif marker not in source:
               raise SystemExit("Pinned DecDRM output validation changed.")
 
           package = root / "apps/txitpy-drm-bridge"
           (package / "src").mkdir(parents=True, exist_ok=True)
           shutil.copyfile("drm_encoder/src/main.rs", package / "src/main.rs")
-          (package / "Cargo.toml").write_text(
-              "[package]\\n"
-              'name = "txitpy-drm-bridge"\\n'
-              'version = "0.1.0"\\n'
-              "edition.workspace = true\\n"
-              "license.workspace = true\\n"
-              "repository.workspace = true\\n"
-              "rust-version.workspace = true\\n\\n"
-              "[dependencies]\\n"
-              'decdrm-station = { path = "../../crates/decdrm-station" }\\n',
-              encoding="utf-8",
-          )
+          manifest = """[package]
+          name = "txitpy-drm-bridge"
+          version = "0.1.0"
+          edition.workspace = true
+          license.workspace = true
+          repository.workspace = true
+          rust-version.workspace = true
+
+          [dependencies]
+          decdrm-station = { path = "../../crates/decdrm-station" }
+          """
+          package.joinpath("Cargo.toml").write_text(manifest.lstrip(), encoding="utf-8")
           PY
 
       - name: Build the DRM encoder
