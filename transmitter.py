@@ -908,8 +908,13 @@ class TxityTransmitter:
 
         def close_audio_connection() -> None:
             nonlocal audio_socket
-            close_audio_connection()
+            if audio_socket is not None:
+                try:
+                    audio_socket.close()
+                except Exception:
+                    pass
                 audio_socket = None
+
 
         try:
             if self._stop_event.is_set():
@@ -1478,11 +1483,7 @@ class TxityTransmitter:
                 except Exception:
                     pass
 
-            if audio_socket is not None:
-                try:
-                    audio_socket.close()
-                except Exception:
-                    pass
+            close_audio_connection()
 
             if audio_timer_resolution is not None:
                 try:
