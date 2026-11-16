@@ -21,7 +21,6 @@ TXITPY sends audio to TXITY's virtual service. It does not control physical radi
 - A microphone for microphone input.
 - A Windows playback device for desktop-audio capture.
 
-TXITPY installs the Python packages it needs with the commands below. Windows desktop-audio capture uses WASAPI loopback support from PyAudioWPatch.
 
 ## Install and run
 
@@ -46,7 +45,7 @@ Select **Start Transmission** to connect to TXITY. Select **Stop Transmission** 
 
 ### Playlist playback
 
-TXITPY supports MP3, WAV, FLAC, OGG, and AIFF files. Add a folder to keep its file list in sync with changes on disk. New, removed, renamed, or edited files appear in the playlist; changes take effect the next time you start playback.
+TXITPY supports MP3, WAV, FLAC, OGG, and AIFF files. Add a folder to keep its track list in sync with changes on disk. TXITPY refreshes the list when files are added, removed, renamed, or edited. Changes take effect the next time you start playback.
 
 TXITPY decodes playlist audio in the background while playback runs. It keeps up to about 5.5 seconds of audio queued and fills about 2.7 seconds before transmission starts. The queue pauses when full, so TXITPY does not load the whole playlist into memory.
 
