@@ -21,6 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
+from audio_playlist import collect_audio_files
 from discord_auth import (
     DiscordAuthManager,
     clean_discord_user,
@@ -983,7 +984,7 @@ def _system_theme_mode() -> str:
 
 def build_app() -> None:
     import tkinter as tk
-    from tkinter import ttk
+    from tkinter import ttk, filedialog
     from material_theme import apply_tk_theme, native_widget_classes
 
     SurfaceFrame, FlatButton = native_widget_classes(tk)
@@ -1044,6 +1045,13 @@ def build_app() -> None:
     tx_audio_device_var = tk.StringVar(root, saved_text("audio_device", "System default"))
     tx_audio_device_label_var = tk.StringVar(root, "Input device")
     tx_audio_input_var = tx_audio_device_var
+    saved_playlist_files = saved_tx_settings.get("playlist_files", [])
+    tx_playlist_files = collect_audio_files(
+        saved_playlist_files if isinstance(saved_playlist_files, list) else []
+    )
+    tx_playlist_shuffle_var = tk.BooleanVar(root, saved_bool("playlist_shuffle", False))
+    tx_playlist_loop_var = tk.BooleanVar(root, saved_bool("playlist_loop", False))
+    tx_playlist_status_var = tk.StringVar(root, "No playlist loaded.")
     tx_cw_text_var = tk.StringVar(root, saved_text("cw_text", "CQ CQ DE TXITPY"))
     tx_cw_wpm_var = tk.StringVar(root, saved_text("cw_wpm", "18"))
     tx_cw_loop_var = tk.BooleanVar(root, saved_bool("cw_loop", True))
@@ -1084,6 +1092,9 @@ def build_app() -> None:
             "station_dbm": tx_power_var.get(),
             "audio_source": tx_audio_source_var.get(),
             "audio_device": tx_audio_device_var.get(),
+            "playlist_files": list(tx_playlist_files),
+            "playlist_shuffle": tx_playlist_shuffle_var.get(),
+            "playlist_loop": tx_playlist_loop_var.get(),
             "cw_text": tx_cw_text_var.get(),
             "cw_wpm": tx_cw_wpm_var.get(),
             "cw_loop": tx_cw_loop_var.get(),
@@ -1144,7 +1155,8 @@ def build_app() -> None:
 
     tx_setting_variables = (
         tx_station_name_var, tx_description_var, tx_frequency_var, tx_mode_var,
-        tx_power_var, tx_audio_source_var, tx_audio_device_var, tx_cw_text_var,
+        tx_power_var, tx_audio_source_var, tx_audio_device_var,
+        tx_playlist_shuffle_var, tx_playlist_loop_var, tx_cw_text_var,
         tx_cw_wpm_var, tx_cw_loop_var, tx_allow_overlap_var, tx_logo_url_var,
         tx_details_var, tx_page_layout_var, tx_fade_enabled_var,
         tx_fade_seconds_var, tx_fade_min_dbm_var, tx_fade_shape_var,
@@ -1976,6 +1988,8 @@ def build_app() -> None:
         if transmitter.is_busy:
             transmitter.stop()
             tx_status_var.set("Stopping transmission...")
+            if tx_audio_source_var.get() == "Audio playlist":
+                tx_playlist_status_var.set("Stopping playlist...")
             update_transmit_button()
             return
         if not discord_authenticated:
@@ -2014,20 +2028,34 @@ def build_app() -> None:
                 am_bandwidth_hz=tx_am_bandwidth_var.get(),
                 am_pre_emphasis=tx_am_pre_emphasis_var.get(),
             )
-            audio_source = (
-                "loopback"
-                if tx_audio_source_var.get() == "Desktop audio (output loopback)"
-                else "mic"
+            if config["mode"] == "CW":
+                audio_source = "mic"
+            else:
+                audio_source = {
+                    "Desktop audio (output loopback)": "loopback",
+                    "Audio playlist": "playlist",
+                }.get(tx_audio_source_var.get(), "mic")
+            playlist_files = list(tx_playlist_files) if audio_source == "playlist" else []
+            selected_device = (
+                tx_audio_device_ids.get(tx_audio_device_var.get())
+                if audio_source in {"mic", "loopback"}
+                else None
             )
-            selected_device = tx_audio_device_ids.get(tx_audio_device_var.get())
             if config["mode"] != "CW" and selected_device is None and audio_source == "loopback":
                 raise ValueError("Select a desktop output device for loopback capture.")
+            if audio_source == "playlist" and not playlist_files:
+                raise ValueError("Add at least one audio file or folder to the playlist.")
             transmitter.start(
                 config,
                 input_device=selected_device,
                 audio_source=audio_source,
+                playlist_files=playlist_files,
+                playlist_shuffle=tx_playlist_shuffle_var.get(),
+                playlist_loop=tx_playlist_loop_var.get(),
             )
             tx_status_var.set("Preparing transmission...")
+            if audio_source == "playlist":
+                tx_playlist_status_var.set("Preparing playlist...")
             update_transmit_button()
         except Exception as exc:
             details = safe_error_text(str(exc), 500)
@@ -2544,9 +2572,215 @@ def build_app() -> None:
         device_picker.pack(fill="x", ipady=5)
         style_tx_combobox(device_picker)
 
+        playlist_frame = tk.Frame(audio_fields, bg=palette["surfaceContainerLow"])
+        playlist_frame.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=6,
+            pady=6,
+        )
+        make_label(
+            playlist_frame,
+            "Playlist",
+            font=("Segoe UI", 10, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        playlist_count_var = tk.StringVar(root, f"{len(tx_playlist_files)} tracks")
+        make_label(
+            playlist_frame,
+            variable=playlist_count_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+
+        playlist_list_frame = tk.Frame(playlist_frame, bg=palette["surfaceContainerLow"])
+        playlist_list_frame.pack(fill="x", pady=(0, 7))
+        playlist_listbox = tk.Listbox(
+            playlist_list_frame,
+            height=7,
+            selectmode="extended",
+            exportselection=False,
+            activestyle="none",
+            bg=palette["surfaceContainerLowest"],
+            fg=palette["onSurface"],
+            selectbackground=palette["primary"],
+            selectforeground=palette["onPrimary"],
+            highlightthickness=2,
+            highlightbackground=palette["outlineVariant"],
+            highlightcolor=palette["primary"],
+            relief="flat",
+            borderwidth=1,
+            font=("Segoe UI", 9),
+            takefocus=True,
+        )
+        playlist_listbox.pack(side="left", fill="both", expand=True)
+        playlist_scrollbar = ttk.Scrollbar(
+            playlist_list_frame,
+            orient="vertical",
+            command=playlist_listbox.yview,
+        )
+        playlist_scrollbar.pack(side="right", fill="y")
+        playlist_listbox.configure(yscrollcommand=playlist_scrollbar.set)
+
+        def update_playlist_list() -> None:
+            playlist_listbox.delete(0, tk.END)
+            name_counts: dict[str, int] = {}
+            for file_path in tx_playlist_files:
+                base_name = Path(file_path).name
+                name_counts[base_name.casefold()] = name_counts.get(base_name.casefold(), 0) + 1
+            for file_path in tx_playlist_files:
+                file_path_obj = Path(file_path)
+                display = file_path_obj.name
+                if name_counts.get(display.casefold(), 0) > 1:
+                    display = f"{display}  ({file_path_obj.parent.name})"
+                playlist_listbox.insert(tk.END, display)
+            playlist_count_var.set(
+                f"{len(tx_playlist_files)} track" + ("" if len(tx_playlist_files) == 1 else "s")
+            )
+
+        def add_playlist_sources(sources: list[str] | tuple[str, ...]) -> None:
+            added_files = collect_audio_files(sources)
+            existing = {item.casefold() for item in tx_playlist_files}
+            additions = [item for item in added_files if item.casefold() not in existing]
+            if additions:
+                tx_playlist_files.extend(additions)
+                update_playlist_list()
+                schedule_tx_settings_save()
+                tx_playlist_status_var.set(f"Added {len(additions)} track(s).")
+            elif not added_files:
+                tx_playlist_status_var.set("No supported audio files were found.")
+            else:
+                tx_playlist_status_var.set("Those audio files are already in the playlist.")
+
+        def add_playlist_files() -> None:
+            selected = filedialog.askopenfilenames(
+                parent=root,
+                title="Add audio files",
+                filetypes=(
+                    ("Audio files", "*.wav *.flac *.ogg *.aiff *.aif *.mp3"),
+                    ("All files", "*.*"),
+                ),
+            )
+            if selected:
+                add_playlist_sources(selected)
+
+        def add_playlist_folder() -> None:
+            selected = filedialog.askdirectory(
+                parent=root,
+                title="Add audio folder",
+                mustexist=True,
+            )
+            if selected:
+                add_playlist_sources([selected])
+
+        def remove_playlist_selection() -> None:
+            selected = sorted(playlist_listbox.curselection(), reverse=True)
+            if not selected:
+                return
+            for index in selected:
+                del tx_playlist_files[index]
+            update_playlist_list()
+            schedule_tx_settings_save()
+            tx_playlist_status_var.set(f"Removed {len(selected)} track(s).")
+
+        def clear_playlist() -> None:
+            if not tx_playlist_files:
+                return
+            tx_playlist_files.clear()
+            update_playlist_list()
+            schedule_tx_settings_save()
+            tx_playlist_status_var.set("Playlist cleared.")
+
+        playlist_actions = tk.Frame(playlist_frame, bg=palette["surfaceContainerLow"])
+        playlist_actions.pack(fill="x", pady=(0, 6))
+        make_button(
+            playlist_actions,
+            "Add files",
+            add_playlist_files,
+            kind="tonal",
+            padx=12,
+            pady=7,
+        ).pack(side="left", padx=(0, 6))
+        make_button(
+            playlist_actions,
+            "Add folder",
+            add_playlist_folder,
+            kind="tonal",
+            padx=12,
+            pady=7,
+        ).pack(side="left", padx=(0, 6))
+        make_button(
+            playlist_actions,
+            "Remove selected",
+            remove_playlist_selection,
+            kind="tonal",
+            padx=12,
+            pady=7,
+        ).pack(side="left", padx=(0, 6))
+        make_button(
+            playlist_actions,
+            "Clear",
+            clear_playlist,
+            kind="text",
+            padx=10,
+            pady=7,
+        ).pack(side="left")
+
+        playlist_options = tk.Frame(playlist_frame, bg=palette["surfaceContainerLow"])
+        playlist_options.pack(fill="x", pady=(2, 4))
+        for label, variable in (
+            ("Shuffle playlist", tx_playlist_shuffle_var),
+            ("Loop playlist", tx_playlist_loop_var),
+        ):
+            option = tk.Checkbutton(
+                playlist_options,
+                text=label,
+                variable=variable,
+                bg=palette["surfaceContainerLow"],
+                fg=palette["onSurface"],
+                activebackground=palette["surfaceContainerLow"],
+                activeforeground=palette["onSurface"],
+                selectcolor=palette["surfaceContainerHighest"],
+                highlightthickness=2,
+                highlightbackground=palette["surfaceContainerLow"],
+                highlightcolor=palette["primary"],
+                cursor="hand2",
+                takefocus=True,
+                bd=0,
+                anchor="w",
+            )
+            option.pack(side="left", padx=(0, 18))
+
+        make_label(
+            playlist_frame,
+            variable=tx_playlist_status_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(3, 0))
+        make_label(
+            playlist_frame,
+            "Supported files: WAV, FLAC, OGG, AIFF, and MP3. Add folder scans subfolders.",
+            font=("Segoe UI", 8, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(4, 0))
+        playlist_listbox.bind(
+            "<Delete>",
+            lambda _event: remove_playlist_selection(),
+        )
+        update_playlist_list()
+
         def refresh_audio_devices(_event=None) -> None:
             tx_audio_device_ids.clear()
             selected_source = tx_audio_source_var.get()
+            if selected_source == "Audio playlist":
+                return
             if selected_source == "Desktop audio (output loopback)":
                 tx_audio_device_label_var.set("Desktop output device")
                 try:
@@ -2583,7 +2817,14 @@ def build_app() -> None:
             if tx_audio_device_var.get() not in tx_audio_device_ids:
                 tx_audio_device_var.set(values[0])
 
-        source_picker.bind("<<ComboboxSelected>>", refresh_audio_devices)
+        source_picker.configure(
+            values=(
+                "Microphone / line input",
+                "Desktop audio (output loopback)",
+                "Audio playlist",
+            )
+        )
+        source_picker.bind("<<ComboboxSelected>>", lambda _event: update_audio_source_controls())
         refresh_button = make_button(
             audio_card,
             "Refresh audio devices",
@@ -2594,11 +2835,23 @@ def build_app() -> None:
         )
         refresh_button.pack(anchor="w", padx=6, pady=(8, 2))
 
+        def update_audio_source_controls() -> None:
+            if tx_audio_source_var.get() == "Audio playlist":
+                device_frame.grid_remove()
+                playlist_frame.grid()
+                refresh_button.pack_forget()
+            else:
+                playlist_frame.grid_remove()
+                device_frame.grid()
+                refresh_button.pack(anchor="w", padx=6, pady=(8, 2))
+                refresh_audio_devices()
+
+        update_audio_source_controls()
+
         make_label(
             audio_card,
-            "Desktop audio uses Windows WASAPI loopback to capture the selected playback device. "
-            "Stereo playback is downmixed to mono and converted to 48 kHz Float32 for TXITY. "
-            "Use microphone / line input for a physical input device.",
+            "Choose a microphone, desktop output, or playlist. Playlist files are decoded to mono 48 kHz audio. "
+            "Desktop output uses Windows WASAPI loopback.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3293,6 +3546,16 @@ def build_app() -> None:
                     f" · dropped: {event.get('frames_dropped', 0)}"
                     f" · queued: {event.get('queue_depth', 0)}"
                 )
+
+            elif kind == "tx_playlist_track":
+                track_path = str(event.get("path") or "")
+                track_name = Path(track_path).name or "Audio track"
+                tx_playlist_status_var.set(
+                    f"Playing {event.get('index', 0)} of {event.get('count', 0)}: {track_name}"
+                )
+
+            elif kind == "tx_playlist_finished":
+                tx_playlist_status_var.set("Playlist finished.")
 
             elif kind == "config":
                 config = event.get("data", {})
