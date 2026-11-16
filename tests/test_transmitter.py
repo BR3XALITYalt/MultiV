@@ -6,6 +6,8 @@ from transmitter import (
     FRAME_BYTES,
     SAMPLE_RATE_HZ,
     BATCH_SAMPLES,
+    AUDIO_FRAME_INTERVAL_SECONDS,
+    playlist_frame_wait_seconds,
     build_audio_socket_url,
     build_transmit_config,
     parse_rf_frequency,
@@ -20,6 +22,15 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(BATCH_SAMPLES, 512)
         self.assertEqual(SAMPLE_RATE_HZ, 48_000)
         self.assertEqual(FRAME_BYTES, 2_048)
+
+    def test_playlist_frames_are_paced_at_48khz(self):
+        self.assertAlmostEqual(AUDIO_FRAME_INTERVAL_SECONDS, 512 / 48_000)
+        self.assertEqual(playlist_frame_wait_seconds(None, 10.0), 0.0)
+        self.assertAlmostEqual(
+            playlist_frame_wait_seconds(10.0, 10.003),
+            (512 / 48_000) - 0.003,
+        )
+        self.assertEqual(playlist_frame_wait_seconds(10.0, 10.02), 0.0)
 
     def test_parse_frequency_units(self):
         self.assertEqual(parse_rf_frequency("7.250 MHz"), 7_250_000)
