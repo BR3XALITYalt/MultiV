@@ -212,7 +212,7 @@ def write_drm_station_config(
         "[output]",
         'sample_format = "float32"',
         'format = "real"',
-        "if_hz = 3000.0",
+        "if_hz = 1500.0",
         "level_dbfs = -15.0",
         "band_limit = true",
         "",
