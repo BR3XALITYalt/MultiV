@@ -1057,10 +1057,11 @@ def build_app() -> None:
     )
     saved_playlist_exclusions = saved_tx_settings.get("playlist_excluded_files", [])
     tx_playlist_excluded_files = {
-        str(Path(item).expanduser().resolve(strict=False)).casefold()
-        for item in saved_playlist_exclusions
-        if isinstance(item, str) and item.strip()
-    } if isinstance(saved_playlist_exclusions, list) else set()
+        path.casefold()
+        for path in normalize_audio_sources(
+            saved_playlist_exclusions if isinstance(saved_playlist_exclusions, list) else []
+        )
+    }
     tx_playlist_files, tx_playlist_signature = build_playlist_snapshot(
         tx_playlist_sources,
         tx_playlist_excluded_files,
