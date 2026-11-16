@@ -98,9 +98,11 @@ def ensure_drm_encoder(on_log: Callable[[str], None] | None = None) -> Path:
 
     plan_file = upstream / "crates" / "decdrm-station" / "src" / "plan.rs"
     plan_source = plan_file.read_text(encoding="utf-8")
-    output_check = '''    if out.file.is_none() && out.device.is_none() {
-        p.push("output: set \`file\` and/or \`device\`");
-    }'''
+    output_check = (
+        '    if out.file.is_none() && out.device.is_none() {\n'
+        '        p.push("output: set ' + chr(96) + 'file' + chr(96) + ' and/or ' + chr(96) + 'device' + chr(96) + '");\n'
+        '    }'
+    )
     no_sink_marker = "TXITPY consumes the samples returned by Station::transmit_frame()"
     if output_check in plan_source:
         plan_source = plan_source.replace(
