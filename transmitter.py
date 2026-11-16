@@ -195,12 +195,12 @@ class TxityTransmitter:
                 daemon=True,
                 name="txity-transmitter",
             )
+            self.events.put({
+                "kind": "tx_state",
+                "state": "starting",
+                "text": "Preparing the TXITY transmission connection...",
+            })
             self._thread.start()
-        self.events.put({
-            "kind": "tx_state",
-            "state": "starting",
-            "text": "Preparing the TXITY transmission connection...",
-        })
 
     def stop(self, wait: float = 0.0) -> None:
         with self._lock:
@@ -263,6 +263,8 @@ class TxityTransmitter:
                 audio_thread_error[:] = [_safe_error(exc)]
 
         try:
+            if self._stop_event.is_set():
+                return
             session_id, session_secret, auth_token = self.client.transmission_credentials()
             if not self.client.control_connected():
                 raise ConnectionError("TXITY control connection is not ready. Reconnect and try again.")
@@ -301,7 +303,11 @@ class TxityTransmitter:
             if self._stop_event.is_set():
                 return
 
+            if self._stop_event.is_set():
+                return
             self.client.send_control_message(config)
+            if self._stop_event.is_set():
+                return
             self.client.send_control_message({"type": "ptt", "ptt": True})
             ptt_sent = True
             with self._lock:
