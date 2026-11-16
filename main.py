@@ -325,6 +325,30 @@ class TxityClient:
 
 def build_app() -> None:
     import bootstack as bs
+    from bootstack.style import Theme, get_font_families, set_font_family
+
+    Theme.from_existing(
+        "bootstrap",
+        name="txity",
+        primary="#ffffff",
+        neutral="#cfcfcf",
+        dark={"background": "#000000", "foreground": "#ffffff"},
+        surfaces={
+            "dark": {
+                "content": "#000000",
+                "card": "#040404",
+                "chrome": "#000000",
+                "raised": "#0b0b0b",
+                "overlay": "#111111",
+                "input": "#000000",
+            }
+        },
+    ).install(activate="txity-dark")
+
+    # Use Lexend when the font is installed; otherwise retain Bootstack's
+    # native system sans-serif fallback, as in the website's CSS stack.
+    if "Lexend" in get_font_families():
+        set_font_family("Lexend")
 
     client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
@@ -351,62 +375,113 @@ def build_app() -> None:
     with bs.AppShell(
         title="TXITPY | TXITY Desktop",
         size=(1120, 760),
-        theme="bootstrap-dark",
+        min_size=(860, 620),
+        theme="txity-dark",
+        show_sidebar=False,
+        sidebar_mode="hidden",
+        nav_accent="primary",
+        remember_window_state=True,
         on_close=shutdown,
     ) as shell:
+        toolbar = shell.add_toolbar(
+            surface="chrome",
+            padding=10,
+            show_border=True,
+            button_variant="outline",
+        )
+        toolbar.add_label("TXITY", font="heading-md")
+        toolbar.add_divider()
+        toolbar.add_button(
+            "Overview",
+            icon="house",
+            accent="primary",
+            on_click=lambda: shell.navigate("overview"),
+        )
+        toolbar.add_button(
+            "Stations",
+            icon="list",
+            accent="primary",
+            on_click=lambda: shell.navigate("stations"),
+        )
+        toolbar.add_button(
+            "Discord",
+            icon="discord",
+            accent="primary",
+            on_click=lambda: shell.navigate("about"),
+        )
+        toolbar.add_spacer()
+        toolbar.add_widget(
+            bs.Badge,
+            textsignal=connection,
+            accent="primary",
+            variant="pill",
+            font="caption",
+        )
+
         with shell.page_nav() as nav:
-            with nav.add_page("overview", text="Overview", icon="house", padding=20, gap=12):
-                bs.Label("TXITY", font="heading-lg")
-                bs.Label("Public server monitor and station directory", accent="secondary")
+            with nav.add_page("overview", text="Overview", icon="house", padding=24, gap=16):
+                bs.Label("TXITY", font="display-xl")
+                bs.Label(
+                    "Public server monitor and station directory",
+                    font="body-lg",
+                    accent="secondary",
+                )
                 bs.Divider()
-                bs.Label(textsignal=connection, font="heading-md", accent="primary")
                 with bs.Row(gap=12):
                     bs.Button("Connect", accent="primary", on_click=client.connect)
                     bs.Button("Disconnect", variant="outline", on_click=client.disconnect)
                     bs.Button("Open TXITY", variant="outline", on_click=lambda: webbrowser.open(BASE_URL))
                 bs.Label("Server status", font="heading-md")
-                with bs.Grid(columns=2, gap=10):
-                    with bs.Card(padding=12, gap=4):
-                        bs.Label("Center frequency", accent="secondary")
-                        bs.Label(textsignal=center, font="heading-lg")
-                    with bs.Card(padding=12, gap=4):
-                        bs.Label("Frequency range", accent="secondary")
-                        bs.Label(textsignal=band, font="heading-lg")
-                    with bs.Card(padding=12, gap=4):
-                        bs.Label("Sample rate", accent="secondary")
-                        bs.Label(textsignal=sample_rate, font="heading-lg")
-                    with bs.Card(padding=12, gap=4):
-                        bs.Label("Active transmitters", accent="secondary")
-                        bs.Label(textsignal=transmitters, font="heading-lg")
-                    with bs.Card(padding=12, gap=4):
-                        bs.Label("Connected clients", accent="secondary")
-                        bs.Label(textsignal=clients, font="heading-lg")
-                bs.Label(textsignal=summary, wrap_width=760)
-                bs.Label(textsignal=updated, accent="secondary", font="caption")
+                bs.Label("SERVER STATUS", font="label", accent="secondary")
+                with bs.Grid(columns=3, gap=16):
+                    with bs.Card(padding=18, gap=8, accent="primary"):
+                        bs.Label("Center frequency", font="label", accent="secondary")
+                        bs.Label(textsignal=center, font="display-lg")
+                    with bs.Card(padding=18, gap=8, accent="primary"):
+                        bs.Label("Frequency range", font="label", accent="secondary")
+                        bs.Label(textsignal=band, font="display-lg")
+                    with bs.Card(padding=18, gap=8, accent="primary"):
+                        bs.Label("Sample rate", font="label", accent="secondary")
+                        bs.Label(textsignal=sample_rate, font="display-lg")
+                    with bs.Card(padding=18, gap=8, accent="primary"):
+                        bs.Label("Active transmitters", font="label", accent="secondary")
+                        bs.Label(textsignal=transmitters, font="display-lg")
+                    with bs.Card(padding=18, gap=8, accent="primary"):
+                        bs.Label("Connected clients", font="label", accent="secondary")
+                        bs.Label(textsignal=clients, font="display-lg")
+                with bs.Card(padding=18, gap=10, accent="primary"):
+                    bs.Label(textsignal=summary, font="body-lg", wrap_width=760)
+                    bs.Label(textsignal=updated, accent="secondary", font="caption")
 
-            with nav.add_page("stations", text="Stations", icon="list", padding=20, gap=10):
-                bs.Label("Station directory", font="heading-lg")
+            with nav.add_page("stations", text="Stations", icon="list", padding=24, gap=16):
+                bs.Label("Station directory", font="display-lg")
                 bs.Label(
                     "Public station information from TXITY. Sort columns or search the list.",
+                    font="body-lg",
                     accent="secondary",
                 )
-                bs.Button("Refresh station list", accent="primary", on_click=client.refresh_stations)
-                station_table = bs.DataTable(
-                    columns=[
-                        {"key": "station", "text": "Station", "width": 190},
-                        {"key": "frequency", "text": "Frequency", "width": 115},
-                        {"key": "mode", "text": "Mode", "width": 90},
-                        {"key": "rating", "text": "Rating", "width": 110},
-                        {"key": "description", "text": "Description"},
-                    ],
-                    rows=[],
-                    searchable=True,
-                    allow_filter=True,
-                    paging_mode="virtual",
-                    page_size=30,
-                    show_status_bar=True,
-                    id_field="id",
-                    context_menus="headers",
+                with bs.Card(padding=18, gap=14, accent="primary"):
+                    bs.Button(
+                        "Refresh station list",
+                        accent="primary",
+                        on_click=client.refresh_stations,
+                    )
+                        station_table = bs.DataTable(
+                        columns=[
+                            {"key": "station", "text": "Station", "width": 190},
+                            {"key": "frequency", "text": "Frequency", "width": 115},
+                            {"key": "mode", "text": "Mode", "width": 90},
+                            {"key": "rating", "text": "Rating", "width": 110},
+                            {"key": "description", "text": "Description"},
+                        ],
+                        rows=[],
+                        searchable=True,
+                        allow_filter=True,
+                        paging_mode="virtual",
+                        page_size=30,
+                        show_status_bar=True,
+                        id_field="id",
+                        context_menus="headers",
                 )
                 bs.Label(
                     "Station data is public and may be delayed by the server or network.",
@@ -414,14 +489,31 @@ def build_app() -> None:
                     font="caption",
                 )
 
-            with nav.add_page("about", text="Discord / Connection", icon="info-circle", padding=20, gap=10):
-                bs.Label("Discord account", font="heading-lg")
-                bs.Label(textsignal=auth_account, font="heading-md", accent="primary")
-                bs.Label(textsignal=auth_browser_status, accent="secondary")
-                bs.Button("Sign in with Discord", accent="primary", on_click=auth_manager.start_login)
-                bs.Button("Disconnect Discord", variant="outline", on_click=disconnect_discord)
-                bs.Divider()
-                bs.Label("Connection", font="heading-md")
+            with nav.add_page("about", text="Discord", icon="info-circle", padding=24, gap=16):
+                bs.Label("Discord account", font="display-lg")
+                with bs.Card(padding=22, gap=14, accent="primary"):
+                    bs.Label(
+                        textsignal=auth_account,
+                        font="heading-md",
+                        accent="primary",
+                    )
+                    bs.Label(
+                        textsignal=auth_browser_status,
+                        accent="secondary",
+                    )
+                    bs.Row(gap=10):
+                        bs.Button(
+                            "Sign in with Discord",
+                            accent="primary",
+                            on_click=auth_manager.start_login,
+                        )
+                        bs.Button(
+                            "Disconnect Discord",
+                            variant="outline",
+                            on_click=disconnect_discord,
+                        )
+                    bs.Divider()
+                    bs.Label("Connection", font="heading-md")
                 bs.Label(BASE_URL, accent="primary")
                 bs.Label(
                     "TXITPY opens TXITY's official Discord sign-in route in your system browser. "
