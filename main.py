@@ -245,20 +245,26 @@ def normalize_media_url(value: Any) -> str:
 
 def discord_avatar_url(avatar_value: Any, user_id: Any = None) -> str:
     """Resolve either a Discord avatar URL or a raw avatar hash."""
-    normalized = normalize_media_url(avatar_value)
-    if normalized:
-        return normalized
-    if not isinstance(avatar_value, str) or not isinstance(user_id, (str, int)):
-        return ""
-    avatar_hash = avatar_value.strip()
-    user_id_text = str(user_id).strip()
+    if isinstance(avatar_value, dict):
+        avatar_value = next((
+            avatar_value.get(key) for key in ("url", "src", "avatarUrl", "avatar_url")
+            if isinstance(avatar_value.get(key), str) and avatar_value.get(key).strip()
+        ), "")
+
+    avatar_hash = avatar_value.strip() if isinstance(avatar_value, str) else ""
+    user_id_text = str(user_id).strip() if isinstance(user_id, (str, int)) and not isinstance(user_id, bool) else ""
+
+    # A Discord avatar hash is not a URL. Resolve it before relative URL joining,
+    # otherwise it would incorrectly become a path on the TXITY website.
     if (
-        not re.fullmatch(r"[A-Za-z0-9_]{8,128}", avatar_hash)
-        or not re.fullmatch(r"\d{5,24}", user_id_text)
+        re.fullmatch(r"[A-Za-z0-9_]{8,128}", avatar_hash)
+        and re.fullmatch(r"\d{5,24}", user_id_text)
+        and not avatar_hash.startswith(("/", "http:", "https:"))
     ):
-        return ""
-    extension = "gif" if avatar_hash.startswith("a_") else "png"
-    return f"https://cdn.discordapp.com/avatars/{user_id_text}/{avatar_hash}.{extension}?size=128"
+        extension = "gif" if avatar_hash.startswith("a_") else "png"
+        return f"https://cdn.discordapp.com/avatars/{user_id_text}/{avatar_hash}.{extension}?size=128"
+
+    return normalize_media_url(avatar_value)
 
 
 def parse_station_page_layout(value: Any) -> dict[str, Any] | None:
