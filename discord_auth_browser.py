@@ -46,7 +46,7 @@ WATCHER_SCRIPT = r"""
         }
 
         clearInterval(window.__txitpyAuthWatcher);
-        api.complete(token).then(result => {
+        api.complete(location.origin, token).then(result => {
             if (result && result.ok) {
                 document.title = "Discord sign-in complete";
                 document.body.innerHTML =
@@ -81,9 +81,9 @@ class AuthBridge:
         self._finished = False
         self.window = None
 
-    def complete(self, token: str) -> dict[str, bool]:
-        """Forward the TXITY token to the parent process without logging it."""
-        if not isinstance(token, str) or user_from_txity_token(token) is None:
+    def complete(self, origin: str, token: str) -> dict[str, bool]:
+        """Forward a valid token read from TXITY's own origin."""
+        if token_from_storage(origin, token) is None:
             return {"ok": False}
 
         with self._lock:
