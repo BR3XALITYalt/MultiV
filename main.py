@@ -2111,7 +2111,7 @@ def build_app() -> None:
             print(f"[TXITPY] Transmission start rejected: {details}", file=sys.stderr, flush=True)
 
     def show_transmit(parent: tk.Frame) -> None:
-        nonlocal tx_transmit_button
+        nonlocal tx_transmit_button, playlist_ui_refresh_callback
 
         page, _canvas = create_scrollable_page(parent)
 
@@ -2678,34 +2678,74 @@ def build_app() -> None:
         playlist_listbox.configure(yscrollcommand=playlist_scrollbar.set)
 
         def update_playlist_list() -> None:
-            playlist_listbox.delete(0, tk.END)
-            name_counts: dict[str, int] = {}
-            for file_path in tx_playlist_files:
-                base_name = Path(file_path).name
-                name_counts[base_name.casefold()] = name_counts.get(base_name.casefold(), 0) + 1
-            for file_path in tx_playlist_files:
-                file_path_obj = Path(file_path)
-                display = file_path_obj.name
-                if name_counts.get(display.casefold(), 0) > 1:
-                    display = f"{display}  ({file_path_obj.parent.name})"
-                playlist_listbox.insert(tk.END, display)
-            playlist_count_var.set(
-                f"{len(tx_playlist_files)} track" + ("" if len(tx_playlist_files) == 1 else "s")
-            )
+            selected_paths = {
+                tx_playlist_files[index].casefold()
+                for index in playlist_listbox.curselection()
+                if 0 <= index < len(tx_playlist_files)
+            }
+            try:
+                playlist_listbox.delete(0, tk.END)
+                name_counts: dict[str, int] = {}
+                for file_path in tx_playlist_files:
+                    base_name = Path(file_path).name
+                    name_counts[base_name.casefold()] = name_counts.get(base_name.casefold(), 0) + 1
+                for index, file_path in enumerate(tx_playlist_files):
+                    file_path_obj = Path(file_path)
+                    display = file_path_obj.name
+                    if name_counts.get(display.casefold(), 0) > 1:
+                        display = f"{display}  ({file_path_obj.parent.name})"
+                    playlist_listbox.insert(tk.END, display)
+                    if file_path.casefold() in selected_paths:
+                        playlist_listbox.selection_set(index)
+                playlist_count_var.set(
+                    f"{len(tx_playlist_files)} track" + ("" if len(tx_playlist_files) == 1 else "s")
+                )
+            except tk.TclError:
+                return
+
+        playlist_ui_refresh_callback = update_playlist_list
+
+        def canonical_playlist_path(value: str | Path) -> str:
+            return str(Path(value).expanduser().resolve(strict=False)).casefold()
 
         def add_playlist_sources(sources: list[str] | tuple[str, ...]) -> None:
-            added_files = collect_audio_files(sources)
-            existing = {item.casefold() for item in tx_playlist_files}
-            additions = [item for item in added_files if item.casefold() not in existing]
-            if additions:
-                tx_playlist_files.extend(additions)
-                update_playlist_list()
-                schedule_tx_settings_save()
-                tx_playlist_status_var.set(f"Added {len(additions)} track(s).")
-            elif not added_files:
-                tx_playlist_status_var.set("No supported audio files were found.")
+            normalized_sources = normalize_audio_sources(sources)
+            if not normalized_sources:
+                tx_playlist_status_var.set("No supported audio files or folders were found.")
+                return
+
+            added_sources: list[str] = []
+            with playlist_watch_lock:
+                existing_sources = {canonical_playlist_path(item) for item in tx_playlist_sources}
+                for source in normalized_sources:
+                    identity = canonical_playlist_path(source)
+                    if identity in existing_sources:
+                        continue
+                    tx_playlist_sources.append(source)
+                    existing_sources.add(identity)
+                    added_sources.append(source)
+
+                    source_path = Path(source)
+                    if source_path.is_dir():
+                        tx_playlist_excluded_files = {
+                            excluded for excluded in tx_playlist_excluded_files
+                            if not Path(excluded).is_relative_to(source_path)
+                        }
+                    else:
+                        tx_playlist_excluded_files.discard(identity)
+
+            if added_sources:
+                added, _removed = refresh_playlist_from_sources()
+                if added:
+                    tx_playlist_status_var.set(f"Added {added} track(s).")
+                elif any(Path(item).is_dir() for item in added_sources):
+                    tx_playlist_status_var.set(
+                        "Folder added. TXITPY will refresh the playlist when its contents change."
+                    )
+                else:
+                    tx_playlist_status_var.set("Those audio files are already in the playlist.")
             else:
-                tx_playlist_status_var.set("Those audio files are already in the playlist.")
+                tx_playlist_status_var.set("Those files and folders are already in the playlist.")
 
         def add_playlist_files() -> None:
             selected = filedialog.askopenfilenames(
@@ -2729,22 +2769,37 @@ def build_app() -> None:
                 add_playlist_sources([selected])
 
         def remove_playlist_selection() -> None:
-            selected = sorted(playlist_listbox.curselection(), reverse=True)
+            selected = sorted(playlist_listbox.curselection())
             if not selected:
                 return
-            for index in selected:
-                del tx_playlist_files[index]
-            update_playlist_list()
-            schedule_tx_settings_save()
-            tx_playlist_status_var.set(f"Removed {len(selected)} track(s).")
+            removed_paths = [
+                tx_playlist_files[index]
+                for index in selected
+                if 0 <= index < len(tx_playlist_files)
+            ]
+            with playlist_watch_lock:
+                for file_path in removed_paths:
+                    identity = canonical_playlist_path(file_path)
+                    tx_playlist_excluded_files.add(identity)
+                    tx_playlist_sources[:] = [
+                        source for source in tx_playlist_sources
+                        if canonical_playlist_path(source) != identity
+                    ]
+            refresh_playlist_from_sources()
+            tx_playlist_status_var.set(f"Removed {len(removed_paths)} track(s).")
 
         def clear_playlist() -> None:
-            if not tx_playlist_files:
-                return
-            tx_playlist_files.clear()
-            update_playlist_list()
-            schedule_tx_settings_save()
+            with playlist_watch_lock:
+                tx_playlist_sources.clear()
+                tx_playlist_excluded_files.clear()
+            refresh_playlist_from_sources()
             tx_playlist_status_var.set("Playlist cleared.")
+
+        def refresh_playlist_manually() -> None:
+            added, removed = refresh_playlist_from_sources()
+            tx_playlist_status_var.set(
+                f"Playlist refreshed: {added} added, {removed} removed."
+            )
 
         playlist_actions = tk.Frame(playlist_frame, bg=palette["surfaceContainerLow"])
         playlist_actions.pack(fill="x", pady=(0, 6))
@@ -2776,6 +2831,14 @@ def build_app() -> None:
             playlist_actions,
             "Clear",
             clear_playlist,
+            kind="text",
+            padx=10,
+            pady=7,
+        ).pack(side="left")
+        make_button(
+            playlist_actions,
+            "Refresh",
+            refresh_playlist_manually,
             kind="text",
             padx=10,
             pady=7,
@@ -2816,7 +2879,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(3, 0))
         make_label(
             playlist_frame,
-            "Supported files: WAV, FLAC, OGG, AIFF, and MP3. Add folder scans subfolders.",
+            "Supported files: WAV, FLAC, OGG, AIFF, and MP3. Added folders refresh automatically when files change.",
             font=("Segoe UI", 8, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
