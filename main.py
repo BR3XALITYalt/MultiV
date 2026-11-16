@@ -34,6 +34,7 @@ from discord_auth import (
     write_diagnostic,
     write_diagnostic_text,
 )
+from drm_support import drm_setup_status, prepare_drm_encoder
 from transmitter import (
     TxityTransmitter,
     build_transmit_config,
@@ -987,7 +988,7 @@ def _system_theme_mode() -> str:
 
 def build_app() -> None:
     import tkinter as tk
-    from tkinter import ttk, filedialog
+    from tkinter import ttk, filedialog, messagebox
     from material_theme import apply_tk_theme, native_widget_classes
 
     SurfaceFrame, FlatButton = native_widget_classes(tk)
@@ -1045,6 +1046,15 @@ def build_app() -> None:
     tx_frequency_check_var = tk.StringVar(root, "Waiting for TXITY station data.")
     tx_mode_var = tk.StringVar(root, saved_text("mode", "AM"))
     tx_mode_help_var = tk.StringVar(root, "AM uses a carrier with upper and lower sidebands.")
+    drm_setup_state: dict[str, Any] = {
+        "running": False,
+        "previous_mode": (
+            tx_mode_var.get().strip().upper()
+            if tx_mode_var.get().strip().upper() not in {"", "DRM"}
+            else "AM"
+        ),
+    }
+    drm_setup_events: queue.Queue[tuple[str, str]] = queue.Queue()
     tx_power_var = tk.StringVar(root, saved_text("station_dbm", "50"))
     tx_power_readout_var = tk.StringVar(root, "50 dBm")
     tx_audio_source_var = tk.StringVar(root, saved_text("audio_source", "Microphone / line input"))
@@ -2360,19 +2370,147 @@ def build_app() -> None:
 
         def update_mode_help(_event=None) -> None:
             descriptions = {
-                "AM": "AM — normal AM with carrier.",
-                "USB": "USB — upper sideband.",
-                "LSB": "LSB — lower sideband.",
-                "USB+C": "USB+C — upper sideband with carrier.",
-                "LSB+C": "LSB+C — lower sideband with carrier.",
+                "AM": "AM - normal AM with carrier.",
+                "USB": "USB - upper sideband.",
+                "LSB": "LSB - lower sideband.",
+                "USB+C": "USB+C - upper sideband with carrier.",
+                "LSB+C": "LSB+C - lower sideband with carrier.",
                 "DSB": "DSB - double-sideband suppressed carrier.",
-                "DRM": "DRM30 - one audio service in a 4.5 kHz OFDM channel. First use builds the encoder and requires Git, Rust 1.88+, CMake, and C/C++ build tools. Microphone and OGG, MP3, or FLAC playlists are supported.",
+                "DRM": "DRM30 - one audio service in a 4.5 kHz OFDM channel. Selecting DRM checks for its encoder and offers setup if needed. Microphone and OGG, MP3, or FLAC playlists are supported.",
                 "CW": "CW - carrier only. The microphone and desktop audio sources are not used.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
             update_frequency_check()
-        mode_picker.bind("<<ComboboxSelected>>", update_mode_help)
+
+        def restore_previous_mode() -> None:
+            previous = str(drm_setup_state.get("previous_mode") or "AM")
+            tx_mode_var.set(previous)
+            update_mode_help()
+
+        def set_mode_picker_enabled(enabled: bool) -> None:
+            try:
+                if mode_picker.winfo_exists():
+                    mode_picker.configure(state="readonly" if enabled else "disabled")
+            except tk.TclError:
+                pass
+
+        def poll_drm_setup() -> None:
+            completed = False
+            while True:
+                try:
+                    kind, value = drm_setup_events.get_nowait()
+                except queue.Empty:
+                    break
+
+                if kind == "log":
+                    tx_status_var.set(value[:240])
+                elif kind == "success":
+                    completed = True
+                    drm_setup_state["running"] = False
+                    drm_setup_state["previous_mode"] = "DRM"
+                    tx_mode_var.set("DRM")
+                    tx_status_var.set("DRM encoder is ready.")
+                    update_mode_help()
+                    set_mode_picker_enabled(True)
+                elif kind == "error":
+                    completed = True
+                    drm_setup_state["running"] = False
+                    restore_previous_mode()
+                    tx_status_var.set("DRM setup failed.")
+                    set_mode_picker_enabled(True)
+                    messagebox.showerror(
+                        "DRM setup failed",
+                        value,
+                        parent=root,
+                    )
+
+            if not completed and drm_setup_state["running"]:
+                root.after(150, poll_drm_setup)
+
+        def handle_mode_selection(_event=None) -> None:
+            selected = tx_mode_var.get().strip().upper()
+            if selected != "DRM":
+                if not drm_setup_state["running"]:
+                    drm_setup_state["previous_mode"] = selected
+                update_mode_help()
+                return
+
+            if drm_setup_state["running"]:
+                return
+
+            status = drm_setup_status()
+            if status.get("ready"):
+                drm_setup_state["previous_mode"] = "DRM"
+                update_mode_help()
+                return
+
+            missing_build_tools = status.get("missing_build_tools") or []
+            if missing_build_tools:
+                restore_previous_mode()
+                messagebox.showerror(
+                    "DRM build tools missing",
+                    "DRM also needs Git, CMake, and a C/C++ compiler. "
+                    "TXITPY could not detect: "
+                    + ", ".join(str(item) for item in missing_build_tools)
+                    + ". Install the missing tools, restart TXITPY, and select DRM again.",
+                    parent=root,
+                )
+                return
+
+            missing = [str(item) for item in (status.get("missing") or [])]
+            if not missing:
+                missing = ["the DRM encoder has not been built on this computer"]
+
+            if not status.get("rust_ready") and os.name != "nt":
+                restore_previous_mode()
+                messagebox.showinfo(
+                    "Rust is required for DRM",
+                    "Install Rust 1.88 or newer from https://rust-lang.org/tools/install, "
+                    "then restart TXITPY and select DRM again.",
+                    parent=root,
+                )
+                webbrowser.open("https://rust-lang.org/tools/install")
+                return
+
+            prompt = (
+                "DRM mode is not ready. TXITPY could not detect:\n\n"
+                + "\n".join(f"• {item}" for item in missing)
+                + "\n\nDownload and install the missing components and build the DRM encoder now? "
+                "TXITPY will select DRM when setup finishes."
+            )
+            if not messagebox.askyesno("Set up DRM30", prompt, parent=root):
+                restore_previous_mode()
+                return
+
+            drm_setup_state["running"] = True
+            previous_mode = str(drm_setup_state.get("previous_mode") or "AM")
+            tx_mode_var.set(previous_mode)
+            tx_mode_help_var.set("Setting up DRM30. Downloading and building its encoder...")
+            tx_status_var.set("Preparing DRM dependencies...")
+            set_mode_picker_enabled(False)
+
+            def setup_worker() -> None:
+                def report(line: str) -> None:
+                    drm_setup_events.put(("log", line))
+
+                try:
+                    encoder = prepare_drm_encoder(on_log=report)
+                except Exception as exc:
+                    drm_setup_events.put(("error", str(exc)))
+                else:
+                    drm_setup_events.put(("success", str(encoder)))
+
+            threading.Thread(
+                target=setup_worker,
+                daemon=True,
+                name="txitpy-drm-setup",
+            ).start()
+            root.after(150, poll_drm_setup)
+
+        mode_picker.bind("<<ComboboxSelected>>", handle_mode_selection)
         update_mode_help()
+        if tx_mode_var.get().strip().upper() == "DRM":
+            root.after_idle(handle_mode_selection)
 
         power_frame = tk.Frame(signal_fields, bg=palette["surfaceContainerLow"])
         power_frame.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
