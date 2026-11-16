@@ -1,3 +1,4 @@
+import ast
 import sys
 import tempfile
 import tomllib
@@ -63,6 +64,26 @@ class DRMConfigurationTests(unittest.TestCase):
         self.assertNotIn("modify", community_command)
         self.assertIn(VISUAL_STUDIO_WORKLOAD, community_command)
         self.assertIn("--includeRecommended", community_command)
+
+    def test_drm_setup_callback_starts_the_worker_without_recursing(self):
+        main_path = Path(__file__).resolve().parents[1] / "main.py"
+        syntax_tree = ast.parse(main_path.read_text(encoding="utf-8"))
+        setup_function = next(
+            node for node in ast.walk(syntax_tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "start_drm_setup"
+        )
+        called_names = {
+            node.func.id
+            for node in ast.walk(setup_function)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+
+        self.assertNotIn("start_drm_setup", called_names)
+        self.assertIn("prepare_drm_encoder", called_names)
+        self.assertIn("setup_worker", {
+            node.name for node in ast.walk(setup_function)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        })
 
     def test_decdrm_source_is_pinned(self):
         self.assertEqual(DECDRM_VERSION, "0.7.1")
