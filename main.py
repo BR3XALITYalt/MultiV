@@ -623,7 +623,7 @@ def build_app() -> None:
                         max_chars=16_000,
                     )
                     print(
-                        f"\\n[TXITPY Discord sign-in error]\\n{details}\\n",
+                        f"\n[TXITPY Discord sign-in error]\n{details}\n",
                         file=sys.stderr,
                         flush=True,
                     )
