@@ -4,6 +4,8 @@ TXITPY is a Python desktop client for TXITY's simulated radio-broadcast service.
 
 ## Features
 
+TXITPY is the desktop app. TXITY refers to the website and simulated service that TXITPY connects to.
+
 - Live server status and a searchable station directory with station profiles, supplied images, custom page blocks, and comments.
 - Discord sign-in through TXITY's sign-in page in an embedded WebView2 window.
 - Live configuration and push-to-talk control through TXITY's authenticated control WebSocket.
