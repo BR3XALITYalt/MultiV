@@ -68,8 +68,35 @@ class StationParserTests(unittest.TestCase):
                 "ratingAverage": 1.375,
                 "ratingCount": 48,
                 "onAirSeconds": 4121,
-                "comments": [{"text": "Ignored comment"}],
-                "pageLayout": "{...}",
+                "logoUrl": "/uploads/stations/example/logo.png",
+                "details": "Long station profile details.",
+                "discordId": "1234567890",
+                "discordAvatarUrl": "https://cdn.discordapp.com/avatars/1234567890/avatar.png",
+                "imageUrls": ["/uploads/stations/example/gallery.png"],
+                "likes": 7,
+                "commentCount": 1,
+                "ratingAverage": 1.375,
+                "comments": [{
+                    "discordUsername": "listener",
+                    "text": "Clear signal.",
+                    "createdAt": "2026-11-15T18:00:00Z",
+                    "discordAvatarUrl": "https://cdn.discordapp.com/avatars/222/avatar.png",
+                }],
+                "pageLayout": {
+                    "height": 520,
+                    "blocks": [{
+                        "type": "text",
+                        "text": "Welcome to the station.",
+                        "left": 10,
+                        "top": 12,
+                        "width": 80,
+                        "height": 70,
+                        "fontFamily": "Georgia",
+                        "fontSize": 22,
+                        "fontWeight": 700,
+                        "textAlign": "center",
+                    }],
+                },
             }],
         })
 
@@ -93,6 +120,19 @@ class StationParserTests(unittest.TestCase):
         self.assertEqual(row["description"], "Short description")
         self.assertNotIn("comments", row)
         self.assertNotIn("pageLayout", row)
+
+        record = stations[0].as_record()
+        self.assertEqual(record["logo_url"], "https://txity.radiodiscussion.org/uploads/stations/example/logo.png")
+        self.assertEqual(record["details_text"], "Long station profile details.")
+        self.assertEqual(record["discord_id"], "1234567890")
+        self.assertEqual(record["avatar_url"], "https://cdn.discordapp.com/avatars/1234567890/avatar.png")
+        self.assertEqual(record["image_urls"], ["https://txity.radiodiscussion.org/uploads/stations/example/gallery.png"])
+        self.assertEqual(record["likes"], 7)
+        self.assertEqual(record["comment_count"], 1)
+        self.assertEqual(record["comments"][0]["author"], "listener")
+        self.assertEqual(record["comments"][0]["text"], "Clear signal.")
+        self.assertEqual(record["page_layout"]["height"], 520)
+        self.assertEqual(record["page_layout"]["blocks"][0]["text"], "Welcome to the station.")
 
     def test_users_json_uses_frequency_hz_when_formatted_frequency_is_missing(self):
         _metrics, stations = parse_users_listing({
