@@ -188,7 +188,7 @@ def _visual_studio_installation_path(*, require_cpp: bool) -> Path | None:
 
 def _visual_studio_cmake_generator_for_version(version: str) -> str | None:
     """Map a Visual Studio installation version to its matching CMake generator."""
-    match = re.match(r"^\\s*([0-9]+)", version)
+    match = re.match(r"^([0-9]+)", version)
     if not match:
         return None
     generators = {
