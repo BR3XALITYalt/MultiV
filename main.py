@@ -345,11 +345,6 @@ def build_app() -> None:
         },
     ).install()
 
-    # Use Lexend when the font is installed; otherwise retain Bootstack's
-    # native system sans-serif fallback, as in the website's CSS stack.
-    if "Lexend" in get_font_families():
-        set_font_family("Lexend")
-
     client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
     auth_account = bs.Signal("Not signed in to Discord")
@@ -383,6 +378,11 @@ def build_app() -> None:
         remember_window_state=True,
         on_close=shutdown,
     ) as shell:
+        # Font discovery uses Tk's active interpreter, so it must happen only
+        # after AppShell has created and entered the application root.
+        if "Lexend" in get_font_families():
+            set_font_family("Lexend")
+
         toolbar = shell.add_toolbar(
             surface="chrome",
             padding=10,
