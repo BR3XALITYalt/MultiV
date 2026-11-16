@@ -834,11 +834,12 @@ class TxityTransmitter:
                     if self._stop_event.is_set():
                         break
 
-                audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
-                send_count += 1
                 now = time.monotonic()
                 if audio_source == "playlist":
                     playlist_last_frame_sent_at = now
+                audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
+                send_count += 1
+                now = time.monotonic()
                 if now - last_metrics_at >= 1.0:
                     self.events.put({
                         "kind": "tx_metrics",
