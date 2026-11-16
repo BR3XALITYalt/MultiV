@@ -831,7 +831,10 @@ class TxityClient:
                 data = json.loads(message)
             except json.JSONDecodeError:
                 return
-            if isinstance(data, dict) and data.get("type") == "status":
+            if not isinstance(data, dict):
+                return
+            message_type = data.get("type")
+            if message_type == "status":
                 if not status_received.is_set():
                     status_received.set()
                     self.events.put({
@@ -839,6 +842,8 @@ class TxityClient:
                         "text": "Connected; receiving live TXITY status.",
                     })
                 self.events.put({"kind": "status", "data": data})
+            elif message_type in {"notice", "kicked", "banned"}:
+                self.events.put({"kind": "tx_server_message", "data": data})
 
         def on_error(_ws: websocket.WebSocketApp, error: Any) -> None:
             if self.stop_event.is_set():
@@ -2507,6 +2512,24 @@ def build_app() -> None:
             f"TXITY reports {data.get('transmittingCount', 'an unknown number')} active transmitters."
         )
 
+        if transmitter.is_busy and data.get("ptt") is True:
+            tx_status_var.set("TXITY confirms that the station is transmitting.")
+        elif transmitter.is_busy and data.get("ptt") is False:
+            queue_position = data.get("queuePosition")
+            if isinstance(queue_position, int) and queue_position >= 0:
+                tx_status_var.set(f"Waiting in the TXITY transmitter queue (position {queue_position + 1}).")
+            elif data.get("txStartUsable") is False or data.get("txBlockReason") is not None:
+                reason = data.get("txStartReason", data.get("txBlockReason"))
+                reasons = {
+                    2: "transmitter capacity is currently full",
+                    3: "frequency sharing must be enabled by both stations",
+                    4: "the total transmitter limit has been reached",
+                    5: "a station name is required",
+                }
+                reason_text = reasons.get(reason, "TXITY did not accept the transmission request")
+                tx_status_var.set(f"Transmission blocked: {reason_text}.")
+                transmitter.stop()
+
     def drain_events() -> None:
         nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows, current_page, tx_profile_initialized
         while True:
@@ -2546,6 +2569,19 @@ def build_app() -> None:
                 details = safe_error_text(str(event.get("text") or ""), 300)
                 if details:
                     print(f"[TXITPY] Audio input warning: {details}", file=sys.stderr, flush=True)
+
+            elif kind == "tx_server_message":
+                data = event.get("data", {})
+                if isinstance(data, dict):
+                    message_type = str(data.get("type") or "")
+                    server_text = safe_error_text(
+                        str(data.get("message") or data.get("reason") or message_type),
+                        500,
+                    )
+                    tx_status_var.set(f"TXITY: {server_text}")
+                    print(f"[TXITPY] TXITY {message_type}: {server_text}", file=sys.stderr, flush=True)
+                    if message_type in {"kicked", "banned"}:
+                        transmitter.stop()
 
             elif kind == "tx_metrics":
                 tx_metrics_var.set(
