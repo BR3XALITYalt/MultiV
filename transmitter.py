@@ -166,6 +166,22 @@ def build_transmit_config(
     station_logo_url: str = "",
     station_details: str = "",
     station_page_layout: str = "",
+    fade_enabled: bool = False,
+    fade_seconds: Any = 15,
+    fade_min_dbm: Any = 25,
+    fade_shape: Any = 0,
+    agc_enabled: bool = True,
+    agc_target: Any = 0.19,
+    mic_gain_db: Any = 0,
+    bass_db: Any = 0,
+    treble_db: Any = 0,
+    presence_db: Any = 0,
+    drive: Any = 0.015,
+    ssb_bandwidth_hz: Any = 10_000,
+    ssb_low_cut_hz: Any = 325,
+    ssb_high_cut_hz: Any = 0,
+    am_bandwidth_hz: Any = 12_000,
+    am_pre_emphasis: bool = False,
 ) -> dict[str, Any]:
     """Create the TXITY config message using the website's currentConfig schema."""
     name = str(station_name or "").strip()
@@ -183,12 +199,56 @@ def build_transmit_config(
     try:
         power = float(station_dbm)
         words_per_minute = int(cw_wpm)
+        fade_duration_seconds = float(fade_seconds)
+        fade_floor = float(fade_min_dbm)
+        fade_curve = int(fade_shape)
+        agc_target_value = float(agc_target)
+        mic_gain_value = float(mic_gain_db)
+        bass_value = float(bass_db)
+        treble_value = float(treble_db)
+        presence_value = float(presence_db)
+        drive_value = float(drive)
+        ssb_width = int(ssb_bandwidth_hz)
+        ssb_low_cut = int(ssb_low_cut_hz)
+        ssb_high_cut = int(ssb_high_cut_hz)
+        am_width = int(am_bandwidth_hz)
     except (TypeError, ValueError) as exc:
-        raise ValueError("Power and CW speed must be numeric values.") from exc
-    if not math.isfinite(power) or not -140 <= power <= 53:
+        raise ValueError("Transmit settings must contain valid numeric values.") from exc
+
+    numeric_values = (
+        power, fade_duration_seconds, fade_floor, agc_target_value,
+        mic_gain_value, bass_value, treble_value, presence_value, drive_value,
+    )
+    if not all(math.isfinite(value) for value in numeric_values):
+        raise ValueError("Transmit settings must be finite numbers.")
+    if not -140 <= power <= 53:
         raise ValueError("Station power must be between -140 and 53 dBm.")
     if not 5 <= words_per_minute <= 60:
         raise ValueError("CW speed must be between 5 and 60 WPM.")
+    if not 10 <= fade_duration_seconds <= 60:
+        raise ValueError("Fade cycle length must be between 10 and 60 seconds.")
+    if not -140 <= fade_floor <= 50:
+        raise ValueError("Fade minimum power must be between -140 and 50 dBm.")
+    if not 0 <= fade_curve <= 5:
+        raise ValueError("Fade style must be between 0 and 5.")
+    if not 0.16 <= agc_target_value <= 0.24:
+        raise ValueError("AGC target must be between 0.16 and 0.24 RMS.")
+    if not -6 <= mic_gain_value <= 6:
+        raise ValueError("Microphone gain must be between -6 and 6 dB.")
+    if not -4 <= bass_value <= 4 or not -4 <= treble_value <= 4:
+        raise ValueError("Bass and treble must be between -4 and 4 dB.")
+    if not -1 <= presence_value <= 1:
+        raise ValueError("Presence must be between -1 and 1 dB.")
+    if not 0 <= drive_value <= 0.025:
+        raise ValueError("Compression drive must be between 0 and 0.025.")
+    if not 2_400 <= ssb_width <= 10_000:
+        raise ValueError("SSB bandwidth must be between 2400 and 10000 Hz.")
+    if not 0 <= ssb_low_cut <= 2_000:
+        raise ValueError("SSB low cut must be between 0 and 2000 Hz.")
+    if not 0 <= ssb_high_cut <= 3_000:
+        raise ValueError("SSB high cut must be between 0 and 3000 Hz.")
+    if not 3_000 <= am_width <= 12_000:
+        raise ValueError("AM bandwidth must be between 3000 and 12000 Hz.")
 
     short_description = str(description or "").strip()[:180]
     return {
@@ -204,25 +264,25 @@ def build_transmit_config(
         "mode": selected_mode,
         "sampleRate": SAMPLE_RATE_HZ,
         "stationDbm": power,
-        "fadeMs": 15_000,
-        "fadeMinDbm": 25,
-        "fadeShape": 0,
+        "fadeMs": int(round(fade_duration_seconds * 1_000)) if fade_enabled else 0,
+        "fadeMinDbm": min(fade_floor, power),
+        "fadeShape": fade_curve,
         "allowOverlapVisitors": bool(allow_overlap),
         "cwText": str(cw_text or "CQ CQ DE TXITY").strip()[:300],
         "cwWpm": words_per_minute,
         "cwLoop": bool(cw_loop),
-        "agcEnabled": True,
-        "agcTarget": 0.19,
-        "micGainDb": 0,
-        "bassDb": 0,
-        "trebleDb": 0,
-        "presenceDb": 0,
-        "drive": 0.015,
-        "ssbBandwidthHz": 10_000,
-        "ssbLowCutHz": 325,
-        "ssbHighCutHz": 0,
-        "amBandwidthHz": 12_000,
-        "amPreEmphasis": False,
+        "agcEnabled": bool(agc_enabled),
+        "agcTarget": agc_target_value,
+        "micGainDb": mic_gain_value,
+        "bassDb": bass_value,
+        "trebleDb": treble_value,
+        "presenceDb": presence_value,
+        "drive": drive_value,
+        "ssbBandwidthHz": ssb_width,
+        "ssbLowCutHz": ssb_low_cut,
+        "ssbHighCutHz": ssb_high_cut,
+        "amBandwidthHz": am_width,
+        "amPreEmphasis": bool(am_pre_emphasis),
     }
 
 
