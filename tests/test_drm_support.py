@@ -17,6 +17,7 @@ from drm_support import (
     VISUAL_STUDIO_WORKLOAD,
     _visual_studio_build_tools_command,
     _visual_studio_cmake_generator_for_version,
+    _clear_stale_opus_cmake_builds,
     LocalDRMPlaylistServer,
     _patch_decdrm_output_validation,
     _run_command,
@@ -70,6 +71,57 @@ class DRMConfigurationTests(unittest.TestCase):
         )
         self.assertIsNone(_visual_studio_cmake_generator_for_version("19.0.0.0"))
         self.assertIsNone(_visual_studio_cmake_generator_for_version("unknown"))
+
+    def test_stale_opus_cmake_cache_is_removed_when_generator_changes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            build_root = Path(folder) / "target" / "release" / "build"
+            build_directory = (
+                build_root
+                / "decdrm-opus-sys-example"
+                / "out"
+                / "build"
+            )
+            build_directory.mkdir(parents=True)
+            cache = build_directory / "CMakeCache.txt"
+            cache.write_text(
+                "CMAKE_GENERATOR:INTERNAL=Visual Studio 18 2026\\n",
+                encoding="utf-8",
+            )
+            retained_file = build_directory.parent / "important.txt"
+            retained_file.write_text("keep", encoding="utf-8")
+
+            removed = _clear_stale_opus_cmake_builds(
+                build_root,
+                "Visual Studio 17 2022",
+            )
+
+            self.assertEqual(removed, 1)
+            self.assertFalse(build_directory.exists())
+            self.assertEqual(retained_file.read_text(encoding="utf-8"), "keep")
+
+    def test_matching_opus_cmake_cache_is_preserved(self):
+        with tempfile.TemporaryDirectory() as folder:
+            build_root = Path(folder) / "target" / "release" / "build"
+            build_directory = (
+                build_root
+                / "decdrm-opus-sys-example"
+                / "out"
+                / "build"
+            )
+            build_directory.mkdir(parents=True)
+            cache = build_directory / "CMakeCache.txt"
+            cache.write_text(
+                "CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022\\n",
+                encoding="utf-8",
+            )
+
+            removed = _clear_stale_opus_cmake_builds(
+                build_root,
+                "Visual Studio 17 2022",
+            )
+
+            self.assertEqual(removed, 0)
+            self.assertTrue(cache.is_file())
 
     def test_windows_build_tools_installer_uses_cpp_desktop_workload(self):
         self.assertEqual(
