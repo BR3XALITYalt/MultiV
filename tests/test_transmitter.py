@@ -9,6 +9,8 @@ from transmitter import (
     AUDIO_FRAME_INTERVAL_SECONDS,
     PLAYLIST_AUDIO_QUEUE_FRAMES,
     PLAYLIST_PREROLL_FRAMES,
+    DRM_PREROLL_FRAMES,
+    SUPPORTED_MODES,
     LIVE_AUDIO_SILENCE_GRACE_SECONDS,
     CONTROL_RECONNECT_GRACE_SECONDS,
     begin_windows_system_awake,
@@ -274,7 +276,41 @@ class TransmitterProtocolTests(unittest.TestCase):
         resampler = StreamingLinearResampler(48_000, 48_000)
         np.testing.assert_array_equal(resampler.process(samples), samples)
 
+    def test_drm_mode_uses_one_dsb_transport_channel(self):
+        self.assertIn("DRM", SUPPORTED_MODES)
+        self.assertEqual(DRM_PREROLL_FRAMES, 94)
+        config = build_transmit_config(
+            station_name="Example DRM",
+            description="Single-service DRM test",
+            frequency="7.250 MHz",
+            mode="DRM",
+            station_dbm=40,
+            allow_overlap=False,
+            auth_token="test-token",
+            am_bandwidth_hz=9_000,
+            am_pre_emphasis=True,
+            fade_enabled=True,
+            agc_enabled=True,
+            mic_gain_db=3,
+            bass_db=2,
+            treble_db=-2,
+            presence_db=1,
+            drive=0.02,
+        )
+        self.assertEqual(config["mode"], "DSB")
+        self.assertEqual(config["_txitpyMode"], "DRM")
+        self.assertEqual(config["amBandwidthHz"], 12_000)
+        self.assertFalse(config["amPreEmphasis"])
+        self.assertEqual(config["fadeMs"], 0)
+        self.assertFalse(config["agcEnabled"])
+        self.assertEqual(config["micGainDb"], 0)
+        self.assertEqual(config["bassDb"], 0)
+        self.assertEqual(config["trebleDb"], 0)
+        self.assertEqual(config["presenceDb"], 0)
+        self.assertEqual(config["drive"], 0)
+
     def test_mode_bandwidth_defaults_match_txity_transmit_config(self):
+        self.assertEqual(mode_bandwidth_hz("DRM"), 12_000)
         self.assertEqual(mode_bandwidth_hz("AM"), 12_000)
         self.assertEqual(mode_bandwidth_hz("DSB"), 12_000)
         self.assertEqual(mode_bandwidth_hz("USB"), 10_000)
