@@ -186,6 +186,7 @@ class DRMConfigurationTests(unittest.TestCase):
 
         self.assertEqual(config["channel"]["mode"], "B")
         self.assertEqual(config["channel"]["occupancy"], 0)
+        self.assertEqual(config["channel"]["protection_b"], 1)
         self.assertEqual(config["output"]["sample_format"], "float32")
         self.assertEqual(config["output"]["format"], "real")
         self.assertEqual(config["output"]["if_hz"], 1500.0)
