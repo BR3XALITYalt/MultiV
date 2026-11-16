@@ -1,6 +1,6 @@
 import unittest
 
-from material_theme import MATERIAL_3_EXPRESSIVE
+from material_theme import MATERIAL_3_EXPRESSIVE, apply_tk_theme
 
 
 REQUIRED_ROLES = {
@@ -48,6 +48,16 @@ class MaterialThemeTests(unittest.TestCase):
         for mode in ("light", "dark"):
             with self.subTest(mode=mode):
                 self.assertTrue(REQUIRED_ROLES.issubset(MATERIAL_3_EXPRESSIVE[mode]))
+
+    def test_tk_theme_returns_selected_palette_without_a_window(self):
+        light = apply_tk_theme(None, "light")
+        dark = apply_tk_theme(None, "dark")
+        self.assertEqual(light["primary"], "#1B6EF3")
+        self.assertEqual(dark["primary"], "#B0C6FF")
+
+    def test_tk_theme_rejects_unknown_mode(self):
+        with self.assertRaises(ValueError):
+            apply_tk_theme(None, "automatic")
 
     def test_text_pairs_meet_wcag_aa_contrast(self):
         pairs = (
