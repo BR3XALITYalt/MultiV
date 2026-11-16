@@ -59,8 +59,97 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["sampleRate"], 48_000)
         self.assertEqual(config["mode"], "USB")
         self.assertTrue(config["allowOverlapVisitors"])
+        self.assertEqual(config["fadeMs"], 0)
+        self.assertTrue(config["agcEnabled"])
+        self.assertEqual(config["agcTarget"], 0.19)
+        self.assertEqual(config["micGainDb"], 0)
+        self.assertEqual(config["ssbBandwidthHz"], 10_000)
         self.assertFalse(config["cwLoop"])
         self.assertEqual(config["discordAuthToken"], "test-token")
+
+    def test_builds_config_with_fading_and_audio_processing_options(self):
+        config = build_transmit_config(
+            station_name="Example Radio",
+            description="Test stream",
+            frequency="7.250 MHz",
+            mode="USB",
+            station_dbm=40,
+            allow_overlap=False,
+            auth_token="test-token",
+            fade_enabled=True,
+            fade_seconds="17.5",
+            fade_min_dbm=25,
+            fade_shape=3,
+            agc_enabled=False,
+            agc_target="0.22",
+            mic_gain_db="-3",
+            bass_db=2,
+            treble_db=-1,
+            presence_db=1,
+            drive="0.02",
+            ssb_bandwidth_hz=8_000,
+            ssb_low_cut_hz=250,
+            ssb_high_cut_hz=500,
+            am_bandwidth_hz=9_000,
+            am_pre_emphasis=True,
+        )
+        self.assertEqual(config["fadeMs"], 17_500)
+        self.assertEqual(config["fadeMinDbm"], 25)
+        self.assertEqual(config["fadeShape"], 3)
+        self.assertFalse(config["agcEnabled"])
+        self.assertEqual(config["agcTarget"], 0.22)
+        self.assertEqual(config["micGainDb"], -3)
+        self.assertEqual(config["bassDb"], 2)
+        self.assertEqual(config["trebleDb"], -1)
+        self.assertEqual(config["presenceDb"], 1)
+        self.assertEqual(config["drive"], 0.02)
+        self.assertEqual(config["ssbBandwidthHz"], 8_000)
+        self.assertEqual(config["ssbLowCutHz"], 250)
+        self.assertEqual(config["ssbHighCutHz"], 500)
+        self.assertEqual(config["amBandwidthHz"], 9_000)
+        self.assertTrue(config["amPreEmphasis"])
+
+    def test_disabled_fading_sends_zero_fade_duration_and_clamps_floor(self):
+        config = build_transmit_config(
+            station_name="Example Radio",
+            description="",
+            frequency="7.250 MHz",
+            mode="AM",
+            station_dbm=20,
+            allow_overlap=False,
+            auth_token="test-token",
+            fade_enabled=False,
+            fade_seconds=15,
+            fade_min_dbm=45,
+        )
+        self.assertEqual(config["fadeMs"], 0)
+        self.assertEqual(config["fadeMinDbm"], 20)
+
+    def test_rejects_out_of_range_filter_values(self):
+        invalid_settings = (
+            {"agc_target": 0.3},
+            {"mic_gain_db": 7},
+            {"bass_db": -5},
+            {"presence_db": 2},
+            {"drive": 0.03},
+            {"ssb_bandwidth_hz": 2_000},
+            {"am_bandwidth_hz": 13_000},
+            {"fade_seconds": 5},
+            {"fade_shape": 6},
+        )
+        for setting in invalid_settings:
+            with self.subTest(setting=setting):
+                with self.assertRaises(ValueError):
+                    build_transmit_config(
+                        station_name="Example Radio",
+                        description="",
+                        frequency="7.250 MHz",
+                        mode="AM",
+                        station_dbm=40,
+                        allow_overlap=False,
+                        auth_token="test-token",
+                        **setting,
+                    )
 
     def test_validates_required_config_values(self):
         with self.assertRaisesRegex(ValueError, "Station name"):
