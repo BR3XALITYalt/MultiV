@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import math
 import queue
+import random
 import re
 import threading
 import time
 from typing import Any
 from urllib.parse import urlencode
+
+from audio_playlist import build_playlist_order, collect_audio_files
 
 
 BASE_URL = "https://txity.radiodiscussion.org"
@@ -28,7 +31,7 @@ DEFAULT_MODE_BANDWIDTH_HZ = {
     "LSB+C": 10_000,
     "CW": 500,
 }
-SUPPORTED_AUDIO_SOURCES = ("mic", "loopback")
+SUPPORTED_AUDIO_SOURCES = ("mic", "loopback", "playlist")
 
 
 def parse_rf_frequency(value: Any) -> int:
@@ -437,10 +440,16 @@ class TxityTransmitter:
         config: dict[str, Any],
         input_device: int | None = None,
         audio_source: str = "mic",
+        playlist_files: list[str] | None = None,
+        playlist_shuffle: bool = False,
+        playlist_loop: bool = False,
     ) -> None:
         selected_source = str(audio_source or "mic").casefold()
         if selected_source not in SUPPORTED_AUDIO_SOURCES:
-            raise ValueError("Choose microphone input or desktop audio loopback.")
+            raise ValueError("Choose microphone input, desktop audio loopback, or an audio playlist.")
+        selected_playlist = collect_audio_files(playlist_files or [])
+        if selected_source == "playlist" and not selected_playlist:
+            raise ValueError("Add at least one supported audio file to the playlist.")
 
         with self._lock:
             if self._starting or self._active or (self._thread and self._thread.is_alive()):
@@ -453,7 +462,14 @@ class TxityTransmitter:
             self._ptt_requested_at = None
             self._thread = threading.Thread(
                 target=self._run,
-                args=(dict(config), input_device, selected_source),
+                args=(
+                    dict(config),
+                    input_device,
+                    selected_source,
+                    selected_playlist,
+                    bool(playlist_shuffle),
+                    bool(playlist_loop),
+                ),
                 daemon=True,
                 name="txity-transmitter",
             )
@@ -483,6 +499,9 @@ class TxityTransmitter:
         config: dict[str, Any],
         input_device: int | None,
         audio_source: str,
+        playlist_files: list[str],
+        playlist_shuffle: bool,
+        playlist_loop: bool,
     ) -> None:
         import websocket
 
@@ -492,6 +511,8 @@ class TxityTransmitter:
         input_stream = None
         loopback_stream = None
         loopback_manager = None
+        playlist_thread: threading.Thread | None = None
+        audio_finished = threading.Event()
         ptt_sent = False
         audio_thread_error: list[str] = []
         audio_queue = self._audio_queue
@@ -501,17 +522,35 @@ class TxityTransmitter:
         carry = bytearray()
         last_callback_warning = 0.0
 
-        def enqueue_pcm_samples(samples) -> None:
+        def enqueue_pcm_samples(
+            samples,
+            *,
+            wait_for_space: bool = False,
+            flush: bool = False,
+        ) -> None:
             nonlocal drop_count
             import numpy as np
 
             pcm = np.asarray(samples, dtype="<f4").reshape(-1)
-            if pcm.size == 0:
-                return
-            carry.extend(pcm.tobytes())
+            if pcm.size:
+                carry.extend(pcm.tobytes())
+            if flush and carry and len(carry) < FRAME_BYTES:
+                carry.extend(b"\\x00" * (FRAME_BYTES - len(carry)))
+
             while len(carry) >= FRAME_BYTES:
                 frame = bytes(carry[:FRAME_BYTES])
                 del carry[:FRAME_BYTES]
+                if wait_for_space:
+                    while not self._stop_event.is_set():
+                        try:
+                            audio_queue.put(frame, timeout=0.1)
+                            break
+                        except queue.Full:
+                            continue
+                    else:
+                        return
+                    continue
+
                 try:
                     audio_queue.put_nowait(frame)
                 except queue.Full:
@@ -565,6 +604,81 @@ class TxityTransmitter:
                 return (None, pyaudio.paContinue)
 
             return callback
+
+        def start_playlist_worker() -> threading.Thread:
+            def stream_playlist() -> None:
+                import numpy as np
+                import soundfile
+
+                completed = False
+                previous_file: str | None = None
+                rng = random.Random()
+                try:
+                    while not self._stop_event.is_set():
+                        order = build_playlist_order(
+                            playlist_files,
+                            shuffle=playlist_shuffle,
+                            previous_file=previous_file,
+                            rng=rng,
+                        )
+                        for index, file_path in enumerate(order, start=1):
+                            if self._stop_event.is_set():
+                                break
+                            self.events.put({
+                                "kind": "tx_playlist_track",
+                                "path": file_path,
+                                "index": index,
+                                "count": len(order),
+                            })
+                            with soundfile.SoundFile(file_path) as source:
+                                source_rate = int(source.samplerate)
+                                if source_rate <= 0 or source.channels <= 0:
+                                    raise RuntimeError(
+                                        f"Audio file has an invalid format: {file_path}"
+                                    )
+                                resampler = StreamingLinearResampler(
+                                    source_rate,
+                                    SAMPLE_RATE_HZ,
+                                )
+                                while not self._stop_event.is_set():
+                                    block = source.read(
+                                        BATCH_SAMPLES * 4,
+                                        dtype="float32",
+                                        always_2d=True,
+                                    )
+                                    if block.size == 0:
+                                        break
+                                    mono = block.mean(axis=1, dtype=np.float32)
+                                    enqueue_pcm_samples(
+                                        resampler.process(mono),
+                                        wait_for_space=True,
+                                    )
+                            previous_file = file_path
+
+                        if self._stop_event.is_set() or not playlist_loop:
+                            break
+
+                    if not self._stop_event.is_set():
+                        enqueue_pcm_samples(
+                            [],
+                            wait_for_space=True,
+                            flush=True,
+                        )
+                        completed = True
+                except Exception as exc:
+                    audio_thread_error[:] = [_safe_error(exc)]
+                finally:
+                    audio_finished.set()
+                    if completed:
+                        self.events.put({"kind": "tx_playlist_finished"})
+
+            thread = threading.Thread(
+                target=stream_playlist,
+                daemon=True,
+                name="txitpy-playlist",
+            )
+            thread.start()
+            return thread
 
         try:
             if self._stop_event.is_set():
@@ -627,7 +741,7 @@ class TxityTransmitter:
                             "48 kHz mono Float32."
                         ),
                     })
-                else:
+                elif audio_source == "mic":
                     import sounddevice
 
                     input_stream = sounddevice.InputStream(
@@ -658,12 +772,17 @@ class TxityTransmitter:
                 self._ptt_requested_at = time.monotonic()
                 self._active = True
                 self._starting = False
-            source_name = "desktop audio" if audio_source == "loopback" else "microphone audio"
+            source_name = {
+                "loopback": "desktop audio",
+                "playlist": "playlist audio",
+            }.get(audio_source, "microphone audio")
             self.events.put({
                 "kind": "tx_state",
                 "state": "transmitting",
                 "text": "Transmitting CW control" if not needs_audio else f"Transmitting {source_name} to TXITY.",
             })
+            if needs_audio and audio_source == "playlist":
+                playlist_thread = start_playlist_worker()
 
             while not self._stop_event.is_set():
                 if not self.client.control_connected():
@@ -678,6 +797,8 @@ class TxityTransmitter:
                 try:
                     frame = audio_queue.get(timeout=0.2)
                 except queue.Empty:
+                    if audio_source == "playlist" and audio_finished.is_set():
+                        break
                     continue
 
                 audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
@@ -695,11 +816,21 @@ class TxityTransmitter:
         except Exception as exc:
             self.events.put({"kind": "tx_error", "text": _safe_error(exc)})
         finally:
+            playlist_completed = (
+                audio_source == "playlist"
+                and audio_finished.is_set()
+                and not self._stop_event.is_set()
+                and not audio_thread_error
+            )
             if ptt_sent:
                 try:
                     self.client.send_control_message({"type": "ptt", "ptt": False})
                 except Exception:
                     pass
+
+            self._stop_event.set()
+            if playlist_thread is not None and playlist_thread is not threading.current_thread():
+                playlist_thread.join(timeout=1.0)
 
             if input_stream is not None:
                 try:
@@ -744,5 +875,5 @@ class TxityTransmitter:
             self.events.put({
                 "kind": "tx_state",
                 "state": "stopped",
-                "text": "Transmission stopped.",
+                "text": "Playlist finished." if playlist_completed else "Transmission stopped.",
             })
