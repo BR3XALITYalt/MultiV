@@ -2180,7 +2180,7 @@ def build_app() -> None:
             *,
             column: int,
             row: int,
-        ) -> None:
+        ) -> tk.Entry:
             wrapper = tk.Frame(parent_frame, bg=palette["surfaceContainerLow"])
             wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
             make_label(
