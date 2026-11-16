@@ -11,6 +11,7 @@ from transmitter import (
     PLAYLIST_PREROLL_FRAMES,
     DRM_PREROLL_FRAMES,
     SUPPORTED_MODES,
+    SUPPORTED_AUDIO_SOURCES,
     LIVE_AUDIO_SILENCE_GRACE_SECONDS,
     RECONNECT_INITIAL_DELAY_SECONDS,
     RECONNECT_MAX_DELAY_SECONDS,
@@ -283,6 +284,10 @@ class TransmitterProtocolTests(unittest.TestCase):
         samples = np.linspace(-1.0, 1.0, 512, dtype=np.float32)
         resampler = StreamingLinearResampler(48_000, 48_000)
         np.testing.assert_array_equal(resampler.process(samples), samples)
+
+    def test_drm_test_tone_is_a_supported_audio_source(self):
+        self.assertIn("DRM", SUPPORTED_MODES)
+        self.assertIn("tone", SUPPORTED_AUDIO_SOURCES)
 
     def test_drm_mode_uses_one_dsb_transport_channel(self):
         self.assertIn("DRM", SUPPORTED_MODES)
