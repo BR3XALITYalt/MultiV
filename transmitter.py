@@ -18,6 +18,7 @@ BATCH_SAMPLES = 512
 FRAME_BYTES = BATCH_SAMPLES * 4
 AUDIO_QUEUE_FRAMES = 32
 SUPPORTED_MODES = ("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "CW")
+SUPPORTED_AUDIO_SOURCES = ("mic", "loopback")
 
 
 def parse_rf_frequency(value: Any) -> int:
@@ -142,7 +143,7 @@ def build_transmit_config(
 
 
 def list_audio_inputs() -> list[tuple[int, str]]:
-    """Return available PortAudio input devices."""
+    """Return available PortAudio microphone and line-input devices."""
     import sounddevice
 
     devices = sounddevice.query_devices()
@@ -153,6 +154,46 @@ def list_audio_inputs() -> list[tuple[int, str]]:
     ]
 
 
+def list_loopback_devices() -> list[tuple[int, str]]:
+    """Return Windows WASAPI loopback devices for capturing desktop playback."""
+    try:
+        import pyaudiowpatch as pyaudio
+    except ImportError as exc:
+        raise RuntimeError(
+            "Desktop audio capture requires PyAudioWPatch. Install the project requirements and reopen TXITPY."
+        ) from exc
+
+    manager = pyaudio.PyAudio()
+    try:
+        try:
+            default_info = manager.get_default_wasapi_loopback()
+            default_index = int(default_info["index"])
+        except (OSError, KeyError, TypeError, ValueError):
+            default_index = None
+
+        devices: list[tuple[int, str]] = []
+        for info in manager.get_loopback_device_info_generator():
+            try:
+                index = int(info["index"])
+                name = str(info.get("name") or f"Desktop output {index}")
+            except (KeyError, TypeError, ValueError):
+                continue
+            label = f"{index}: {name}"
+            if index == default_index:
+                label += " (Default output)"
+            devices.append((index, label))
+
+        if default_index is not None:
+            devices.sort(key=lambda item: (item[0] != default_index, item[0]))
+        if not devices:
+            raise RuntimeError(
+                "No Windows WASAPI loopback devices were found. Check that a playback device is enabled."
+            )
+        return devices
+    finally:
+        manager.terminate()
+
+
 def _safe_error(error: BaseException) -> str:
     """Avoid including authenticated WebSocket query strings in error text."""
     text = str(error)
@@ -161,8 +202,61 @@ def _safe_error(error: BaseException) -> str:
     return f"{type(error).__name__}: {text[:700]}"
 
 
+class StreamingLinearResampler:
+    """Resample mono float audio while retaining phase between callback blocks."""
+
+    def __init__(self, source_rate: int, target_rate: int = SAMPLE_RATE_HZ) -> None:
+        if source_rate <= 0 or target_rate <= 0:
+            raise ValueError("Audio sample rates must be positive.")
+        self.source_rate = int(source_rate)
+        self.target_rate = int(target_rate)
+        self.step = self.source_rate / self.target_rate
+        self._buffer = None
+        self._position = 0.0
+
+    def process(self, samples):
+        import numpy as np
+
+        chunk = np.asarray(samples, dtype=np.float32).reshape(-1)
+        if chunk.size == 0:
+            return np.empty(0, dtype=np.float32)
+        if self.source_rate == self.target_rate:
+            return chunk.copy()
+
+        combined = (
+            chunk
+            if self._buffer is None
+            else np.concatenate((self._buffer, chunk))
+        )
+        if combined.size < 2:
+            self._buffer = combined.copy()
+            return np.empty(0, dtype=np.float32)
+
+        positions = np.arange(
+            self._position,
+            combined.size - 1,
+            self.step,
+            dtype=np.float64,
+        )
+        if positions.size == 0:
+            self._buffer = combined.copy()
+            return np.empty(0, dtype=np.float32)
+
+        left = positions.astype(np.int64)
+        fraction = (positions - left).astype(np.float32)
+        output = combined[left] + (
+            combined[left + 1] - combined[left]
+        ) * fraction
+
+        next_position = self._position + positions.size * self.step
+        discard = max(0, min(int(next_position) - 1, combined.size - 1))
+        self._buffer = combined[discard:].copy()
+        self._position = next_position - discard
+        return np.asarray(output, dtype=np.float32)
+
+
 class TxityTransmitter:
-    """Stream microphone PCM to TXITY and send PTT/config over its control socket."""
+    """Stream microphone or desktop-loopback PCM to TXITY."""
 
     def __init__(self, client: Any, events: queue.Queue[dict[str, Any]]) -> None:
         self.client = client
@@ -180,7 +274,16 @@ class TxityTransmitter:
         with self._lock:
             return self._starting or self._active
 
-    def start(self, config: dict[str, Any], input_device: int | None = None) -> None:
+    def start(
+        self,
+        config: dict[str, Any],
+        input_device: int | None = None,
+        audio_source: str = "mic",
+    ) -> None:
+        selected_source = str(audio_source or "mic").casefold()
+        if selected_source not in SUPPORTED_AUDIO_SOURCES:
+            raise ValueError("Choose microphone input or desktop audio loopback.")
+
         with self._lock:
             if self._starting or self._active or (self._thread and self._thread.is_alive()):
                 raise RuntimeError("A transmission is already starting or active.")
@@ -191,7 +294,7 @@ class TxityTransmitter:
             self._ptt_sent = False
             self._thread = threading.Thread(
                 target=self._run,
-                args=(dict(config), input_device),
+                args=(dict(config), input_device, selected_source),
                 daemon=True,
                 name="txity-transmitter",
             )
@@ -216,13 +319,20 @@ class TxityTransmitter:
         if wait > 0 and thread and thread is not threading.current_thread():
             thread.join(timeout=wait)
 
-    def _run(self, config: dict[str, Any], input_device: int | None) -> None:
+    def _run(
+        self,
+        config: dict[str, Any],
+        input_device: int | None,
+        audio_source: str,
+    ) -> None:
         import websocket
 
         mode = str(config.get("mode", "AM")).upper()
         needs_audio = mode != "CW"
         audio_socket = None
         input_stream = None
+        loopback_stream = None
+        loopback_manager = None
         ptt_sent = False
         audio_thread_error: list[str] = []
         audio_queue = self._audio_queue
@@ -232,35 +342,70 @@ class TxityTransmitter:
         carry = bytearray()
         last_callback_warning = 0.0
 
-        def audio_callback(indata, _frames, _time_info, status) -> None:
-            nonlocal drop_count, last_callback_warning
-            if status:
-                now = time.monotonic()
-                if now - last_callback_warning >= 5.0:
-                    last_callback_warning = now
-                    self.events.put({
-                        "kind": "tx_audio_warning",
-                        "text": str(status)[:300],
-                    })
-            try:
-                carry.extend(indata.tobytes())
-                while len(carry) >= FRAME_BYTES:
-                    frame = bytes(carry[:FRAME_BYTES])
-                    del carry[:FRAME_BYTES]
+        def enqueue_pcm_samples(samples) -> None:
+            nonlocal drop_count
+            import numpy as np
+
+            pcm = np.asarray(samples, dtype="<f4").reshape(-1)
+            if pcm.size == 0:
+                return
+            carry.extend(pcm.tobytes())
+            while len(carry) >= FRAME_BYTES:
+                frame = bytes(carry[:FRAME_BYTES])
+                del carry[:FRAME_BYTES]
+                try:
+                    audio_queue.put_nowait(frame)
+                except queue.Full:
+                    try:
+                        audio_queue.get_nowait()
+                    except queue.Empty:
+                        pass
                     try:
                         audio_queue.put_nowait(frame)
+                        drop_count += 1
                     except queue.Full:
-                        try:
-                            audio_queue.get_nowait()
-                        except queue.Empty:
-                            pass
-                        try:
-                            audio_queue.put_nowait(frame)
-                            drop_count += 1
-                        except queue.Full:
-                            drop_count += 1
+                        drop_count += 1
+
+        def report_audio_warning(status: Any) -> None:
+            nonlocal last_callback_warning
+            if not status:
+                return
+            now = time.monotonic()
+            if now - last_callback_warning >= 5.0:
+                last_callback_warning = now
+                self.events.put({
+                    "kind": "tx_audio_warning",
+                    "text": str(status)[:300],
+                })
+
+        def microphone_callback(indata, _frames, _time_info, status) -> None:
+            report_audio_warning(status)
+            try:
+                enqueue_pcm_samples(indata[:, 0])
             except Exception as exc:
                 audio_thread_error[:] = [_safe_error(exc)]
+
+        def loopback_callback_factory(channels: int, source_rate: int, pyaudio):
+            import numpy as np
+
+            resampler = StreamingLinearResampler(source_rate, SAMPLE_RATE_HZ)
+
+            def callback(in_data, _frame_count, _time_info, status):
+                report_audio_warning(status)
+                try:
+                    raw = np.frombuffer(in_data or b"", dtype=np.float32)
+                    if raw.size:
+                        usable = raw.size - (raw.size % channels)
+                        if usable <= 0:
+                            return (None, pyaudio.paContinue)
+                        audio = raw[:usable].reshape(-1, channels)
+                        mono = audio.mean(axis=1, dtype=np.float32) if channels > 1 else audio[:, 0]
+                        enqueue_pcm_samples(resampler.process(mono))
+                except Exception as exc:
+                    audio_thread_error[:] = [_safe_error(exc)]
+                return (None, pyaudio.paContinue)
+
+            return callback
 
         try:
             if self._stop_event.is_set():
@@ -270,8 +415,6 @@ class TxityTransmitter:
                 raise ConnectionError("TXITY control connection is not ready. Reconnect and try again.")
 
             if needs_audio:
-                import sounddevice
-
                 audio_url = build_audio_socket_url(session_id, session_secret, auth_token)
                 audio_socket = websocket.create_connection(
                     audio_url,
@@ -285,26 +428,67 @@ class TxityTransmitter:
                     "text": "Authenticated TX audio WebSocket connected.",
                 })
 
-                input_stream = sounddevice.InputStream(
-                    device=input_device,
-                    samplerate=SAMPLE_RATE_HZ,
-                    channels=1,
-                    dtype="float32",
-                    blocksize=BATCH_SAMPLES,
-                    latency="low",
-                    callback=audio_callback,
-                )
-                input_stream.start()
-                self.events.put({
-                    "kind": "tx_log",
-                    "text": "Microphone opened at 48 kHz, mono Float32; sending 512-sample batches.",
-                })
+                if audio_source == "loopback":
+                    try:
+                        import pyaudiowpatch as pyaudio
+                    except ImportError as exc:
+                        raise RuntimeError(
+                            "Desktop audio capture requires PyAudioWPatch. Install the project requirements and reopen TXITPY."
+                        ) from exc
+
+                    if input_device is None:
+                        raise RuntimeError("Select a desktop output device for loopback capture.")
+
+                    loopback_manager = pyaudio.PyAudio()
+                    info = loopback_manager.get_device_info_by_index(input_device)
+                    if not bool(info.get("isLoopbackDevice")):
+                        raise RuntimeError("The selected device is not a Windows WASAPI loopback input.")
+
+                    channels = min(2, int(info.get("maxInputChannels", 0)))
+                    source_rate = int(round(float(info.get("defaultSampleRate", SAMPLE_RATE_HZ))))
+                    if channels < 1 or source_rate < 1:
+                        raise RuntimeError("The selected desktop output does not expose a usable audio format.")
+
+                    loopback_stream = loopback_manager.open(
+                        format=pyaudio.paFloat32,
+                        channels=channels,
+                        rate=source_rate,
+                        input=True,
+                        input_device_index=input_device,
+                        frames_per_buffer=BATCH_SAMPLES,
+                        stream_callback=loopback_callback_factory(channels, source_rate, pyaudio),
+                        start=False,
+                    )
+                    loopback_stream.start_stream()
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": (
+                            f"Desktop output loopback opened: {info.get('name', 'selected output')} "
+                            f"({source_rate} Hz, {channels} channels); downmixing and converting to "
+                            "48 kHz mono Float32."
+                        ),
+                    })
+                else:
+                    import sounddevice
+
+                    input_stream = sounddevice.InputStream(
+                        device=input_device,
+                        samplerate=SAMPLE_RATE_HZ,
+                        channels=1,
+                        dtype="float32",
+                        blocksize=BATCH_SAMPLES,
+                        latency="low",
+                        callback=microphone_callback,
+                    )
+                    input_stream.start()
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": "Microphone opened at 48 kHz, mono Float32; sending 512-sample batches.",
+                    })
 
             if self._stop_event.is_set():
                 return
 
-            if self._stop_event.is_set():
-                return
             self.client.send_control_message(config)
             if self._stop_event.is_set():
                 return
@@ -314,10 +498,11 @@ class TxityTransmitter:
                 self._ptt_sent = True
                 self._active = True
                 self._starting = False
+            source_name = "desktop audio" if audio_source == "loopback" else "microphone audio"
             self.events.put({
                 "kind": "tx_state",
                 "state": "transmitting",
-                "text": "Transmitting CW control" if not needs_audio else "Transmitting microphone audio to TXITY.",
+                "text": "Transmitting CW control" if not needs_audio else f"Transmitting {source_name} to TXITY.",
             })
 
             while not self._stop_event.is_set():
@@ -363,6 +548,23 @@ class TxityTransmitter:
                     pass
                 try:
                     input_stream.close()
+                except Exception:
+                    pass
+
+            if loopback_stream is not None:
+                try:
+                    if loopback_stream.is_active():
+                        loopback_stream.stop_stream()
+                except Exception:
+                    pass
+                try:
+                    loopback_stream.close()
+                except Exception:
+                    pass
+
+            if loopback_manager is not None:
+                try:
+                    loopback_manager.terminate()
                 except Exception:
                     pass
 
