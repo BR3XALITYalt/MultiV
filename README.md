@@ -15,6 +15,7 @@ TXITPY is the desktop app. TXITY refers to the website and simulated service tha
 - CW control mode without an audio stream.
 - Signal fading, AGC, microphone gain, tone controls, SSB bandwidth and cuts, and AM bandwidth and pre-emphasis.
 - Local autosave for station identity and transmit preferences.
+- On Windows, minimizing the window hides TXITPY in the system tray. Left-click the tray icon to restore it, or right-click for Open and Quit actions.
 
 TXITPY sends microphone and desktop-loopback audio to TXITY's virtual service. It does not control physical radio hardware.
 
@@ -32,6 +33,7 @@ The app uses native Tkinter and ttk widgets, a horizontal navigation bar, rectan
 
 - Python 3.12 or newer
 - Microsoft Edge WebView2 Runtime on Windows
+- pystray for the Windows system tray integration (installed by the Windows requirements)
 - PyAudioWPatch and a Windows WASAPI playback device for desktop-audio loopback
 
 Install the dependencies:
