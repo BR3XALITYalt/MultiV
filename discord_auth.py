@@ -17,7 +17,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from queue import Queue
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 
 BASE_URL = "https://txity.radiodiscussion.org"
 AUTH_START_URL = f"{BASE_URL}/auth/discord/start"
@@ -137,9 +137,33 @@ class DiscordAuthManager:
         self._lock = threading.RLock()
         self._server: ThreadingHTTPServer | None = None
         self._state = ""
+        self._completed = False
         self._timeout: threading.Timer | None = None
+        self.auth_start_url = AUTH_START_URL
+        self.secure_auth_enabled = False
+
+    def configure(self, auth_url: Any, secure_enabled: Any) -> None:
+        """Accept only TXITY's configured HTTPS auth route."""
+        candidate = urljoin(BASE_URL + "/", auth_url) if isinstance(auth_url, str) else AUTH_START_URL
+        parsed = urlsplit(candidate)
+        allowed = (
+            parsed.scheme == "https"
+            and parsed.hostname == "txity.radiodiscussion.org"
+            and parsed.port in (None, 443)
+        )
+        with self._lock:
+            self.auth_start_url = candidate if allowed else AUTH_START_URL
+            self.secure_auth_enabled = secure_enabled is True and allowed
 
     def start_login(self) -> None:
+        with self._lock:
+            enabled = self.secure_auth_enabled
+        if not enabled:
+            self.events.put({
+                "kind": "auth_error",
+                "text": "TXITY has not enabled secure Discord sign-in in its server configuration.",
+            })
+            return
         self.close()
 
         manager = self
@@ -235,6 +259,7 @@ class DiscordAuthManager:
         with self._lock:
             self._server = server
             self._state = state
+            self._completed = False
             self._timeout = threading.Timer(
                 CALLBACK_TIMEOUT_SECONDS,
                 self._expire,
@@ -253,7 +278,7 @@ class DiscordAuthManager:
             f"http://127.0.0.1:{server.server_port}/callback?"
             + urlencode({"state": state})
         )
-        login_url = AUTH_START_URL + "?" + urlencode({"return": callback_url})
+        login_url = self.auth_start_url + "?" + urlencode({"return": callback_url})
 
         self.events.put({
             "kind": "auth_browser",
@@ -275,6 +300,7 @@ class DiscordAuthManager:
             return (
                 isinstance(value, str)
                 and bool(self._state)
+                and not self._completed
                 and hmac.compare_digest(value, self._state)
             )
 
@@ -285,9 +311,10 @@ class DiscordAuthManager:
         user: dict[str, str],
         joined: bool,
     ) -> bool:
-        if not self._state_matches(state):
-            return False
         with self._lock:
+            if not self._state or self._completed or not hmac.compare_digest(state, self._state):
+                return False
+            self._completed = True
             timeout = self._timeout
             self._timeout = None
         if timeout is not None:
