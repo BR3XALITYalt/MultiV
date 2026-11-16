@@ -36,7 +36,7 @@ class DRMConfigurationTests(unittest.TestCase):
         self.assertEqual(config["channel"]["occupancy"], 0)
         self.assertEqual(config["output"]["sample_format"], "float32")
         self.assertEqual(config["output"]["format"], "real")
-        self.assertEqual(config["output"]["if_hz"], 3000.0)
+        self.assertEqual(config["output"]["if_hz"], 1500.0)
         self.assertEqual(len(config["service"]), 1)
         service = config["service"][0]
         self.assertEqual(service["audio"]["codec"], "he-aac")
