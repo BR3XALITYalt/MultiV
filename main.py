@@ -604,13 +604,30 @@ def build_app() -> None:
                     station_table.set_rows(rows)
                     updated.set(f"Station list refreshed: {len(rows)} entries")
                 elif kind == "auth_token":
+                    print(
+                        "[TXITPY] Desktop app received the Discord session event.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                     token = event.get("token")
                     user = clean_discord_user(event.get("user"))
                     if is_auth_token(token):
                         client.set_discord_auth(token, user)
                         display_name = (user or {}).get("globalName") or (user or {}).get("username") or "Discord account"
                         auth_account.set(f"Signed in as {display_name}")
-                        auth_browser_status.set("TXITY returned a signed session through the local callback.")
+                        auth_browser_status.set("Discord sign-in completed. Connecting to TXITY...")
+                        print(
+                            "[TXITPY] Discord session attached; reconnecting the status connection.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                    else:
+                        auth_browser_status.set("TXITY returned an invalid Discord session.")
+                        print(
+                            "[TXITPY] The desktop app rejected the returned Discord session.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
                 elif kind == "auth_signed_out":
                     client.set_discord_auth(None, None)
                     auth_account.set("Not signed in to Discord")
