@@ -247,28 +247,39 @@ def _run_command(
     on_log: Callable[[str], None] | None = None,
 ) -> str:
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             command,
             cwd=str(cwd) if cwd else None,
-            check=False,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
             errors="replace",
+            bufsize=1,
         )
     except FileNotFoundError as exc:
         raise RuntimeError(f"Required build tool was not found: {command[0]}") from exc
-    output = "\n".join(part for part in (result.stdout, result.stderr) if part).strip()
-    if result.returncode != 0:
+
+    output_lines: list[str] = []
+    assert process.stdout is not None
+    for raw_line in process.stdout:
+        line = raw_line.rstrip()
+        if not line:
+            continue
+        output_lines.append(line)
+        if len(output_lines) > 80:
+            del output_lines[:-80]
+        if on_log:
+            on_log(line[:500])
+
+    return_code = process.wait()
+    output = "\n".join(output_lines).strip()
+    if return_code != 0:
         tail = "\n".join(output.splitlines()[-50:])
         raise RuntimeError(
-            f"Command failed ({result.returncode}): {' '.join(command)}"
+            f"Command failed ({return_code}): {' '.join(command)}"
             + (f"\n{tail}" if tail else "")
         )
-    if on_log and output:
-        for line in output.splitlines()[-12:]:
-            if line.strip():
-                on_log(line.strip()[:500])
     return output
 
 
