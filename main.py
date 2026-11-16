@@ -1565,10 +1565,6 @@ def build_app() -> None:
         auth_manager.close()
         root.destroy()
 
-    def disconnect_status_connection() -> None:
-        transmitter.stop(wait=0.5)
-        client.disconnect()
-
     def toggle_theme() -> None:
         nonlocal theme_mode
         theme_mode = "dark" if theme_mode == "light" else "light"
