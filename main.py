@@ -2369,6 +2369,103 @@ def build_app() -> None:
 
         signal_card = make_card(page, padding=16)
         signal_card.pack(fill="x", pady=(0, 12))
+
+        drm_metadata_slot = tk.Frame(page, bg=palette["background"])
+        drm_metadata_slot.pack(fill="x")
+        drm_metadata_card = make_card(drm_metadata_slot, padding=16)
+        make_label(
+            drm_metadata_card,
+            "DRM service metadata",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        make_label(
+            drm_metadata_card,
+            "These values are broadcast in the DRM service information. A blank service label uses the station name.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=860,
+        ).pack(anchor="w", pady=(0, 10))
+
+        drm_metadata_fields = tk.Frame(drm_metadata_card, bg=palette["surfaceContainerLow"])
+        drm_metadata_fields.pack(fill="x")
+        drm_metadata_fields.grid_columnconfigure(0, weight=1, uniform="drm-metadata")
+        drm_metadata_fields.grid_columnconfigure(1, weight=1, uniform="drm-metadata")
+        add_tx_entry(
+            drm_metadata_fields,
+            "Service label (optional, max 16 characters)",
+            tx_drm_service_label_var,
+            column=0,
+            row=0,
+        )
+        add_tx_entry(
+            drm_metadata_fields,
+            "Service ID (hexadecimal, 24-bit)",
+            tx_drm_service_id_var,
+            column=1,
+            row=0,
+        )
+
+        language_frame = tk.Frame(drm_metadata_fields, bg=palette["surfaceContainerLow"])
+        language_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            language_frame,
+            "Language",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        drm_language_picker = ttk.Combobox(
+            language_frame,
+            textvariable=tx_drm_language_var,
+            values=DRM_LANGUAGES,
+            state="readonly",
+            height=10,
+        )
+        drm_language_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_language_picker)
+
+        programme_type_frame = tk.Frame(drm_metadata_fields, bg=palette["surfaceContainerLow"])
+        programme_type_frame.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
+        make_label(
+            programme_type_frame,
+            "Programme type",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        drm_programme_type_picker = ttk.Combobox(
+            programme_type_frame,
+            textvariable=tx_drm_programme_type_var,
+            values=DRM_PROGRAMME_TYPES,
+            state="readonly",
+            height=12,
+        )
+        drm_programme_type_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_programme_type_picker)
+
+        add_tx_entry(
+            drm_metadata_fields,
+            "ISO language code (optional, e.g. eng)",
+            tx_drm_iso_language_var,
+            column=0,
+            row=2,
+        )
+        add_tx_entry(
+            drm_metadata_fields,
+            "Country code (optional, e.g. US)",
+            tx_drm_iso_country_var,
+            column=1,
+            row=2,
+        )
+
+        def update_drm_metadata_visibility() -> None:
+            if tx_mode_var.get().strip().upper() == "DRM":
+                if not drm_metadata_card.winfo_manager():
+                    drm_metadata_card.pack(fill="x", pady=(0, 12))
+            else:
+                drm_metadata_card.pack_forget()
         make_label(
             signal_card,
             "Signal settings",
@@ -2422,6 +2519,7 @@ def build_app() -> None:
                 "CW": "CW - carrier only. The microphone and desktop audio sources are not used.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
+            update_drm_metadata_visibility()
             update_frequency_check()
 
         def restore_previous_mode() -> None:
