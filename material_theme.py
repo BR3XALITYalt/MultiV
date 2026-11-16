@@ -266,8 +266,14 @@ def rounded_widget_classes(tk):
             self.bind("<Configure>", self._redraw_surface, add="+")
 
         def _redraw_surface(self, event=None) -> None:
-            width = max(2, self.winfo_width())
-            height = max(2, self.winfo_height())
+            width = self.winfo_width()
+            height = self.winfo_height()
+
+            # Tk sends an initial configure event before geometry is assigned.
+            # Wait until the surface has room for its 1-pixel outline.
+            if width <= 2 or height <= 2:
+                return
+
             self._surface_canvas.delete("surface")
             coordinates = rounded_rectangle_points(
                 width - 2,
