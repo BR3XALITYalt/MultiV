@@ -1,71 +1,68 @@
 # TXITPY
 
-TXITPY is a Python desktop client for TXITY's simulated radio-broadcast service. It uses Tkinter and ttk for the interface and TXITY's existing Discord sign-in, control WebSocket, and audio WebSocket.
+TXITPY connects to TXITY, a simulated radio service. Sign in with Discord to browse virtual stations, configure your station, and send audio to TXITY.
 
 ## Features
 
-TXITPY is the desktop app. TXITY refers to the website and simulated service that TXITPY connects to.
+- Browse stations, profiles, images, and comments.
+- Send microphone audio, Windows desktop audio, or a playlist.
+- Play MP3, WAV, FLAC, OGG, and AIFF files with shuffle and loop options.
+- Use CW mode to send a configured Morse-code message.
+- Adjust audio processing, including AGC, gain, tone controls, and mode-specific bandwidth settings.
+- Save station details and transmission preferences between launches.
+- Minimize TXITPY to the Windows system tray and restore it from the tray icon.
 
-- Live server status and a searchable station directory with station profiles, supplied images, custom page blocks, and comments.
-- Discord sign-in through TXITY's sign-in page in an embedded WebView2 window.
-- Live configuration and push-to-talk control through TXITY's authenticated control WebSocket.
-- Microphone or Windows desktop-audio input sent as mono Float32 PCM at 48 kHz in 512-sample frames.
-- Windows WASAPI loopback capture. Stereo playback is downmixed to mono and resampled to 48 kHz.
-- Audio playlists with multi-file and recursive folder import, MP3/WAV/FLAC/OGG/AIFF playback, shuffle, and loop controls. A background decoder keeps a bounded queue of several seconds of audio ahead of playback, with a short prefill before transmission starts. It decodes tracks as needed rather than loading the entire playlist. Imported folders refresh automatically when tracks are added, removed, renamed, or edited; changes during playback apply to the next start.
-- CW control mode without an audio stream.
-- Signal fading, AGC, microphone gain, tone controls, SSB bandwidth and cuts, and AM bandwidth and pre-emphasis.
-- Local autosave for station identity and transmit preferences.
-- On Windows, minimizing the window hides TXITPY in the system tray. Left-click the tray icon to restore it, or right-click for Open and Quit actions.
-
-TXITPY sends microphone and desktop-loopback audio to TXITY's virtual service. It does not control physical radio hardware.
-
-## Sign-in and session handling
-
-Discord sign-in is required before the dashboard opens. At startup, TXITPY checks its app-specific WebView2 profile in a hidden browser window. A valid TXITY session opens the dashboard; otherwise, TXITPY shows the sign-in page.
-
-The browser profile keeps TXITY's website session between launches. TXITPY reads the session token from TXITY's own origin and keeps it in memory. It does not write the token to the settings file or application logs. Disconnecting Discord clears the saved browser profile.
-
-## Interface
-
-The app uses native Tkinter and ttk widgets, a horizontal navigation bar, rectangular panels, and Segoe UI. Its light and dark themes use Material 3 surface roles and blue and cyan accents adapted from [TeleDrive](https://github.com/Mahmud0808/TeleDrive). The light primary blue is darkened to meet WCAG AA contrast for text. The toolbar switches between themes.
+TXITPY sends audio to TXITY's virtual service. It does not control physical radio equipment.
 
 ## Requirements
 
-- Python 3.12 or newer
-- Microsoft Edge WebView2 Runtime on Windows
-- pystray for the Windows system tray integration (installed by the Windows requirements)
-- PyAudioWPatch and a Windows WASAPI playback device for desktop-audio loopback
+- Python 3.12 or newer.
+- Microsoft Edge WebView2 Runtime on Windows.
+- A microphone for microphone input.
+- A Windows playback device for desktop-audio capture.
 
-Install the dependencies:
+TXITPY installs the Python packages it needs with the commands below. Windows desktop-audio capture uses WASAPI loopback support from PyAudioWPatch.
+
+## Install and run
+
+Open a terminal in the TXITPY folder and run:
 
 ```bash
 python -m pip install -r requirements.txt
-```
-
-Run the app:
-
-```bash
 python main.py
 ```
 
-## Local settings
+On first launch, sign in with Discord through TXITY. TXITY must have secure Discord sign-in enabled.
 
-On Windows, TXITPY stores station and transmit preferences in `%APPDATA%\TXITPY\transmit-settings.json`. On Linux and macOS, it uses `$XDG_CONFIG_HOME/TXITPY/transmit-settings.json` or `~/.config/TXITPY/transmit-settings.json`.
+## Send audio
 
-The settings file does not contain Discord session tokens.
+Open the **Transmit** page and enter your station details, frequency, and mode. Choose an audio source:
 
-## Tests
+- **Microphone:** Select an available microphone or input device.
+- **Desktop audio:** On Windows, select the playback device whose sound TXITPY should capture.
+- **Audio playlist:** Add audio files or folders. Use **Shuffle playlist** and **Loop playlist** to change playback.
 
-```bash
-python -m unittest discover -s tests -v
-```
+Select **Start Transmission** to connect to TXITY. Select **Stop Transmission** to end it.
 
-## TXITY data
+### Playlist playback
 
-TXITPY reads public server configuration from `/api/config` and the station directory from `/users.json` on `https://txity.radiodiscussion.org`. The listing supplies client counts, station metadata, profile fields, gallery images, custom page blocks, and recent comments. TXITPY loads station images from TXITY's media host and Discord's image CDN.
+TXITPY supports MP3, WAV, FLAC, OGG, and AIFF files. Add a folder to keep its file list in sync with changes on disk. New, removed, renamed, or edited files appear in the playlist; changes take effect the next time you start playback.
 
-The Stations page shows refresh results and fetch errors. If TXITY changes its JSON schema or status protocol, the client may need an update. Discord sign-in is available only when TXITY reports `secureDiscordAuth: true`.
+TXITPY decodes playlist audio in the background while playback runs. It keeps up to about 5.5 seconds of audio queued and fills about 2.7 seconds before transmission starts. The queue pauses when full, so TXITPY does not load the whole playlist into memory.
 
-TXITY returns the signed Discord session to its homepage. The embedded browser waits for TXITY's frontend to store the session in same-origin browser storage. TXITPY reads the token only on `https://txity.radiodiscussion.org` and sends it through a temporary loopback callback. The callback listens on loopback, uses a single-use random state value, expires after five minutes, and closes after use.
+### CW mode
 
-Playlist audio is decoded in a background worker while the stream is running. The queue holds up to about 5.5 seconds of 48 kHz mono Float32 audio, and TXITPY fills about 2.7 seconds before PTT begins. The worker continues decoding ahead during playback and pauses automatically when the bounded queue is full, keeping memory use predictable without preloading the entire playlist. TXITPY watches imported folders in the background and refreshes the saved track list when file paths or file metadata change. Track progress follows audio sent to the service, not the decoder's read-ahead position.
+Choose **CW** as the transmission mode and enter the message and speed in the CW message section. Use **Repeat CW message** to keep the message running.
+
+## Browse stations
+
+Open **Stations** to view the station directory. Select a station card to see its profile, station details, and comments.
+
+## Sign-in and saved settings
+
+TXITPY keeps your TXITY sign-in session in its app-specific browser profile. Disconnect Discord in TXITPY to end the saved session. The preferences file does not contain Discord session tokens.
+
+TXITPY stores station and transmission preferences at:
+
+- **Windows:** `%APPDATA%\TXITPY\transmit-settings.json`
+- **Linux and macOS:** `$XDG_CONFIG_HOME/TXITPY/transmit-settings.json`, or `~/.config/TXITPY/transmit-settings.json` when `XDG_CONFIG_HOME` is not set.
