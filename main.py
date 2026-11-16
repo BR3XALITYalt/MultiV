@@ -411,10 +411,9 @@ def build_app() -> None:
         )
         toolbar.add_spacer()
         toolbar.add_widget(
-            bs.Badge,
+            bs.Label,
             textsignal=connection,
             accent="primary",
-            variant="pill",
             font="caption",
         )
 
