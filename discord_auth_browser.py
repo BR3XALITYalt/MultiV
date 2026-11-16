@@ -21,6 +21,7 @@ from discord_auth import (
     safe_error_text,
     user_from_txity_token,
     write_diagnostic,
+    write_diagnostic_text,
 )
 
 TXITY_ORIGIN = "https://txity.radiodiscussion.org"
