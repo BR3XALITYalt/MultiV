@@ -729,6 +729,7 @@ class TxityClient:
         self.ws: Any = None
         self.ws_thread: threading.Thread | None = None
         self.control_send_lock = threading.Lock()
+        self.control_generation = 0
 
     def set_discord_auth(self, token: Any, user: Any = None) -> None:
         """Attach or disconnect a token received through TXITY's OAuth callback."""
@@ -866,6 +867,8 @@ class TxityClient:
         status_received = threading.Event()
 
         def on_open(ws: websocket.WebSocketApp) -> None:
+            with self.auth_lock:
+                self.control_generation += 1
             self.events.put({
                 "kind": "connection",
                 "text": "Connected (Discord session supplied)" if auth_token else "Connected (public status only)",
