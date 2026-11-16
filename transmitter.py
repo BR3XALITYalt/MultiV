@@ -8,7 +8,6 @@ import queue
 import random
 import re
 import threading
-import tempfile
 import time
 from typing import Any
 from urllib.parse import urlencode
@@ -22,8 +21,8 @@ SAMPLE_RATE_HZ = 48_000
 BATCH_SAMPLES = 512
 FRAME_BYTES = BATCH_SAMPLES * 4
 AUDIO_QUEUE_FRAMES = 32
-PLAYLIST_AUDIO_QUEUE_FRAMES = 2_048
-PLAYLIST_PREROLL_FRAMES = 512
+PLAYLIST_AUDIO_QUEUE_FRAMES = 512
+PLAYLIST_PREROLL_FRAMES = 256
 PLAYLIST_READ_FRAMES = 8_192
 AUDIO_FRAME_INTERVAL_SECONDS = BATCH_SAMPLES / SAMPLE_RATE_HZ
 
@@ -447,80 +446,6 @@ class StreamingLinearResampler:
         return np.asarray(output, dtype=np.float32)
 
 
-def prepare_playlist_audio_cache(
-    playlist_files: list[str],
-    stop_event: threading.Event,
-    on_progress=None,
-):
-    """Decode the full playlist to frame-aligned 48 kHz mono PCM in a temporary file."""
-    import numpy as np
-    import soundfile
-
-    cache = tempfile.TemporaryFile(mode="w+b")
-    track_segments: dict[str, tuple[int, int]] = {}
-
-    try:
-        total_tracks = len(playlist_files)
-        for index, file_path in enumerate(playlist_files, start=1):
-            if stop_event.is_set():
-                raise InterruptedError("Playlist preparation was cancelled.")
-            if on_progress is not None:
-                on_progress(file_path, index, total_tracks)
-
-            start_offset = cache.tell()
-            carry = bytearray()
-
-            with soundfile.SoundFile(file_path) as source:
-                source_rate = int(source.samplerate)
-                if source_rate <= 0 or source.channels <= 0:
-                    raise RuntimeError(f"Audio file has an invalid format: {file_path}")
-
-                resampler = StreamingLinearResampler(source_rate, SAMPLE_RATE_HZ)
-                while not stop_event.is_set():
-                    block = source.read(
-                        PLAYLIST_READ_FRAMES,
-                        dtype="float32",
-                        always_2d=True,
-                    )
-                    if block.size == 0:
-                        break
-
-                    mono = block.mean(axis=1, dtype=np.float32)
-                    converted = resampler.process(mono)
-                    if converted.size:
-                        carry.extend(
-                            converted.astype("<f4", copy=False).tobytes()
-                        )
-
-                    complete_bytes = (len(carry) // FRAME_BYTES) * FRAME_BYTES
-                    if complete_bytes:
-                        cache.write(carry[:complete_bytes])
-                        del carry[:complete_bytes]
-
-            if stop_event.is_set():
-                raise InterruptedError("Playlist preparation was cancelled.")
-
-            if carry:
-                carry.extend(bytes(FRAME_BYTES - len(carry)))
-                cache.write(carry)
-
-            end_offset = cache.tell()
-            if end_offset > start_offset:
-                track_segments[file_path] = (
-                    start_offset,
-                    end_offset - start_offset,
-                )
-
-        if not track_segments:
-            raise RuntimeError("The playlist did not contain any playable audio samples.")
-
-        cache.flush()
-        cache.seek(0)
-        return cache, track_segments
-    except BaseException:
-        cache.close()
-        raise
-
 
 class TxityTransmitter:
     """Stream microphone or desktop-loopback PCM to TXITY."""
@@ -637,8 +562,6 @@ class TxityTransmitter:
         loopback_stream = None
         loopback_manager = None
         playlist_thread: threading.Thread | None = None
-        playlist_cache = None
-        playlist_segments: dict[str, tuple[int, int]] = {}
         audio_finished = threading.Event()
         playlist_reached_end = False
         playlist_underruns = 0
@@ -740,22 +663,17 @@ class TxityTransmitter:
 
             return callback
 
-        def start_playlist_worker(
-            cache_file,
-            cache_segments: dict[str, tuple[int, int]],
-        ) -> threading.Thread:
-            available_files = [
-                file_path for file_path in playlist_files
-                if file_path in cache_segments
-            ]
-
+        def start_playlist_worker() -> threading.Thread:
             def stream_playlist() -> None:
                 previous_file: str | None = None
                 rng = random.Random()
                 try:
+                    import numpy as np
+                    import soundfile
+
                     while not self._stop_event.is_set():
                         order = build_playlist_order(
-                            available_files,
+                            playlist_files,
                             shuffle=playlist_shuffle,
                             previous_file=previous_file,
                             rng=rng,
@@ -763,32 +681,49 @@ class TxityTransmitter:
                         for index, file_path in enumerate(order, start=1):
                             if self._stop_event.is_set():
                                 break
-
-                            start_offset, byte_count = cache_segments[file_path]
-                            cache_file.seek(start_offset)
-                            remaining = byte_count
-                            playlist_info = (file_path, index, len(order))
-
-                            while remaining and not self._stop_event.is_set():
-                                frame = cache_file.read(FRAME_BYTES)
-                                if len(frame) != FRAME_BYTES:
+                            with soundfile.SoundFile(file_path) as source:
+                                source_rate = int(source.samplerate)
+                                if source_rate <= 0 or source.channels <= 0:
                                     raise RuntimeError(
-                                        f"Prepared playlist cache is incomplete: {file_path}"
+                                        f"Audio file has an invalid format: {file_path}"
                                     )
-
-                                queued_frame = (frame, playlist_info)
+                                playlist_info = (file_path, index, len(order))
+                                resampler = StreamingLinearResampler(
+                                    source_rate,
+                                    SAMPLE_RATE_HZ,
+                                )
                                 while not self._stop_event.is_set():
-                                    try:
-                                        audio_queue.put(queued_frame, timeout=0.1)
+                                    block = source.read(
+                                        PLAYLIST_READ_FRAMES,
+                                        dtype="float32",
+                                        always_2d=True,
+                                    )
+                                    if block.size == 0:
                                         break
-                                    except queue.Full:
-                                        continue
-                                remaining -= len(frame)
-
+                                    mono = block.mean(axis=1, dtype=np.float32)
+                                    enqueue_pcm_samples(
+                                        resampler.process(mono),
+                                        wait_for_space=True,
+                                        playlist_info=playlist_info,
+                                    )
+                                if not self._stop_event.is_set():
+                                    enqueue_pcm_samples(
+                                        [],
+                                        wait_for_space=True,
+                                        flush=True,
+                                        playlist_info=playlist_info,
+                                    )
                             previous_file = file_path
 
                         if self._stop_event.is_set() or not playlist_loop:
                             break
+
+                    if not self._stop_event.is_set():
+                        enqueue_pcm_samples(
+                            [],
+                            wait_for_space=True,
+                            flush=True,
+                        )
                 except Exception as exc:
                     details = _safe_error(exc)
                     audio_thread_error[:] = [details]
@@ -798,7 +733,7 @@ class TxityTransmitter:
                     })
                     self.events.put({
                         "kind": "tx_log",
-                        "text": f"Playlist cache playback error: {details}",
+                        "text": f"Playlist decoder error: {details}",
                     })
                 finally:
                     audio_finished.set()
@@ -891,51 +826,13 @@ class TxityTransmitter:
                     })
 
             if needs_audio and audio_source == "playlist":
-                self.events.put({
-                    "kind": "tx_log",
-                    "text": "Pre-decoding the full playlist before starting transmission.",
-                })
-
-                def report_playlist_preparation(file_path: str, index: int, count: int) -> None:
-                    self.events.put({
-                        "kind": "tx_playlist_preparing",
-                        "path": file_path,
-                        "index": index,
-                        "count": count,
-                    })
-
-                playlist_cache, playlist_segments = prepare_playlist_audio_cache(
-                    playlist_files,
-                    self._stop_event,
-                    on_progress=report_playlist_preparation,
-                )
-                if self._stop_event.is_set():
-                    return
-
-                playlist_files = [
-                    file_path for file_path in playlist_files
-                    if file_path in playlist_segments
-                ]
-                cached_seconds = sum(
-                    byte_count / (SAMPLE_RATE_HZ * 4)
-                    for _offset, byte_count in playlist_segments.values()
-                )
+                audio_timer_resolution = begin_windows_audio_timer_resolution()
+                playlist_thread = start_playlist_worker()
                 self.events.put({
                     "kind": "tx_log",
                     "text": (
-                        f"Playlist preloaded: {len(playlist_segments)} tracks, "
-                        f"{cached_seconds:.1f} seconds of decoded audio."
+                        "Buffering a few seconds of playlist audio before starting transmission."
                     ),
-                })
-
-                audio_timer_resolution = begin_windows_audio_timer_resolution()
-                playlist_thread = start_playlist_worker(
-                    playlist_cache,
-                    playlist_segments,
-                )
-                self.events.put({
-                    "kind": "tx_log",
-                    "text": "Filling the playback buffer before starting the stream.",
                 })
                 buffer_deadline = time.monotonic() + 12.0
                 while not self._stop_event.is_set():
@@ -948,7 +845,7 @@ class TxityTransmitter:
                         break
                     if time.monotonic() >= buffer_deadline:
                         raise TimeoutError(
-                            "Playlist audio did not fill its playback buffer within 12 seconds."
+                            "Playlist audio did not fill its startup buffer within 12 seconds."
                         )
                     self._stop_event.wait(0.02)
 
@@ -1066,12 +963,6 @@ class TxityTransmitter:
             self._stop_event.set()
             if playlist_thread is not None and playlist_thread is not threading.current_thread():
                 playlist_thread.join(timeout=2.0)
-
-            if playlist_cache is not None:
-                try:
-                    playlist_cache.close()
-                except Exception:
-                    pass
 
             if input_stream is not None:
                 try:
