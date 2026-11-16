@@ -1,3 +1,2 @@
 bootstack>=0.3.0
 websocket-client>=1.8.0
-pywebview>=5.0
