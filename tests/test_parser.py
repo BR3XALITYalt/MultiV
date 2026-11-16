@@ -9,6 +9,7 @@ from main import (
     normalize_media_url,
     discord_avatar_url,
     _clean_station_comments,
+    fetch_station_image,
 )
 
 
@@ -184,6 +185,90 @@ class StationParserTests(unittest.TestCase):
         self.assertEqual(record["description"], "A longer station description.")
         self.assertEqual(record["description_source"], "details")
         self.assertEqual(record["details_text"], "A longer station description.")
+
+    def test_page_layout_text_can_supply_missing_station_description(self):
+        _metrics, stations = parse_users_listing({
+            "stations": [{
+                "sessionId": "station-page-layout",
+                "name": "Layout Radio",
+                "pageLayout": {
+                    "height": 400,
+                    "blocks": [
+                        {"type": "image", "imageUrl": "/image.png"},
+                        {"type": "text", "text": "Station page description."},
+                    ],
+                },
+            }],
+        })
+        record = stations[0].as_record()
+        self.assertEqual(record["description"], "Station page description.")
+        self.assertEqual(record["description_source"], "pageLayout")
+
+    def test_image_fetch_accepts_valid_image_with_generic_mime_type(self):
+        from io import BytesIO
+        from unittest.mock import patch
+        from PIL import Image
+
+        output = BytesIO()
+        Image.new("RGB", (3, 2), "blue").save(output, format="PNG")
+        image_data = output.getvalue()
+
+        class FakeResponse:
+            status = 200
+            headers = {"Content-Type": "application/octet-stream"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def geturl(self):
+                return "https://txity.radiodiscussion.org/uploads/test.png"
+
+            def getcode(self):
+                return self.status
+
+            def read(self, _limit):
+                return image_data
+
+        with patch("main.urlopen", return_value=FakeResponse()):
+            self.assertEqual(
+                fetch_station_image("https://txity.radiodiscussion.org/uploads/test.png"),
+                image_data,
+            )
+
+    def test_image_fetch_reports_http_status_and_mime_for_non_image_body(self):
+        from io import BytesIO
+        from unittest.mock import patch
+        from PIL import Image
+
+        output = BytesIO()
+        Image.new("RGB", (2, 2), "red").save(output, format="PNG")
+        image_data = output.getvalue()
+
+        class FakeResponse:
+            status = 200
+            headers = {"Content-Type": "text/html; charset=utf-8"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def geturl(self):
+                return "https://txity.radiodiscussion.org/uploads/test.jpg"
+
+            def getcode(self):
+                return self.status
+
+            def read(self, _limit):
+                return b"<html>Not an image</html>"
+
+        with patch("main.urlopen", return_value=FakeResponse()):
+            with self.assertRaisesRegex(ValueError, "HTTP 200.*Content-Type: text/html"):
+                fetch_station_image("https://txity.radiodiscussion.org/uploads/test.jpg")
 
     def test_users_json_uses_frequency_hz_when_formatted_frequency_is_missing(self):
         _metrics, stations = parse_users_listing({
