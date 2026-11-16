@@ -3413,7 +3413,7 @@ def build_app() -> None:
             selected_source = tx_audio_source_var.get()
             if selected_source in {"Audio playlist", "DRM test tone (1 kHz)"}:
                 return
-            if selected_source == "Desktop audio (output loopback"):
+            if selected_source == "Desktop audio (output loopback)":
                 tx_audio_device_label_var.set("Desktop output device")
                 try:
                     devices = list_loopback_devices()
