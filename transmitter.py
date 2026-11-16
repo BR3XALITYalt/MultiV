@@ -188,6 +188,36 @@ def mode_bandwidth_hz(mode: Any, station: dict[str, Any] | None = None) -> int:
     return DEFAULT_MODE_BANDWIDTH_HZ.get(mode_name, DEFAULT_MODE_BANDWIDTH_HZ["AM"])
 
 
+def tx_status_diagnostic_snapshot(
+    data: Any,
+    *,
+    request_frequency_hz: int | None = None,
+    request_mode: str | None = None,
+    allow_overlap: bool | None = None,
+) -> dict[str, Any]:
+    """Keep only status fields needed to diagnose a TXITY PTT decision."""
+    if not isinstance(data, dict):
+        return {}
+
+    fields = (
+        "ptt",
+        "queuePosition",
+        "txStartUsable",
+        "txStartReason",
+        "txBlockReason",
+        "bandMinHz",
+        "bandMaxHz",
+    )
+    snapshot = {key: data[key] for key in fields if key in data}
+    if request_frequency_hz is not None:
+        snapshot["requestRfHz"] = int(request_frequency_hz)
+    if request_mode:
+        snapshot["requestMode"] = str(request_mode).strip().upper()
+    if allow_overlap is not None:
+        snapshot["requestAllowOverlapVisitors"] = bool(allow_overlap)
+    return snapshot
+
+
 def find_frequency_overlaps(
     frequency: Any,
     mode: Any,
