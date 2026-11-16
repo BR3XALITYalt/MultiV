@@ -360,9 +360,13 @@ def build_app() -> None:
 
     def disconnect_discord() -> None:
         client.set_discord_auth(None, None)
-        auth_manager.clear_browser_session()
+        profile_cleared = auth_manager.clear_browser_session()
         auth_account.set("Not connected to Discord")
-        auth_browser_status.set("TXITPY disconnected the session and cleared its embedded browser profile.")
+        auth_browser_status.set(
+            "TXITPY disconnected and cleared its embedded browser profile."
+            if profile_cleared
+            else "TXITPY disconnected, but the embedded browser profile could not be cleared."
+        )
 
     def shutdown() -> None:
         client.disconnect()
