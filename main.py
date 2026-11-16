@@ -996,7 +996,7 @@ def build_app() -> None:
 
     root = tk.Tk()
     palette = apply_tk_theme(root, theme_mode)
-    root.title("TXITPY | TXITY Desktop")
+    root.title("TXITPY")
     root.geometry("1180x790")
     root.minsize(900, 650)
     root.configure(background=palette["background"])
@@ -1029,16 +1029,6 @@ def build_app() -> None:
     connection_var = tk.StringVar(root, "Disconnected")
     account_var = tk.StringVar(root, "Not signed in to Discord")
     auth_status_var = tk.StringVar(root, "Checking TXITY server configuration...")
-    center_var = tk.StringVar(root, "Not reported")
-    band_var = tk.StringVar(root, "Not reported")
-    sample_rate_var = tk.StringVar(root, "Not reported")
-    transmitters_var = tk.StringVar(root, "Not reported")
-    clients_var = tk.StringVar(root, "Not reported")
-    sessions_var = tk.StringVar(root, "Not reported")
-    web_audio_var = tk.StringVar(root, "Not reported")
-    sdrpp_streaming_var = tk.StringVar(root, "Not reported")
-    updated_var = tk.StringVar(root, "Waiting for server data")
-    summary_var = tk.StringVar(root, "Sign in with Discord to load TXITY server information.")
     station_status_var = tk.StringVar(root, "Waiting for TXITY station data.")
     station_count_var = tk.StringVar(root, "0 stations")
 
@@ -1054,7 +1044,7 @@ def build_app() -> None:
     tx_audio_device_var = tk.StringVar(root, saved_text("audio_device", "System default"))
     tx_audio_device_label_var = tk.StringVar(root, "Input device")
     tx_audio_input_var = tx_audio_device_var
-    tx_cw_text_var = tk.StringVar(root, saved_text("cw_text", "CQ CQ DE TXITY"))
+    tx_cw_text_var = tk.StringVar(root, saved_text("cw_text", "CQ CQ DE TXITPY"))
     tx_cw_wpm_var = tk.StringVar(root, saved_text("cw_wpm", "18"))
     tx_cw_loop_var = tk.BooleanVar(root, saved_bool("cw_loop", True))
     tx_allow_overlap_var = tk.BooleanVar(root, saved_bool("allow_overlap", False))
@@ -1177,17 +1167,6 @@ def build_app() -> None:
     update_tx_power_readout()
     tx_transmit_button: tk.Button | None = None
 
-    metric_vars = {
-        "Center frequency": center_var,
-        "Frequency range": band_var,
-        "Sample rate": sample_rate_var,
-        "Active transmitters": transmitters_var,
-        "Connected clients": clients_var,
-        "Total sessions": sessions_var,
-        "Web audio clients": web_audio_var,
-        "SDR++ streaming": sdrpp_streaming_var,
-    }
-
     discord_authenticated = False
     auth_restore_started = False
     auth_enabled = False
@@ -1203,7 +1182,7 @@ def build_app() -> None:
     image_cache: dict[tuple[str, int], Any] = {}
     image_loading: set[str] = set()
     image_labels: dict[str, list[tuple[tk.Label, int, str]]] = {}
-    current_page = "overview"
+    current_page = "transmit"
     shell_frame: tk.Frame | None = None
     content_frame: tk.Frame | None = None
     nav_frame: tk.Frame | None = None
@@ -1576,7 +1555,7 @@ def build_app() -> None:
             if profile_cleared
             else "Discord was disconnected, but the saved browser session could not be cleared."
         )
-        current_page = "overview"
+        current_page = "transmit"
         build_shell()
 
     def on_shutdown() -> None:
@@ -1762,7 +1741,7 @@ def build_app() -> None:
 
         make_label(
             card,
-            "TXITY",
+            "TXITPY",
             font=("Segoe UI", 30, "bold"),
             background=palette["surfaceContainerLow"],
             color=palette["primary"],
@@ -1841,92 +1820,6 @@ def build_app() -> None:
         canvas.pack(fill="both", expand=True)
         active_scroll_canvas = canvas
         return page, canvas
-
-    def show_overview(parent: tk.Frame) -> None:
-        page, canvas = create_scrollable_page(parent)
-
-        make_label(
-            page,
-            "TXITY",
-            font=("Segoe UI", 26, "bold"),
-            background=palette["background"],
-        ).pack(anchor="w", pady=(8, 0))
-        make_label(
-            page,
-            "Public server monitor and station directory",
-            font=("Segoe UI", 11, "normal"),
-            color=palette["onSurfaceVariant"],
-            background=palette["background"],
-        ).pack(anchor="w", pady=(2, 18))
-
-        actions = tk.Frame(page, bg=palette["background"])
-        actions.pack(fill="x", pady=(0, 18))
-        make_button(actions, "Connect", client.connect, kind="primary").pack(side="left", padx=(0, 8))
-        make_button(actions, "Disconnect", disconnect_status_connection, kind="tonal").pack(side="left", padx=(0, 8))
-        make_button(
-            actions,
-            "Open TXITY",
-            lambda: webbrowser.open(BASE_URL),
-            kind="text",
-        ).pack(side="left")
-
-        make_label(
-            page,
-            "SERVER STATUS",
-            font=("Segoe UI", 10, "bold"),
-            color=palette["onSurfaceVariant"],
-            background=palette["background"],
-        ).pack(anchor="w", pady=(0, 10))
-
-        grid = tk.Frame(page, bg=palette["background"])
-        grid.pack(fill="x")
-        for column in range(4):
-            grid.grid_columnconfigure(column, weight=1, uniform="metric")
-
-        for index, (name, variable) in enumerate(metric_vars.items()):
-            row, column = divmod(index, 4)
-            card = make_card(
-                grid,
-                background=palette["surfaceContainerLow"],
-                padding=16,
-            )
-            card.grid(
-                row=row,
-                column=column,
-                sticky="nsew",
-                padx=6,
-                pady=6,
-            )
-            make_label(
-                card,
-                name,
-                font=("Segoe UI", 9, "bold"),
-                color=palette["onSurfaceVariant"],
-                background=palette["surfaceContainerLow"],
-            ).pack(anchor="w")
-            make_label(
-                card,
-                variable=variable,
-                font=("Segoe UI", 21, "bold"),
-                background=palette["surfaceContainerLow"],
-            ).pack(anchor="w", pady=(7, 0))
-
-        info = make_card(page, padding=16)
-        info.pack(fill="x", pady=(8, 12))
-        make_label(
-            info,
-            variable=summary_var,
-            font=("Segoe UI", 10, "normal"),
-            background=palette["surfaceContainerLow"],
-            wraplength=850,
-        ).pack(anchor="w")
-        make_label(
-            info,
-            variable=updated_var,
-            font=("Segoe UI", 9, "normal"),
-            color=palette["onSurfaceVariant"],
-            background=palette["surfaceContainerLow"],
-        ).pack(anchor="w", pady=(9, 0))
 
     def show_stations(parent: tk.Frame) -> None:
         nonlocal station_cards_frame
@@ -3177,7 +3070,7 @@ def build_app() -> None:
 
         make_label(
             topbar,
-            "TXITY",
+            "TXITPY",
             font=("Segoe UI", 17, "bold"),
             color=palette["primary"],
             background=palette["surfaceContainerLow"],
@@ -3189,7 +3082,6 @@ def build_app() -> None:
 
             destinations = (
                 ("Transmit", "transmit"),
-                ("Overview", "overview"),
                 ("Stations", "stations"),
                 ("Discord", "discord"),
             )
@@ -3270,7 +3162,7 @@ def build_app() -> None:
             elif current_page == "discord":
                 show_discord(content_frame)
             else:
-                show_overview(content_frame)
+                show_transmit(content_frame)
         else:
             make_button(
                 topbar,
@@ -3289,81 +3181,17 @@ def build_app() -> None:
             content_frame.pack(fill="both", expand=True)
             show_gate(content_frame)
 
-    def apply_users_metrics(metrics: dict[str, Any]) -> None:
-        nonlocal users_listing_received
-        users_listing_received = True
-
-        def metric_text(name: str) -> str:
-            value = metrics.get(name)
-            return str(value) if isinstance(value, int) else "Not reported"
-
-        web_count = metric_text("webClients")
-        sdrpp_count = metric_text("sdrppClients")
-        clients_var.set(
-            f"{web_count} web / {sdrpp_count} SDR++"
-            if web_count != "Not reported" and sdrpp_count != "Not reported"
-            else "Not reported"
-        )
-        transmitters_var.set(metric_text("transmitting"))
-        sessions_var.set(metric_text("sessions"))
-        web_audio_var.set(metric_text("webAudioClients"))
-        sdrpp_streaming_var.set(metric_text("sdrppStreamingClients"))
-
-        timestamp = metrics.get("updatedAtLocal")
-        updated_var.set(
-            f"TXITY users listing updated at {timestamp}"
-            if isinstance(timestamp, str) and timestamp
-            else "TXITY users listing refreshed"
-        )
-
     def apply_status(data: dict[str, Any]) -> None:
         nonlocal server_band_min_hz, server_band_max_hz
         nonlocal tx_negative_status_reason, tx_negative_status_count
-        center_var.set(format_frequency(data.get("centerHz")))
         low, high = data.get("bandMinHz"), data.get("bandMaxHz")
         if isinstance(low, (int, float)) and isinstance(high, (int, float)):
             server_band_min_hz = int(low)
             server_band_max_hz = int(high)
-            band_var.set(f"{format_frequency(low)} - {format_frequency(high)}")
         else:
             server_band_min_hz = None
             server_band_max_hz = None
         update_frequency_check()
-        rate = data.get("sampleRate")
-        sample_rate_var.set(
-            f"{rate / 1_000_000:.3f} MS/s"
-            if isinstance(rate, (int, float)) else "Not reported"
-        )
-        # The WebSocket status feed is the live source. Keep the users.json
-        # snapshot as a fallback only for fields absent from this update.
-        live_transmitters = data.get("transmittingCount")
-        if isinstance(live_transmitters, int) and not isinstance(live_transmitters, bool):
-            transmitters_var.set(str(live_transmitters))
-        web_clients = data.get("webClients")
-        sdrpp_clients = data.get("sdrppClients")
-        if (
-            isinstance(web_clients, int) and not isinstance(web_clients, bool)
-            and isinstance(sdrpp_clients, int) and not isinstance(sdrpp_clients, bool)
-        ):
-            clients_var.set(f"{web_clients} web / {sdrpp_clients} SDR++")
-        elif isinstance(web_clients, int) and not isinstance(web_clients, bool):
-            clients_var.set(f"{web_clients} web")
-        elif isinstance(sdrpp_clients, int) and not isinstance(sdrpp_clients, bool):
-            clients_var.set(f"{sdrpp_clients} SDR++")
-
-        for key, variable in (
-            ("sessions", sessions_var),
-            ("webAudioClients", web_audio_var),
-            ("sdrppStreamingClients", sdrpp_streaming_var),
-        ):
-            value = data.get(key)
-            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
-                variable.set(str(value))
-        protection = "enabled" if data.get("protection") else "not reported"
-        summary_var.set(
-            f"Server protection: {protection}. "
-            f"TXITY reports {data.get('transmittingCount', 'an unknown number')} active transmitters."
-        )
 
         if transmitter.is_busy and data.get("ptt") is True:
             tx_negative_status_reason = None
@@ -3408,6 +3236,7 @@ def build_app() -> None:
 
     def drain_events() -> None:
         nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows, current_page, tx_profile_initialized
+        nonlocal users_listing_received
         nonlocal tx_negative_status_reason, tx_negative_status_count
         while True:
             try:
@@ -3423,7 +3252,6 @@ def build_app() -> None:
 
             elif kind == "status":
                 apply_status(event.get("data", {}))
-                updated_var.set("Live status received")
 
             elif kind == "tx_state":
                 state = str(event.get("state") or "")
@@ -3473,9 +3301,6 @@ def build_app() -> None:
             elif kind == "config":
                 config = event.get("data", {})
                 if isinstance(config, dict):
-                    if center_var.get() == "Not reported":
-                        center_var.set(format_frequency(config.get("centerHz")))
-
                     auth_manager.configure(
                         config.get("discordAuthUrl"),
                         config.get("secureDiscordAuth") is True,
@@ -3492,6 +3317,7 @@ def build_app() -> None:
                         )
 
             elif kind == "users_listing":
+                users_listing_received = True
                 station_rows = event.get("rows", [])
                 update_frequency_check()
                 if not tx_profile_initialized and client.discord_user:
@@ -3517,7 +3343,6 @@ def build_app() -> None:
                 image_cache.clear()
                 image_loading.clear()
                 image_labels.clear()
-                apply_users_metrics(event.get("metrics", {}))
                 station_status_var.set(
                     f"Loaded {len(station_rows)} stations from TXITY users.json."
                     if station_rows else
@@ -3556,10 +3381,6 @@ def build_app() -> None:
                             flush=True,
                         )
                 update_station_tree()
-                summary_var.set(
-                    f"TXITY currently reports "
-                    f"{event.get('metrics', {}).get('transmitting', 'an unknown number')} transmitting stations."
-                )
                 print(
                     f"[TXITPY] Loaded {len(station_rows)} stations from users.json.",
                     file=sys.stderr,
@@ -3593,7 +3414,6 @@ def build_app() -> None:
                     max_chars=1_200,
                 )
                 station_status_var.set(details)
-                summary_var.set(details)
                 update_station_tree()
                 print(f"[TXITPY] {details}", file=sys.stderr, flush=True)
 
@@ -3612,7 +3432,7 @@ def build_app() -> None:
                     account_var.set(f"Signed in as {display_name}")
                     auth_status_var.set("Discord sign-in completed.")
                     station_status_var.set("Loading station data from TXITY...")
-                    current_page = "overview"
+                    current_page = "transmit"
                     build_shell()
                     client.connect()
                     print(
@@ -3658,7 +3478,6 @@ def build_app() -> None:
                     max_chars=1_500,
                 )
                 connection_var.set("Live status unavailable")
-                summary_var.set(details)
                 print(f"[TXITPY] Status WebSocket error: {details}", file=sys.stderr, flush=True)
 
             elif kind == "error":
@@ -3666,7 +3485,6 @@ def build_app() -> None:
                     str(event.get("text", "Network error")),
                     max_chars=1_500,
                 )
-                summary_var.set(details)
                 if not auth_enabled:
                     auth_status_var.set(details)
 
