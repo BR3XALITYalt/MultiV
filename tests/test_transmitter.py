@@ -10,6 +10,8 @@ from transmitter import (
     build_transmit_config,
     parse_rf_frequency,
     StreamingLinearResampler,
+    find_frequency_overlaps,
+    mode_bandwidth_hz,
 )
 
 
@@ -113,6 +115,45 @@ class TransmitterProtocolTests(unittest.TestCase):
         samples = np.linspace(-1.0, 1.0, 512, dtype=np.float32)
         resampler = StreamingLinearResampler(48_000, 48_000)
         np.testing.assert_array_equal(resampler.process(samples), samples)
+
+    def test_mode_bandwidth_defaults_match_txity_transmit_config(self):
+        self.assertEqual(mode_bandwidth_hz("AM"), 12_000)
+        self.assertEqual(mode_bandwidth_hz("DSB"), 12_000)
+        self.assertEqual(mode_bandwidth_hz("USB"), 10_000)
+        self.assertEqual(mode_bandwidth_hz("LSB+C"), 10_000)
+        self.assertEqual(mode_bandwidth_hz("CW"), 500)
+
+    def test_detects_overlapping_virtual_station_frequency(self):
+        overlaps = find_frequency_overlaps(
+            "7.250 MHz",
+            "AM",
+            [{
+                "id": "other",
+                "station": "Nearby station",
+                "frequency_hz": 7_245_000,
+                "mode": "AM",
+                "allow_overlap_visitors": True,
+            }],
+        )
+        self.assertEqual(len(overlaps), 1)
+        self.assertEqual(overlaps[0]["station_name"], "Nearby station")
+        self.assertEqual(overlaps[0]["offset_hz"], 5_000)
+        self.assertEqual(overlaps[0]["overlap_hz"], 7_000)
+        self.assertTrue(overlaps[0]["allow_overlap_visitors"])
+
+    def test_ignores_non_overlapping_or_unreported_station_frequencies(self):
+        overlaps = find_frequency_overlaps(
+            "7.250 MHz",
+            "AM",
+            [
+                {"station": "Far station", "frequency": "7.300 MHz", "mode": "AM"},
+                {"station": "No frequency", "frequency": "Not reported", "mode": "USB"},
+            ],
+        )
+        self.assertEqual(overlaps, [])
+
+    def test_station_reported_bandwidth_overrides_mode_default(self):
+        self.assertEqual(mode_bandwidth_hz("AM", {"bandwidthHz": 2_400}), 2_400)
 
 
 
