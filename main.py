@@ -23,7 +23,6 @@ from urllib.request import Request, urlopen
 
 from audio_playlist import (
     build_playlist_snapshot,
-    collect_audio_files,
     normalize_audio_sources,
 )
 from discord_auth import (
@@ -1073,7 +1072,10 @@ def build_app() -> None:
     playlist_ui_refresh_callback: Any = None
     tx_playlist_shuffle_var = tk.BooleanVar(root, saved_bool("playlist_shuffle", False))
     tx_playlist_loop_var = tk.BooleanVar(root, saved_bool("playlist_loop", False))
-    tx_playlist_status_var = tk.StringVar(root, "No playlist loaded.")
+    tx_playlist_status_var = tk.StringVar(
+        root,
+        f"{len(tx_playlist_files)} tracks loaded." if tx_playlist_files else "No playlist loaded.",
+    )
     tx_cw_text_var = tk.StringVar(root, saved_text("cw_text", "CQ CQ DE TXITPY"))
     tx_cw_wpm_var = tk.StringVar(root, saved_text("cw_wpm", "18"))
     tx_cw_loop_var = tk.BooleanVar(root, saved_bool("cw_loop", True))
@@ -2712,6 +2714,14 @@ def build_app() -> None:
         def canonical_playlist_path(value: str | Path) -> str:
             return str(Path(value).expanduser().resolve(strict=False)).casefold()
 
+        def playlist_path_is_within(candidate: str | Path, folder: str | Path) -> bool:
+            candidate_path = canonical_playlist_path(candidate)
+            folder_path = canonical_playlist_path(folder)
+            try:
+                return os.path.commonpath((candidate_path, folder_path)) == folder_path
+            except ValueError:
+                return False
+
         def add_playlist_sources(sources: list[str] | tuple[str, ...]) -> None:
             normalized_sources = normalize_audio_sources(sources)
             if not normalized_sources:
@@ -2733,7 +2743,7 @@ def build_app() -> None:
                     if source_path.is_dir():
                         exclusions_to_clear = [
                             excluded for excluded in tx_playlist_excluded_files
-                            if Path(excluded).is_relative_to(source_path)
+                            if playlist_path_is_within(excluded, source_path)
                         ]
                         tx_playlist_excluded_files.difference_update(exclusions_to_clear)
                     else:
