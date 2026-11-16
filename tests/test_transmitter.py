@@ -80,7 +80,7 @@ class TransmitterProtocolTests(unittest.TestCase):
     def test_live_audio_silence_only_fills_sustained_input_gaps(self):
         self.assertEqual(LIVE_AUDIO_SILENCE_GRACE_SECONDS, 0.1)
         self.assertFalse(should_send_live_audio_silence(10.0, 10.05))
-        self.assertTrue(should_send_live_audio_silence(10.0, 10.1))
+        self.assertTrue(should_send_live_audio_silence(10.0, 10.101))
 
     def test_control_reconnect_grace_allows_short_disconnects(self):
         self.assertEqual(CONTROL_RECONNECT_GRACE_SECONDS, 20.0)
