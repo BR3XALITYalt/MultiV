@@ -2,6 +2,43 @@
 
 from __future__ import annotations
 
+import math
+
+
+def rounded_rectangle_points(
+    width: float,
+    height: float,
+    radius: float,
+    *,
+    segments: int = 14,
+) -> list[float]:
+    """Return an evenly sampled rounded-rectangle outline in clockwise order."""
+    if width <= 0 or height <= 0:
+        raise ValueError("Rounded rectangle dimensions must be positive.")
+    if segments < 2:
+        raise ValueError("A rounded rectangle needs at least two arc segments.")
+
+    radius = max(0.0, min(float(radius), width / 2, height / 2))
+    if radius == 0:
+        return [0, 0, width, 0, width, height, 0, height]
+
+    corners = (
+        (radius, radius, math.pi, 1.5 * math.pi),
+        (width - radius, radius, 1.5 * math.pi, 2 * math.pi),
+        (width - radius, height - radius, 0, 0.5 * math.pi),
+        (radius, height - radius, 0.5 * math.pi, math.pi),
+    )
+    points: list[float] = []
+    for center_x, center_y, start, end in corners:
+        for step in range(segments + 1):
+            angle = start + (end - start) * step / segments
+            points.extend((
+                center_x + radius * math.cos(angle),
+                center_y + radius * math.sin(angle),
+            ))
+    return points
+
+
 
 MATERIAL_3_EXPRESSIVE = {
     "name": "txity-m3",
@@ -188,24 +225,6 @@ def rounded_widget_classes(tk):
     """Create rounded Tk widgets while keeping tkinter imports out of module loading."""
     from tkinter import font as tkfont
 
-    def rounded_points(width: float, height: float, radius: float) -> list[float]:
-        radius = max(1.0, min(radius, width / 2, height / 2))
-        corners = (
-            (radius, radius, 180, 270),
-            (width - radius, radius, 270, 360),
-            (width - radius, height - radius, 0, 90),
-            (radius, height - radius, 90, 180),
-        )
-        points: list[float] = []
-        for center_x, center_y, start, end in corners:
-            for step in range(7):
-                angle = (start + (end - start) * step / 6) * 3.141592653589793 / 180
-                points.extend((
-                    center_x + radius * __import__("math").cos(angle),
-                    center_y + radius * __import__("math").sin(angle),
-                ))
-        return points
-
     class RoundedSurface(tk.Frame):
         """A frame with a rounded surface painted behind its child widgets."""
 
@@ -224,7 +243,7 @@ def rounded_widget_classes(tk):
             self._outside_background = outside or parent.cget("bg")
             self._outline_color = outline or background
             self._corner_radius = radius
-            inset = max(padding, int(radius * 0.6))
+            inset = max(padding, math.ceil(radius * 0.34))
             super().__init__(
                 parent,
                 bg=self._outside_background,
@@ -250,7 +269,7 @@ def rounded_widget_classes(tk):
             width = max(2, self.winfo_width())
             height = max(2, self.winfo_height())
             self._surface_canvas.delete("surface")
-            coordinates = rounded_points(
+            coordinates = rounded_rectangle_points(
                 width - 2,
                 height - 2,
                 min(self._corner_radius, (min(width, height) - 2) / 2),
@@ -261,8 +280,6 @@ def rounded_widget_classes(tk):
                 fill=self._surface_background,
                 outline=self._outline_color,
                 width=1,
-                smooth=True,
-                splinesteps=18,
                 tags="surface",
             )
 
@@ -343,7 +360,7 @@ def rounded_widget_classes(tk):
             foreground = self._hover_foreground if self._hovered else self._foreground
             outline = self._focus_color if self._focused else self._outline
             self.delete("all")
-            coordinates = rounded_points(
+            coordinates = rounded_rectangle_points(
                 width - 2,
                 height - 2,
                 min(self._corner_radius, (min(width, height) - 2) / 2),
@@ -354,8 +371,6 @@ def rounded_widget_classes(tk):
                 fill=fill,
                 outline=outline,
                 width=2 if self._focused else 1,
-                smooth=True,
-                splinesteps=18,
             )
             x = self._padding_x if self._anchor == "w" else width / 2
             self.create_text(
