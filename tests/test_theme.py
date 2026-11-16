@@ -38,8 +38,8 @@ def _contrast(first, second):
 
 
 class MaterialThemeTests(unittest.TestCase):
-    def test_uses_teledrive_blue_expressive_palette(self):
-        self.assertEqual(MATERIAL_3_EXPRESSIVE["light"]["primary"], "#1B6EF3")
+    def test_uses_accessible_teledrive_derived_blue_palette(self):
+        self.assertEqual(MATERIAL_3_EXPRESSIVE["light"]["primary"], "#185ABC")
         self.assertEqual(MATERIAL_3_EXPRESSIVE["light"]["tertiary"], "#00677E")
         self.assertEqual(MATERIAL_3_EXPRESSIVE["dark"]["primary"], "#B0C6FF")
         self.assertEqual(MATERIAL_3_EXPRESSIVE["dark"]["tertiary"], "#5CD5F9")
@@ -52,8 +52,31 @@ class MaterialThemeTests(unittest.TestCase):
     def test_tk_theme_returns_selected_palette_without_a_window(self):
         light = apply_tk_theme(None, "light")
         dark = apply_tk_theme(None, "dark")
-        self.assertEqual(light["primary"], "#1B6EF3")
+        self.assertEqual(light["primary"], "#185ABC")
         self.assertEqual(dark["primary"], "#B0C6FF")
+
+    def test_primary_text_and_outline_meet_contrast_requirements(self):
+        surface_roles = (
+            "background",
+            "surface",
+            "surfaceContainerLowest",
+            "surfaceContainerLow",
+            "surfaceContainer",
+            "surfaceContainerHigh",
+            "surfaceContainerHighest",
+        )
+        for mode in ("light", "dark"):
+            scheme = MATERIAL_3_EXPRESSIVE[mode]
+            for background in surface_roles:
+                with self.subTest(mode=mode, background=background):
+                    self.assertGreaterEqual(
+                        _contrast(scheme["primary"], scheme[background]),
+                        4.5,
+                    )
+            self.assertGreaterEqual(
+                _contrast(scheme["outline"], scheme["surfaceContainerLow"]),
+                3.0,
+            )
 
     def test_tk_theme_rejects_unknown_mode(self):
         with self.assertRaises(ValueError):
