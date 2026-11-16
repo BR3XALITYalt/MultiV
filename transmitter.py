@@ -31,7 +31,17 @@ DRM_PREROLL_FRAMES = 94
 PLAYLIST_READ_FRAMES = 8_192
 AUDIO_FRAME_INTERVAL_SECONDS = BATCH_SAMPLES / SAMPLE_RATE_HZ
 LIVE_AUDIO_SILENCE_GRACE_SECONDS = 0.1
-CONTROL_RECONNECT_GRACE_SECONDS = 20.0
+RECONNECT_INITIAL_DELAY_SECONDS = 1.0
+RECONNECT_MAX_DELAY_SECONDS = 15.0
+
+
+def reconnect_delay(attempt: int) -> float:
+    """Return a bounded exponential retry delay for a network reconnect."""
+    exponent = max(0, min(int(attempt) - 1, 4))
+    return min(
+        RECONNECT_MAX_DELAY_SECONDS,
+        RECONNECT_INITIAL_DELAY_SECONDS * (2 ** exponent),
+    )
 
 
 def playlist_frame_wait_seconds(next_frame_deadline: float | None, now: float) -> float:
@@ -651,7 +661,12 @@ class TxityTransmitter:
         last_metrics_at = time.monotonic()
         last_audio_frame_at = time.monotonic()
         last_capture_error_at = 0.0
-        control_disconnected_at: float | None = None
+        control_configured = False
+        control_disconnect_reported = False
+        last_control_generation: int | None = None
+        transmission_announced = False
+        audio_reconnect_attempt = 0
+        pending_frame: Any = None
         carry = bytearray()
         last_callback_warning = 0.0
 
@@ -823,6 +838,79 @@ class TxityTransmitter:
             thread.start()
             return thread
 
+        server_config = {
+            key: value for key, value in config.items()
+            if not key.startswith("_txitpy")
+        }
+        control_wait_reported = False
+
+        def wait_for_control_connection() -> bool:
+            nonlocal control_wait_reported
+            while not self._stop_event.is_set():
+                if self.client.control_connected():
+                    if control_wait_reported:
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": "TXITY control connection restored.",
+                        })
+                    control_wait_reported = False
+                    return True
+                if not control_wait_reported:
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": "TXITY control connection is unavailable; retrying until transmission is stopped.",
+                    })
+                    control_wait_reported = True
+                self._stop_event.wait(0.5)
+            return False
+
+        def open_audio_connection() -> Any:
+            attempt = 0
+            while not self._stop_event.is_set():
+                if not wait_for_control_connection():
+                    return None
+                try:
+                    connection = websocket.create_connection(
+                        audio_url,
+                        timeout=10,
+                        origin=BASE_URL,
+                        enable_multithread=True,
+                    )
+                    connection.settimeout(1.0)
+                    if self._stop_event.is_set():
+                        connection.close()
+                        return None
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": "Authenticated TX audio WebSocket connected.",
+                    })
+                    return connection
+                except Exception as exc:
+                    attempt += 1
+                    delay = reconnect_delay(attempt)
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": (
+                            f"TXITY audio connection failed ({_safe_error(exc)}). "
+                            f"Retrying in {delay:.0f} seconds."
+                        ),
+                    })
+                    self._stop_event.wait(delay)
+            return None
+
+        def audio_connection_is_open(connection: Any) -> bool:
+            if connection is None:
+                return False
+            state = getattr(connection, "connected", None)
+            if state is None:
+                state = getattr(getattr(connection, "sock", None), "connected", False)
+            return bool(state)
+
+        def close_audio_connection() -> None:
+            nonlocal audio_socket
+            close_audio_connection()
+                audio_socket = None
+
         try:
             if self._stop_event.is_set():
                 return
@@ -888,22 +976,15 @@ class TxityTransmitter:
                     )
 
             session_id, session_secret, auth_token = self.client.transmission_credentials()
-            if not self.client.control_connected():
-                raise ConnectionError("TXITY control connection is not ready. Reconnect and try again.")
+            audio_url = build_audio_socket_url(session_id, session_secret, auth_token)
+
+            if not wait_for_control_connection():
+                return
 
             if needs_audio:
-                audio_url = build_audio_socket_url(session_id, session_secret, auth_token)
-                audio_socket = websocket.create_connection(
-                    audio_url,
-                    timeout=10,
-                    origin=BASE_URL,
-                    enable_multithread=True,
-                )
-                audio_socket.settimeout(1.0)
-                self.events.put({
-                    "kind": "tx_log",
-                    "text": "Authenticated TX audio WebSocket connected.",
-                })
+                audio_socket = open_audio_connection()
+                if audio_socket is None:
+                    return
 
                 if audio_source == "loopback" and not drm_mode:
                     try:
@@ -1098,54 +1179,90 @@ class TxityTransmitter:
             if self._stop_event.is_set():
                 return
 
-            server_config = {
-                key: value for key, value in config.items()
-                if not key.startswith("_txitpy")
-            }
-            self.client.send_control_message(server_config)
-            if self._stop_event.is_set():
-                return
-            self.client.send_control_message({"type": "ptt", "ptt": True})
-            ptt_sent = True
-            with self._lock:
-                self._ptt_sent = True
-                self._ptt_requested_at = time.monotonic()
-                self._active = True
-                self._starting = False
             source_name = "DRM30" if drm_mode else {
                 "loopback": "desktop audio",
                 "playlist": "playlist audio",
             }.get(audio_source, "microphone audio")
-            self.events.put({
-                "kind": "tx_state",
-                "state": "transmitting",
-                "text": "Transmitting CW control" if not needs_audio else f"Transmitting {source_name} to TXITY.",
-            })
             while not self._stop_event.is_set():
                 if not self.client.control_connected():
-                    now = time.monotonic()
-                    if control_disconnected_at is None:
-                        control_disconnected_at = now
+                    if not control_disconnect_reported:
                         self.events.put({
                             "kind": "tx_log",
-                            "text": "TXITY control connection interrupted; holding transmission for reconnection.",
+                            "text": "TXITY control connection interrupted; holding audio and retrying until stopped.",
                         })
-                    elif now - control_disconnected_at >= CONTROL_RECONNECT_GRACE_SECONDS:
-                        raise ConnectionError(
-                            "TXITY control connection did not return within 20 seconds."
-                        )
-                    self._stop_event.wait(0.1)
+                        control_disconnect_reported = True
+                    control_configured = False
+                    self._stop_event.wait(0.25)
                     continue
 
-                if control_disconnected_at is not None:
-                    self.client.send_control_message({"type": "ptt", "ptt": True})
-                    with self._lock:
-                        self._ptt_requested_at = time.monotonic()
-                    control_disconnected_at = None
+                if control_disconnect_reported:
                     self.events.put({
                         "kind": "tx_log",
-                        "text": "TXITY control connection restored; transmission resumed.",
+                        "text": "TXITY control connection restored; restoring transmission state.",
                     })
+                    control_disconnect_reported = False
+
+                current_generation = getattr(self.client, "control_generation", None)
+                if (
+                    current_generation is not None
+                    and last_control_generation is not None
+                    and current_generation != last_control_generation
+                ):
+                    control_configured = False
+
+                if needs_audio and not audio_connection_is_open(audio_socket):
+                    if audio_socket is not None:
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": "TXITY audio connection was lost; reconnecting.",
+                        })
+                        close_audio_connection()
+                    audio_socket = open_audio_connection()
+                    if audio_socket is None:
+                        break
+                    audio_reconnect_attempt = 0
+                    control_configured = False
+
+                if not control_configured:
+                    try:
+                        self.client.send_control_message(server_config)
+                        if self._stop_event.is_set():
+                            break
+                        self.client.send_control_message({"type": "ptt", "ptt": True})
+                    except Exception as exc:
+                        control_configured = False
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": (
+                                f"Could not restore TXITY transmission control ({_safe_error(exc)}); "
+                                "retrying."
+                            ),
+                        })
+                        self._stop_event.wait(0.5)
+                        continue
+
+                    ptt_sent = True
+                    control_configured = True
+                    last_control_generation = getattr(
+                        self.client, "control_generation", None
+                    )
+                    with self._lock:
+                        self._ptt_sent = True
+                        self._ptt_requested_at = time.monotonic()
+                        self._active = True
+                        self._starting = False
+                    if not transmission_announced:
+                        self.events.put({
+                            "kind": "tx_state",
+                            "state": "transmitting",
+                            "text": "Transmitting CW control" if not needs_audio else f"Transmitting {source_name} to TXITY.",
+                        })
+                        transmission_announced = True
+                    else:
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": "TXITY transmission state restored.",
+                        })
 
                 if audio_thread_error:
                     raise RuntimeError(audio_thread_error[0])
@@ -1178,13 +1295,16 @@ class TxityTransmitter:
 
                 using_silence_frame = False
                 try:
-                    queued_frame = audio_queue.get(
-                        timeout=(
-                            0.05
-                            if audio_source == "playlist" or drm_mode
-                            else AUDIO_FRAME_INTERVAL_SECONDS
+                    if pending_frame is not None:
+                        queued_frame = pending_frame
+                    else:
+                        queued_frame = audio_queue.get(
+                            timeout=(
+                                0.05
+                                if audio_source == "playlist" or drm_mode
+                                else AUDIO_FRAME_INTERVAL_SECONDS
+                            )
                         )
-                    )
                 except queue.Empty:
                     if drm_mode:
                         if drm_reader_finished.is_set():
@@ -1247,7 +1367,27 @@ class TxityTransmitter:
                     if self._stop_event.is_set():
                         break
 
-                audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
+                try:
+                    audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
+                except Exception as exc:
+                    if self._stop_event.is_set():
+                        break
+                    pending_frame = queued_frame
+                    audio_reconnect_attempt += 1
+                    delay = reconnect_delay(audio_reconnect_attempt)
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": (
+                            f"TXITY audio stream disconnected ({_safe_error(exc)}). "
+                            f"Reconnecting in {delay:.0f} seconds."
+                        ),
+                    })
+                    close_audio_connection()
+                    control_configured = False
+                    self._stop_event.wait(delay)
+                    continue
+                pending_frame = None
+                audio_reconnect_attempt = 0
                 send_count += 1
                 if audio_source in {"mic", "loopback"} and not using_silence_frame:
                     last_audio_frame_at = time.monotonic()
