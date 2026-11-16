@@ -908,13 +908,12 @@ class TxityTransmitter:
                     if self._stop_event.is_set():
                         break
 
-                now = time.perf_counter()
                 audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
                 send_count += 1
                 if audio_source == "playlist":
                     playlist_next_frame_deadline = next_playlist_frame_deadline(
                         playlist_next_frame_deadline,
-                        now,
+                        time.perf_counter(),
                     )
                 now = time.monotonic()
                 if now - last_metrics_at >= 1.0:
