@@ -1,7 +1,7 @@
 """TXITPY desktop companion for the public TXITY station directory and status feed.
 
 This release is read-only. It does not send transmitter settings, PTT commands,
-or audio frames, and it never reuses credentials captured from a browser session.
+or audio frames. Discord sign-in uses TXITY's official OAuth route and a one-use loopback callback.
 """
 from __future__ import annotations
 
@@ -162,17 +162,15 @@ class TxityClient:
         self.ws_thread: threading.Thread | None = None
 
     def set_discord_auth(self, token: Any, user: Any = None) -> None:
-        """Attach a token obtained from TXITY's official embedded browser."""
+        """Attach or disconnect a token received through TXITY's OAuth callback."""
         clean_token = token if is_auth_token(token) else ""
         clean_user = clean_discord_user(user) if clean_token else None
         with self.auth_lock:
             if clean_token == self.auth_token:
                 self.discord_user = clean_user
                 return
-            self.auth_token = clean_token
-            self.discord_user = clean_user
-                active_socket = self.ws
             had_auth = bool(self.auth_token)
+            active_socket = self.ws
             self.auth_token = clean_token
             self.discord_user = clean_user
 
@@ -481,8 +479,17 @@ def build_app() -> None:
                     updated.set("Live status received")
                 elif kind == "config":
                     config = event.get("data", {})
-                    if isinstance(config, dict) and center() == "Not reported":
-                        center.set(format_frequency(config.get("centerHz")))
+                    if isinstance(config, dict):
+                        if center() == "Not reported":
+                            center.set(format_frequency(config.get("centerHz")))
+                        auth_manager.configure(
+                            config.get("discordAuthUrl"),
+                            config.get("secureDiscordAuth") is True,
+                        )
+                        if config.get("secureDiscordAuth") is True:
+                            auth_browser_status.set("TXITY secure Discord sign-in is available.")
+                        else:
+                            auth_browser_status.set("TXITY secure Discord sign-in is not enabled.")
                 elif kind == "stations":
                     rows = event.get("rows", [])
                     station_table.set_rows(rows)
