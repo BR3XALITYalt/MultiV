@@ -1,0 +1,2 @@
+bootstack>=0.3.0
+websocket-client>=1.8.0
