@@ -405,7 +405,7 @@ def build_app() -> None:
         )
         toolbar.add_button(
             "Discord",
-            icon="discord",
+            icon="chat-dots",
             accent="primary",
             on_click=lambda: shell.navigate("about"),
         )
@@ -431,7 +431,6 @@ def build_app() -> None:
                     bs.Button("Connect", accent="primary", on_click=client.connect)
                     bs.Button("Disconnect", variant="outline", on_click=client.disconnect)
                     bs.Button("Open TXITY", variant="outline", on_click=lambda: webbrowser.open(BASE_URL))
-                bs.Label("Server status", font="heading-md")
                 bs.Label("SERVER STATUS", font="label", accent="secondary")
                 with bs.Grid(columns=3, gap=16):
                     with bs.Card(padding=18, gap=8, accent="primary"):
@@ -466,7 +465,7 @@ def build_app() -> None:
                         accent="primary",
                         on_click=client.refresh_stations,
                     )
-                        station_table = bs.DataTable(
+                    station_table = bs.DataTable(
                         columns=[
                             {"key": "station", "text": "Station", "width": 190},
                             {"key": "frequency", "text": "Frequency", "width": 115},
@@ -482,7 +481,7 @@ def build_app() -> None:
                         show_status_bar=True,
                         id_field="id",
                         context_menus="headers",
-                )
+                    )
                 bs.Label(
                     "Station data is public and may be delayed by the server or network.",
                     accent="secondary",
@@ -501,7 +500,7 @@ def build_app() -> None:
                         textsignal=auth_browser_status,
                         accent="secondary",
                     )
-                    bs.Row(gap=10):
+                    with bs.Row(gap=10):
                         bs.Button(
                             "Sign in with Discord",
                             accent="primary",
@@ -514,33 +513,33 @@ def build_app() -> None:
                         )
                     bs.Divider()
                     bs.Label("Connection", font="heading-md")
-                bs.Label(BASE_URL, accent="primary")
-                bs.Label(
-                    "TXITPY opens TXITY's official Discord sign-in route in your system browser. "
-                    "A one-use loopback callback returns the signed token to this app.",
-                    wrap_width=760,
-                )
-                bs.Label(
-                    "The system browser keeps TXITY's normal website session. TXITPY keeps the "
-                    "returned token in memory and supplies it to the status WebSocket; it does not "
-                    "write the token to a settings file or log it.",
-                    wrap_width=760,
-                )
-                bs.Label(
-                    "The desktop client remains read-only for radio operation. It sends status requests and TXITY's "
-                    "logout notification, never transmitter configuration, push-to-talk commands, or audio frames.",
-                    wrap_width=760,
-                )
-                bs.Button(
-                    "Open TXITY website",
-                    variant="outline",
-                    on_click=lambda: webbrowser.open(BASE_URL),
-                )
-                bs.Button(
-                    "Open project repository",
-                    variant="outline",
-                    on_click=lambda: webbrowser.open("https://github.com/BR3XALITYalt/TXITPY"),
-                )
+                    bs.Label(BASE_URL, accent="primary")
+                    bs.Label(
+                        "TXITPY opens TXITY's official Discord sign-in route in your system browser. "
+                        "A one-use loopback callback returns the signed token to this app.",
+                        wrap_width=760,
+                    )
+                    bs.Label(
+                        "The system browser keeps TXITY's normal website session. TXITPY keeps the "
+                        "returned token in memory and supplies it to the status WebSocket; it does not "
+                        "write the token to a settings file or log it.",
+                        wrap_width=760,
+                    )
+                    bs.Label(
+                        "The desktop client remains read-only for radio operation. It sends status requests and TXITY's "
+                        "logout notification, never transmitter configuration, push-to-talk commands, or audio frames.",
+                        wrap_width=760,
+                    )
+                    bs.Button(
+                        "Open TXITY website",
+                        variant="outline",
+                        on_click=lambda: webbrowser.open(BASE_URL),
+                    )
+                    bs.Button(
+                        "Open project repository",
+                        variant="outline",
+                        on_click=lambda: webbrowser.open("https://github.com/BR3XALITYalt/TXITPY"),
+                    )
 
         def apply_status(data: dict[str, Any]) -> None:
             center.set(format_frequency(data.get("centerHz")))
