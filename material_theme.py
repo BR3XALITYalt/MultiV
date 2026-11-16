@@ -242,7 +242,8 @@ def rounded_widget_classes(tk):
                 takefocus=0,
             )
             self._surface_canvas.place(x=0, y=0, relwidth=1, relheight=1)
-            self._surface_canvas.lower()
+            # Canvas.lower() lowers canvas items; use Tk's window command to stack this widget.
+            self.tk.call("lower", self._surface_canvas._w)
             self.bind("<Configure>", self._redraw_surface, add="+")
 
         def _redraw_surface(self, event=None) -> None:
