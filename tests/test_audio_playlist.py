@@ -90,6 +90,22 @@ class AudioPlaylistTests(unittest.TestCase):
             files, _signature = build_playlist_snapshot([root], [first])
             self.assertEqual([Path(path).name for path in files], ["second.wav"])
 
+    def test_reimporting_a_folder_restores_previously_excluded_tracks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = root / "first.ogg"
+            second = root / "second.ogg"
+            first.write_bytes(b"first")
+            second.write_bytes(b"second")
+
+            removed, _signature = build_playlist_snapshot([root], [first])
+            restored, _restored_signature = build_playlist_snapshot([root], [])
+            self.assertEqual([Path(path).name for path in removed], ["second.ogg"])
+            self.assertEqual(
+                [Path(path).name for path in restored],
+                ["first.ogg", "second.ogg"],
+            )
+
     def test_ignores_missing_paths_and_unsupported_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
