@@ -11,6 +11,7 @@ import secrets
 import threading
 import uuid
 import webbrowser
+import sys
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any
@@ -18,7 +19,14 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from discord_auth import DiscordAuthManager, clean_discord_user, is_auth_token
+from discord_auth import (
+    DiscordAuthManager,
+    clean_discord_user,
+    format_exception_details,
+    is_auth_token,
+    safe_error_text,
+    write_diagnostic,
+)
 
 BASE_URL = "https://txity.radiodiscussion.org"
 CONTROL_URL = "wss://txity.radiodiscussion.org/ws/control"
@@ -503,6 +511,7 @@ def build_app() -> None:
                     bs.Label(
                         textsignal=auth_browser_status,
                         accent="secondary",
+                        wrap_width=760,
                     )
                     with bs.Row(gap=10):
                         bs.Button(
@@ -623,4 +632,30 @@ def build_app() -> None:
 
 
 if __name__ == "__main__":
-    build_app()
+    try:
+        build_app()
+    except Exception as exc:
+        details = format_exception_details(exc)
+        log_path = write_diagnostic(
+            "main-window-startup",
+            exc,
+            filename="application-errors.log",
+        )
+        message = (
+            "TXITPY could not open its main application window.\n\n"
+            f"Exception: {type(exc).__name__}: {safe_error_text(exc)}\n\n"
+            f"Traceback:\n{details}"
+        )
+        if log_path is not None:
+            message += f"\n\nFull diagnostic log: {log_path}"
+
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror("TXITPY startup error", message, parent=root)
+            root.destroy()
+        except Exception:
+            print(message, file=sys.stderr)
