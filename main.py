@@ -2426,7 +2426,32 @@ def build_app() -> None:
                 pass
 
         def start_drm_setup() -> None:
-            start_drm_setup()
+            drm_setup_state["running"] = True
+            previous_mode = str(drm_setup_state.get("previous_mode") or "AM")
+            tx_mode_var.set(previous_mode)
+            tx_mode_help_var.set("Setting up DRM30. Downloading and building its encoder...")
+            tx_status_var.set("Preparing DRM dependencies...")
+            set_drm_progress_visible(True)
+            set_mode_picker_enabled(False)
+
+            def setup_worker() -> None:
+                def report(line: str) -> None:
+                    drm_setup_events.put(("log", line))
+
+                try:
+                    encoder = prepare_drm_encoder(on_log=report)
+                except Exception as exc:
+                    drm_setup_events.put(("error", str(exc)))
+                else:
+                    drm_setup_events.put(("success", str(encoder)))
+
+            threading.Thread(
+                target=setup_worker,
+                daemon=True,
+                name="txitpy-drm-setup",
+            ).start()
+            root.after(150, poll_drm_setup)
+
 
         def poll_drm_setup() -> None:
             completed = False
@@ -2543,31 +2568,7 @@ def build_app() -> None:
                 restore_previous_mode()
                 return
 
-            drm_setup_state["running"] = True
-            previous_mode = str(drm_setup_state.get("previous_mode") or "AM")
-            tx_mode_var.set(previous_mode)
-            tx_mode_help_var.set("Setting up DRM30. Downloading and building its encoder...")
-            tx_status_var.set("Preparing DRM dependencies...")
-            set_drm_progress_visible(True)
-            set_mode_picker_enabled(False)
-
-            def setup_worker() -> None:
-                def report(line: str) -> None:
-                    drm_setup_events.put(("log", line))
-
-                try:
-                    encoder = prepare_drm_encoder(on_log=report)
-                except Exception as exc:
-                    drm_setup_events.put(("error", str(exc)))
-                else:
-                    drm_setup_events.put(("success", str(encoder)))
-
-            threading.Thread(
-                target=setup_worker,
-                daemon=True,
-                name="txitpy-drm-setup",
-            ).start()
-            root.after(150, poll_drm_setup)
+            start_drm_setup()
 
         mode_picker.bind("<<ComboboxSelected>>", handle_mode_selection)
         update_mode_help()
