@@ -144,7 +144,14 @@ class DiscordAuthManager:
 
     def configure(self, auth_url: Any, secure_enabled: Any) -> None:
         """Accept only TXITY's configured HTTPS auth route."""
-        raw_url = auth_url.strip() if isinstance(auth_url, str) else ""
+        # TXITY's frontend defaults this value to /auth/discord/start when
+        # the optional config field is absent.
+        if auth_url is None:
+            raw_url = "/auth/discord/start"
+        elif isinstance(auth_url, str):
+            raw_url = auth_url.strip()
+        else:
+            raw_url = ""
         candidate = urljoin(BASE_URL + "/", raw_url) if raw_url else ""
         try:
             parsed = urlsplit(candidate)
