@@ -314,6 +314,12 @@ def build_transmit_config(
     ssb_high_cut_hz: Any = 0,
     am_bandwidth_hz: Any = 12_000,
     am_pre_emphasis: bool = False,
+    drm_service_label: str = "",
+    drm_service_id: str = "0xB30001",
+    drm_language: str = "English",
+    drm_programme_type: str = "No programme type",
+    drm_iso_language: str = "",
+    drm_iso_country: str = "",
 ) -> dict[str, Any]:
     """Create the TXITY config message using the website's currentConfig schema."""
     name = str(station_name or "").strip()
@@ -427,6 +433,12 @@ def build_transmit_config(
             "trebleDb": 0.0,
             "presenceDb": 0.0,
             "drive": 0.0,
+            "_txitpyDrmServiceLabel": str(drm_service_label or "").strip()[:16],
+            "_txitpyDrmServiceId": str(drm_service_id or "0xB30001").strip(),
+            "_txitpyDrmLanguage": str(drm_language or "English").strip(),
+            "_txitpyDrmProgrammeType": str(drm_programme_type or "No programme type").strip(),
+            "_txitpyDrmIsoLanguage": str(drm_iso_language or "").strip(),
+            "_txitpyDrmIsoCountry": str(drm_iso_country or "").strip(),
         })
     return configuration
 
@@ -1004,10 +1016,19 @@ class TxityTransmitter:
                             "count": count,
                         }),
                     )
+                    drm_metadata = {
+                        "service_label": config.get("_txitpyDrmServiceLabel") or None,
+                        "service_id": config.get("_txitpyDrmServiceId", "0xB30001"),
+                        "language": config.get("_txitpyDrmLanguage", "English"),
+                        "programme_type": config.get("_txitpyDrmProgrammeType", "No programme type"),
+                        "iso_language": config.get("_txitpyDrmIsoLanguage", ""),
+                        "iso_country": config.get("_txitpyDrmIsoCountry", ""),
+                    }
                     drm_config_path = write_drm_station_config(
                         drm_temp_path / "station.toml",
                         station_name=config.get("stationName", "TXITPY"),
                         playlist_url=drm_playlist_server.url,
+                        **drm_metadata,
                     )
                 else:
                     import sounddevice
@@ -1023,6 +1044,7 @@ class TxityTransmitter:
                         drm_temp_path / "station.toml",
                         station_name=config.get("stationName", "TXITPY"),
                         input_device_name=input_name,
+                        **drm_metadata,
                     )
 
             self.client.transmission_credentials()
