@@ -27,6 +27,14 @@ Select **Start Transmission** to begin and **Stop Transmission** to finish. On W
 
 TXITPY supports MP3, WAV, FLAC, OGG, and AIFF playlists. Use **Shuffle playlist** or **Loop playlist** as needed. TXITPY reads audio ahead during playback to reduce gaps. Imported folders refresh when files change; playlist changes take effect the next time you start playback.
 
+### DRM30
+
+The **DRM** mode builds a single mono HE-AAC programme in a 4.5 kHz DRM30 channel. It accepts a microphone or OGG, MP3, and FLAC playlists. WAV and AIFF playlist entries are skipped, and desktop-audio loopback is not supported in DRM mode.
+
+The first DRM start builds the encoder from source. It requires Git, Rust 1.88 or newer, CMake, and a working C/C++ compiler toolchain. The source and build are cached locally. The build uses DecDRM 0.7.1 under GPL-2.0-or-later; see [drm_encoder/NOTICE.md](drm_encoder/NOTICE.md) and [drm_encoder/COPYING](drm_encoder/COPYING). Its codec submodules have separate licensing terms, so do not redistribute a compiled helper without reviewing those terms.
+
+TXITY does not have a native DRM mode. TXITPY carries the generated DRM waveform through TXITY's existing DSB audio transport. This is an experimental software path and has not yet been verified with an independent DRM receiver.
+
 For CW, choose **CW** as the mode and enter a message and speed in the **CW message** section. Select **Repeat CW message** to keep it playing.
 
 ## Stations
