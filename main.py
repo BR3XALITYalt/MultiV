@@ -324,6 +324,14 @@ class TxityClient:
 
     def connect(self) -> None:
         if self.ws_thread and self.ws_thread.is_alive():
+            if self.stop_event.is_set():
+                self.stop_event.clear()
+                self.reconnect_event.set()
+                if self.ws is not None:
+                    try:
+                        self.ws.close()
+                    except Exception:
+                        pass
             return
         self.stop_event.clear()
         self.reconnect_event.clear()
@@ -508,7 +516,7 @@ def _system_theme_mode() -> str:
 def build_app() -> None:
     import tkinter as tk
     from tkinter import ttk
-    from material_theme import MATERIAL_3_EXPRESSIVE, apply_tk_theme
+    from material_theme import apply_tk_theme
 
     client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
