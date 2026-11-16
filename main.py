@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 from discord_auth import (
@@ -47,6 +47,17 @@ class Station:
     details: str = ""
     operator: str = ""
     on_air: str = ""
+    logo_url: str = ""
+    profile_details: str = ""
+    discord_id: str = ""
+    avatar_url: str = ""
+    image_urls: list[str] | None = None
+    page_layout: dict[str, Any] | None = None
+    likes: int = 0
+    rating_average: float | None = None
+    rating_count: int = 0
+    comments: list[dict[str, str]] | None = None
+    comment_count: int = 0
 
     def as_row(self) -> dict[str, str]:
         return {
@@ -58,6 +69,22 @@ class Station:
             "on_air": self.on_air,
             "rating": self.rating,
             "description": self.description,
+        }
+
+    def as_record(self) -> dict[str, Any]:
+        return {
+            **self.as_row(),
+            "logo_url": self.logo_url,
+            "details_text": self.profile_details,
+            "discord_id": self.discord_id,
+            "avatar_url": self.avatar_url,
+            "image_urls": self.image_urls or [],
+            "page_layout": self.page_layout,
+            "likes": self.likes,
+            "rating_average": self.rating_average,
+            "rating_count": self.rating_count,
+            "comments": self.comments or [],
+            "comment_count": self.comment_count,
         }
 
 
@@ -173,8 +200,123 @@ def format_duration(value: Any) -> str:
     return f"{seconds}s"
 
 
+def normalize_media_url(value: Any) -> str:
+    """Allow station media only from TXITY or Discord's image CDN."""
+    if not isinstance(value, str) or not value.strip():
+        return ""
+    raw = value.strip()
+    if raw.startswith("//"):
+        return ""
+    url = urljoin(f"{BASE_URL}/", raw)
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname not in {
+        "txity.radiodiscussion.org",
+        "cdn.discordapp.com",
+        "media.discordapp.net",
+    }:
+        return ""
+    return url
+
+
+def parse_station_page_layout(value: Any) -> dict[str, Any] | None:
+    """Keep only a small, display-safe subset of a station's custom page layout."""
+    if isinstance(value, str):
+        if len(value) > 40_000:
+            return None
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(value, dict):
+        return None
+
+    raw_blocks = value.get("blocks")
+    if not isinstance(raw_blocks, list):
+        raw_blocks = value.get("elements")
+    if not isinstance(raw_blocks, list):
+        return None
+
+    blocks: list[dict[str, Any]] = []
+    for item in raw_blocks[:24]:
+        if not isinstance(item, dict):
+            continue
+        block_type = item.get("type", item.get("kind", "text"))
+        if not isinstance(block_type, str):
+            block_type = "text"
+        block_type = block_type.casefold().replace("layout-", "")
+        if block_type not in {"text", "image", "separator"}:
+            continue
+
+        text_value = item.get("text", item.get("content", ""))
+        if not isinstance(text_value, str):
+            text_value = ""
+        image_url = normalize_media_url(
+            item.get("imageUrl", item.get("src", item.get("url", "")))
+        )
+
+        def number(*names: str, default: float) -> float:
+            for name in names:
+                candidate = item.get(name)
+                if isinstance(candidate, (int, float)) and not isinstance(candidate, bool):
+                    return float(candidate)
+            return default
+
+        blocks.append({
+            "type": block_type,
+            "text": text_value[:2_000],
+            "image_url": image_url,
+            "x": max(0.0, min(100.0, number("x", "left", default=8.0))),
+            "y": max(0.0, min(100.0, number("y", "top", default=8.0))),
+            "width": max(5.0, min(100.0, number("width", "w", default=84.0))),
+            "height": max(8.0, min(900.0, number("height", "h", default=72.0))),
+            "font": item.get("fontFamily", item.get("font", "Segoe UI"))
+                if isinstance(item.get("fontFamily", item.get("font", "Segoe UI")), str) else "Segoe UI",
+            "font_size": max(10, min(72, int(number("fontSize", "font_size", default=18)))),
+            "font_weight": max(300, min(900, int(number("fontWeight", "font_weight", default=400)))),
+            "align": item.get("textAlign", item.get("align", "left"))
+                if item.get("textAlign", item.get("align", "left")) in {"left", "center", "right"} else "left",
+        })
+    if not blocks:
+        return None
+
+    height = value.get("height", value.get("pageHeight", 420))
+    if not isinstance(height, (int, float)) or isinstance(height, bool):
+        height = 420
+    return {"height": max(320, min(1_200, int(height))), "blocks": blocks}
+
+
+def _clean_station_comments(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    comments: list[dict[str, str]] = []
+    for item in value[:30]:
+        if not isinstance(item, dict):
+            continue
+
+        def pick(*names: str, limit: int = 600) -> str:
+            for name in names:
+                candidate = item.get(name)
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()[:limit]
+            return ""
+
+        author = pick("discordUsername", "username", "author", "name", limit=80) or "TXITY user"
+        text_value = pick("text", "content", "body")
+        if not text_value:
+            continue
+        comments.append({
+            "author": author,
+            "text": text_value,
+            "timestamp": pick("createdAtLocal", "createdAt", "timestamp", "date", limit=80),
+            "avatar_url": normalize_media_url(
+                item.get("discordAvatarUrl", item.get("avatarUrl", ""))
+            ),
+        })
+    return comments
+
+
 def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
-    """Parse the public TXITY users.json response without retaining comment data."""
+    """Parse TXITY's public listing and bounded station-page metadata."""
     if not isinstance(payload, dict):
         raise ValueError("TXITY users.json did not return a JSON object.")
 
@@ -230,30 +372,52 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
 
         average = item.get("ratingAverage")
         count = item.get("ratingCount")
-        if (
-            isinstance(average, (int, float))
-            and not isinstance(average, bool)
-            and isinstance(count, int)
-            and not isinstance(count, bool)
-            and count > 0
-        ):
-            rating = f"★ {average:.2f} ({count})"
-        else:
-            rating = "Not rated"
+        average_value = (
+            float(average)
+            if isinstance(average, (int, float)) and not isinstance(average, bool)
+            else None
+        )
+        rating_count = count if isinstance(count, int) and not isinstance(count, bool) and count >= 0 else 0
+        rating = f"★ {average_value:.2f} ({rating_count})" if average_value is not None and rating_count else "Not rated"
 
         operator = item.get("discordUsername")
         if not isinstance(operator, str):
             operator = ""
 
+        raw_images = item.get("imageUrls")
+        image_urls = [
+            normalized for normalized in (
+                normalize_media_url(value) for value in raw_images[:6]
+            ) if normalized
+        ] if isinstance(raw_images, list) else []
+        logo_url = normalize_media_url(item.get("logoUrl")) or (image_urls[0] if image_urls else "")
+
+        profile_details = item.get("details")
+        if not isinstance(profile_details, str):
+            profile_details = ""
+        comments = _clean_station_comments(item.get("comments"))
+        likes = item.get("likes")
+        comment_count = item.get("commentCount")
         stations.append(Station(
-            station_id=station_id.strip(),
-            name=name.strip(),
-            description=description.strip(),
-            frequency=frequency.strip(),
+            station_id=station_id.strip()[:160],
+            name=name.strip()[:120],
+            description=description.strip()[:500],
+            frequency=frequency.strip()[:40],
             rating=rating,
-            mode=mode.strip(),
-            operator=operator.strip(),
+            mode=mode.strip()[:24],
+            operator=operator.strip()[:100],
             on_air=format_duration(item.get("onAirSeconds")),
+            logo_url=logo_url,
+            profile_details=profile_details.strip()[:4_000],
+            discord_id=str(item.get("discordId", ""))[:40] if item.get("discordId") is not None else "",
+            avatar_url=normalize_media_url(item.get("discordAvatarUrl")),
+            image_urls=image_urls,
+            page_layout=parse_station_page_layout(item.get("pageLayout")),
+            likes=likes if isinstance(likes, int) and not isinstance(likes, bool) and likes >= 0 else 0,
+            rating_average=average_value,
+            rating_count=rating_count,
+            comments=comments,
+            comment_count=comment_count if isinstance(comment_count, int) and not isinstance(comment_count, bool) and comment_count >= 0 else len(comments),
         ))
 
     return metrics, stations
@@ -370,7 +534,7 @@ class TxityClient:
                 self.events.put({
                     "kind": "users_listing",
                     "metrics": metrics,
-                    "rows": [station.as_row() for station in stations],
+                    "rows": [station.as_record() for station in stations],
                 })
             except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as exc:
                 self.events.put({
