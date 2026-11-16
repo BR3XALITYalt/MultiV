@@ -320,6 +320,8 @@ def build_transmit_config(
     drm_programme_type: str = "No programme type",
     drm_iso_language: str = "",
     drm_iso_country: str = "",
+    drm_audio_codec: str = "xHE-AAC",
+    drm_interleaving: str = "long",
 ) -> dict[str, Any]:
     """Create the TXITY config message using the website's currentConfig schema."""
     name = str(station_name or "").strip()
@@ -439,6 +441,8 @@ def build_transmit_config(
             "_txitpyDrmProgrammeType": str(drm_programme_type or "No programme type").strip(),
             "_txitpyDrmIsoLanguage": str(drm_iso_language or "").strip(),
             "_txitpyDrmIsoCountry": str(drm_iso_country or "").strip(),
+            "_txitpyDrmAudioCodec": str(drm_audio_codec or "xHE-AAC").strip(),
+            "_txitpyDrmInterleaving": str(drm_interleaving or "long").strip().casefold(),
         })
     return configuration
 
@@ -1001,6 +1005,8 @@ class TxityTransmitter:
                     "programme_type": config.get("_txitpyDrmProgrammeType", "No programme type"),
                     "iso_language": config.get("_txitpyDrmIsoLanguage", ""),
                     "iso_country": config.get("_txitpyDrmIsoCountry", ""),
+                    "audio_codec": config.get("_txitpyDrmAudioCodec", "xHE-AAC"),
+                    "interleaving": config.get("_txitpyDrmInterleaving", "long"),
                 }
 
                 if audio_source == "playlist":
