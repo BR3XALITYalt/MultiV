@@ -2508,7 +2508,7 @@ def build_app() -> None:
         )
 
     def drain_events() -> None:
-        nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows, current_page
+        nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows, current_page, tx_profile_initialized
         while True:
             try:
                 event = client.events.get_nowait()
