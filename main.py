@@ -1001,6 +1001,16 @@ def build_app() -> None:
     root.minsize(900, 650)
     root.configure(background=palette["background"])
 
+    saved_tx_settings = load_tx_settings()
+
+    def saved_text(key: str, default: str) -> str:
+        value = saved_tx_settings.get(key, default)
+        return str(value) if value is not None else default
+
+    def saved_bool(key: str, default: bool) -> bool:
+        value = saved_tx_settings.get(key, default)
+        return value if isinstance(value, bool) else default
+
     # Tk variables live for the lifetime of the root, even when page widgets
     # are rebuilt after navigation or a theme change.
     connection_var = tk.StringVar(root, "Disconnected")
@@ -1019,28 +1029,129 @@ def build_app() -> None:
     station_status_var = tk.StringVar(root, "Waiting for TXITY station data.")
     station_count_var = tk.StringVar(root, "0 stations")
 
-    tx_station_name_var = tk.StringVar(root, "")
-    tx_description_var = tk.StringVar(root, "")
-    tx_frequency_var = tk.StringVar(root, "7.250 MHz")
+    tx_station_name_var = tk.StringVar(root, saved_text("station_name", ""))
+    tx_description_var = tk.StringVar(root, saved_text("description", ""))
+    tx_frequency_var = tk.StringVar(root, saved_text("frequency", "7.250 MHz"))
     tx_frequency_check_var = tk.StringVar(root, "Waiting for TXITY station data.")
-    tx_mode_var = tk.StringVar(root, "AM")
+    tx_mode_var = tk.StringVar(root, saved_text("mode", "AM"))
     tx_mode_help_var = tk.StringVar(root, "AM uses a carrier with upper and lower sidebands.")
-    tx_power_var = tk.StringVar(root, "50")
+    tx_power_var = tk.StringVar(root, saved_text("station_dbm", "50"))
     tx_power_readout_var = tk.StringVar(root, "50 dBm")
-    tx_audio_source_var = tk.StringVar(root, "Microphone / line input")
-    tx_audio_device_var = tk.StringVar(root, "System default")
+    tx_audio_source_var = tk.StringVar(root, saved_text("audio_source", "Microphone / line input"))
+    tx_audio_device_var = tk.StringVar(root, saved_text("audio_device", "System default"))
     tx_audio_device_label_var = tk.StringVar(root, "Input device")
     tx_audio_input_var = tx_audio_device_var
-    tx_cw_text_var = tk.StringVar(root, "CQ CQ DE TXITY")
-    tx_cw_wpm_var = tk.StringVar(root, "18")
-    tx_cw_loop_var = tk.BooleanVar(root, True)
-    tx_allow_overlap_var = tk.BooleanVar(root, False)
-    tx_logo_url_var = tk.StringVar(root, "")
-    tx_details_var = tk.StringVar(root, "")
-    tx_page_layout_var = tk.StringVar(root, "")
+    tx_cw_text_var = tk.StringVar(root, saved_text("cw_text", "CQ CQ DE TXITY"))
+    tx_cw_wpm_var = tk.StringVar(root, saved_text("cw_wpm", "18"))
+    tx_cw_loop_var = tk.BooleanVar(root, saved_bool("cw_loop", True))
+    tx_allow_overlap_var = tk.BooleanVar(root, saved_bool("allow_overlap", False))
+    tx_logo_url_var = tk.StringVar(root, saved_text("station_logo_url", ""))
+    tx_details_var = tk.StringVar(root, saved_text("station_details", ""))
+    tx_page_layout_var = tk.StringVar(root, saved_text("station_page_layout", ""))
+
+    tx_fade_enabled_var = tk.BooleanVar(root, saved_bool("fade_enabled", False))
+    tx_fade_seconds_var = tk.StringVar(root, saved_text("fade_seconds", "15"))
+    tx_fade_min_dbm_var = tk.StringVar(root, saved_text("fade_min_dbm", "25"))
+    tx_fade_shape_var = tk.StringVar(root, saved_text("fade_shape", "0"))
+    tx_agc_enabled_var = tk.BooleanVar(root, saved_bool("agc_enabled", True))
+    tx_agc_target_var = tk.StringVar(root, saved_text("agc_target", "0.19"))
+    tx_mic_gain_var = tk.StringVar(root, saved_text("mic_gain_db", "0"))
+    tx_bass_var = tk.StringVar(root, saved_text("bass_db", "0"))
+    tx_treble_var = tk.StringVar(root, saved_text("treble_db", "0"))
+    tx_presence_var = tk.StringVar(root, saved_text("presence_db", "0"))
+    tx_drive_var = tk.StringVar(root, saved_text("drive", "0.015"))
+    tx_ssb_bandwidth_var = tk.StringVar(root, saved_text("ssb_bandwidth_hz", "10000"))
+    tx_ssb_low_cut_var = tk.StringVar(root, saved_text("ssb_low_cut_hz", "325"))
+    tx_ssb_high_cut_var = tk.StringVar(root, saved_text("ssb_high_cut_hz", "0"))
+    tx_am_bandwidth_var = tk.StringVar(root, saved_text("am_bandwidth_hz", "12000"))
+    tx_am_pre_emphasis_var = tk.BooleanVar(root, saved_bool("am_pre_emphasis", False))
     tx_status_var = tk.StringVar(root, "Not transmitting")
     tx_metrics_var = tk.StringVar(root, "Audio frames sent: 0")
     tx_audio_device_ids: dict[str, int | None] = {"System default": None}
+    tx_profile_initialized = "station_name" in saved_tx_settings
+
+    settings_save_after_id: str | None = None
+
+    def tx_settings_snapshot() -> dict[str, Any]:
+        return {
+            "station_name": tx_station_name_var.get(),
+            "description": tx_description_var.get(),
+            "frequency": tx_frequency_var.get(),
+            "mode": tx_mode_var.get(),
+            "station_dbm": tx_power_var.get(),
+            "audio_source": tx_audio_source_var.get(),
+            "audio_device": tx_audio_device_var.get(),
+            "cw_text": tx_cw_text_var.get(),
+            "cw_wpm": tx_cw_wpm_var.get(),
+            "cw_loop": tx_cw_loop_var.get(),
+            "allow_overlap": tx_allow_overlap_var.get(),
+            "station_logo_url": tx_logo_url_var.get(),
+            "station_details": tx_details_var.get(),
+            "station_page_layout": tx_page_layout_var.get(),
+            "fade_enabled": tx_fade_enabled_var.get(),
+            "fade_seconds": tx_fade_seconds_var.get(),
+            "fade_min_dbm": tx_fade_min_dbm_var.get(),
+            "fade_shape": tx_fade_shape_var.get(),
+            "agc_enabled": tx_agc_enabled_var.get(),
+            "agc_target": tx_agc_target_var.get(),
+            "mic_gain_db": tx_mic_gain_var.get(),
+            "bass_db": tx_bass_var.get(),
+            "treble_db": tx_treble_var.get(),
+            "presence_db": tx_presence_var.get(),
+            "drive": tx_drive_var.get(),
+            "ssb_bandwidth_hz": tx_ssb_bandwidth_var.get(),
+            "ssb_low_cut_hz": tx_ssb_low_cut_var.get(),
+            "ssb_high_cut_hz": tx_ssb_high_cut_var.get(),
+            "am_bandwidth_hz": tx_am_bandwidth_var.get(),
+            "am_pre_emphasis": tx_am_pre_emphasis_var.get(),
+        }
+
+    def save_tx_settings_now() -> None:
+        nonlocal settings_save_after_id
+        if settings_save_after_id is not None:
+            try:
+                root.after_cancel(settings_save_after_id)
+            except tk.TclError:
+                pass
+            settings_save_after_id = None
+        path = tx_settings_file()
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_text(
+                json.dumps(tx_settings_snapshot(), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            temporary.replace(path)
+        except OSError as exc:
+            print(f"[TXITPY] Settings could not be saved: {exc}", file=sys.stderr, flush=True)
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def schedule_tx_settings_save(*_args) -> None:
+        nonlocal settings_save_after_id
+        if settings_save_after_id is not None:
+            try:
+                root.after_cancel(settings_save_after_id)
+            except tk.TclError:
+                pass
+        settings_save_after_id = root.after(450, save_tx_settings_now)
+
+    tx_setting_variables = (
+        tx_station_name_var, tx_description_var, tx_frequency_var, tx_mode_var,
+        tx_power_var, tx_audio_source_var, tx_audio_device_var, tx_cw_text_var,
+        tx_cw_wpm_var, tx_cw_loop_var, tx_allow_overlap_var, tx_logo_url_var,
+        tx_details_var, tx_page_layout_var, tx_fade_enabled_var,
+        tx_fade_seconds_var, tx_fade_min_dbm_var, tx_fade_shape_var,
+        tx_agc_enabled_var, tx_agc_target_var, tx_mic_gain_var, tx_bass_var,
+        tx_treble_var, tx_presence_var, tx_drive_var, tx_ssb_bandwidth_var,
+        tx_ssb_low_cut_var, tx_ssb_high_cut_var, tx_am_bandwidth_var,
+        tx_am_pre_emphasis_var,
+    )
+    for setting_variable in tx_setting_variables:
+        setting_variable.trace_add("write", schedule_tx_settings_save)
 
     def update_tx_power_readout(*_args) -> None:
         try:
@@ -1052,7 +1163,6 @@ def build_app() -> None:
     tx_power_var.trace_add("write", update_tx_power_readout)
     update_tx_power_readout()
     tx_transmit_button: tk.Button | None = None
-    tx_profile_initialized = False
 
     metric_vars = {
         "Center frequency": center_var,
@@ -1481,6 +1591,7 @@ def build_app() -> None:
     def on_shutdown() -> None:
         transmitter.stop(wait=1.0)
         client.disconnect()
+        save_tx_settings_now()
         auth_manager.close()
         root.destroy()
 
