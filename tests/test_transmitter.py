@@ -304,7 +304,19 @@ class TransmitterProtocolTests(unittest.TestCase):
             treble_db=-2,
             presence_db=1,
             drive=0.02,
+            drm_service_label="BLABS Radio",
+            drm_service_id="0x123ABC",
+            drm_language="English",
+            drm_programme_type="Rock Music",
+            drm_iso_language="eng",
+            drm_iso_country="US",
         )
+        self.assertEqual(config["_txitpyDrmServiceLabel"], "BLABS Radio")
+        self.assertEqual(config["_txitpyDrmServiceId"], "0x123ABC")
+        self.assertEqual(config["_txitpyDrmLanguage"], "English")
+        self.assertEqual(config["_txitpyDrmProgrammeType"], "Rock Music")
+        self.assertEqual(config["_txitpyDrmIsoLanguage"], "eng")
+        self.assertEqual(config["_txitpyDrmIsoCountry"], "US")
         self.assertEqual(config["mode"], "DSB")
         self.assertEqual(config["_txitpyMode"], "DRM")
         self.assertEqual(config["amBandwidthHz"], 12_000)
@@ -316,6 +328,23 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["trebleDb"], 0)
         self.assertEqual(config["presenceDb"], 0)
         self.assertEqual(config["drive"], 0)
+
+    def test_drm_metadata_defaults_are_available_without_custom_values(self):
+        config = build_transmit_config(
+            station_name="Example DRM",
+            description="",
+            frequency="7 MHz",
+            mode="DRM",
+            station_dbm=40,
+            allow_overlap=False,
+            auth_token="test-token",
+        )
+        self.assertEqual(config["_txitpyDrmServiceLabel"], "")
+        self.assertEqual(config["_txitpyDrmServiceId"], "0xB30001")
+        self.assertEqual(config["_txitpyDrmLanguage"], "English")
+        self.assertEqual(config["_txitpyDrmProgrammeType"], "No programme type")
+        self.assertEqual(config["_txitpyDrmIsoLanguage"], "")
+        self.assertEqual(config["_txitpyDrmIsoCountry"], "")
 
     def test_mode_bandwidth_defaults_match_txity_transmit_config(self):
         self.assertEqual(mode_bandwidth_hz("DRM"), 12_000)
