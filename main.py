@@ -2341,9 +2341,9 @@ def build_app() -> None:
         mode_picker = ttk.Combobox(
             mode_frame,
             textvariable=tx_mode_var,
-            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "CW"),
+            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "DRM", "CW"),
             state="readonly",
-            height=7,
+            height=8,
         )
         mode_picker.pack(fill="x", ipady=5)
         style_tx_combobox(mode_picker)
@@ -2365,8 +2365,9 @@ def build_app() -> None:
                 "LSB": "LSB — lower sideband.",
                 "USB+C": "USB+C — upper sideband with carrier.",
                 "LSB+C": "LSB+C — lower sideband with carrier.",
-                "DSB": "DSB — double-sideband suppressed carrier.",
-                "CW": "CW — carrier only. The microphone and desktop audio sources are not used.",
+                "DSB": "DSB - double-sideband suppressed carrier.",
+                "DRM": "DRM30 - one audio service in a 4.5 kHz OFDM channel. Requires the Rust/CMake build tools on first use. Microphone and OGG, MP3, or FLAC playlists are supported.",
+                "CW": "CW - carrier only. The microphone and desktop audio sources are not used.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
             update_frequency_check()
