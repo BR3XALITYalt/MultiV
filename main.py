@@ -2902,6 +2902,7 @@ def build_app() -> None:
 
     def drain_events() -> None:
         nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows, current_page, tx_profile_initialized
+        nonlocal tx_negative_status_reason, tx_negative_status_count
         while True:
             try:
                 event = client.events.get_nowait()
@@ -2920,6 +2921,9 @@ def build_app() -> None:
 
             elif kind == "tx_state":
                 state = str(event.get("state") or "")
+                if state in {"starting", "stopped"}:
+                    tx_negative_status_reason = None
+                    tx_negative_status_count = 0
                 tx_status_var.set(str(event.get("text") or state))
                 update_transmit_button()
                 print(f"[TXITPY] Transmission state: {state}.", file=sys.stderr, flush=True)
