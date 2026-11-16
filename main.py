@@ -597,6 +597,7 @@ def build_app() -> None:
             on_click=lambda: shell.navigate("about"),
         )
         toolbar.add_spacer()
+        toolbar.add_widget(bs.ThemeToggle, variant="ghost")
         toolbar.add_widget(
             bs.Label,
             textsignal=connection,
@@ -619,31 +620,31 @@ def build_app() -> None:
                     bs.Button("Open TXITY", variant="outline", on_click=lambda: webbrowser.open(BASE_URL))
                 bs.Label("SERVER STATUS", font="label", accent="secondary")
                 with bs.Grid(columns=3, gap=16):
-                    with bs.Card(padding=18, gap=8, accent="primary"):
+                    with bs.Card(padding=18, gap=8):
                         bs.Label("Center frequency", font="label", accent="secondary")
                         bs.Label(textsignal=center, font="display-lg")
-                    with bs.Card(padding=18, gap=8, accent="primary"):
+                    with bs.Card(padding=18, gap=8):
                         bs.Label("Frequency range", font="label", accent="secondary")
                         bs.Label(textsignal=band, font="display-lg")
-                    with bs.Card(padding=18, gap=8, accent="primary"):
+                    with bs.Card(padding=18, gap=8):
                         bs.Label("Sample rate", font="label", accent="secondary")
                         bs.Label(textsignal=sample_rate, font="display-lg")
-                    with bs.Card(padding=18, gap=8, accent="primary"):
+                    with bs.Card(padding=18, gap=8):
                         bs.Label("Active transmitters", font="label", accent="secondary")
                         bs.Label(textsignal=transmitters, font="display-lg")
-                    with bs.Card(padding=18, gap=8, accent="primary"):
+                    with bs.Card(padding=18, gap=8):
                         bs.Label("Connected clients", font="label", accent="secondary")
                         bs.Label(textsignal=clients, font="display-lg")
-                    with bs.Card(padding=18, gap=8, accent="primary"):
+                    with bs.Card(padding=18, gap=8):
                         bs.Label("Total sessions", font="label", accent="secondary")
                         bs.Label(textsignal=sessions, font="display-lg")
-                    with bs.Card(padding=18, gap=8, accent="primary"):
+                    with bs.Card(padding=18, gap=8):
                         bs.Label("Web audio clients", font="label", accent="secondary")
                         bs.Label(textsignal=web_audio_clients, font="display-lg")
-                    with bs.Card(padding=18, gap=8, accent="primary"):
+                    with bs.Card(padding=18, gap=8):
                         bs.Label("SDR++ streaming", font="label", accent="secondary")
                         bs.Label(textsignal=sdrpp_streaming_clients, font="display-lg")
-                with bs.Card(padding=18, gap=10, accent="primary"):
+                with bs.Card(padding=18, gap=10):
                     bs.Label(textsignal=summary, font="body-lg", wrap_width=760)
                     bs.Label(textsignal=updated, accent="secondary", font="caption")
 
@@ -654,7 +655,7 @@ def build_app() -> None:
                     font="body-lg",
                     accent="secondary",
                 )
-                with bs.Card(padding=18, gap=14, accent="primary"):
+                with bs.Card(padding=18, gap=14):
                     bs.Label(
                         textsignal=station_status,
                         accent="secondary",
@@ -699,7 +700,7 @@ def build_app() -> None:
                     font="body-lg",
                     accent="secondary",
                 )
-                with bs.Card(padding=22, gap=14, accent="primary"):
+                with bs.Card(padding=22, gap=14):
                     bs.Label(
                         textsignal=auth_account,
                         font="heading-md",
