@@ -1788,7 +1788,7 @@ def build_app() -> None:
                 station_dbm=tx_power_var.get(),
                 allow_overlap=tx_allow_overlap_var.get(),
                 auth_token=client.auth_token,
-                    cw_text=tx_cw_text_var.get(),
+                cw_text=tx_cw_text_var.get(),
                 cw_wpm=tx_cw_wpm_var.get(),
                 cw_loop=tx_cw_loop_var.get(),
                 station_logo_url=tx_logo_url_var.get(),
