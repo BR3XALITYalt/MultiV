@@ -1750,7 +1750,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(14, 6))
         make_label(
             card,
-            "Your Discord account is required to use the TXITPY desktop app. 
+            "Your Discord account is required to use the TXITPY desktop app. "
             "TXITPY checks your saved session automatically on later launches.",
             font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
