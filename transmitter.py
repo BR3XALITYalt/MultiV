@@ -872,6 +872,15 @@ class TxityTransmitter:
             key: value for key, value in config.items()
             if not key.startswith("_txitpy")
         }
+        self.events.put({
+            "kind": "tx_log",
+            "text": (
+                "TXITY config request: "
+                f"rfHz={server_config.get('rfHz')}, "
+                f"mode={server_config.get('mode')}, "
+                f"allowOverlapVisitors={server_config.get('allowOverlapVisitors')}."
+            ),
+        })
         control_wait_reported = False
 
         def wait_for_control_connection() -> bool:
@@ -1300,7 +1309,10 @@ class TxityTransmitter:
                         self.events.put({
                             "kind": "tx_state",
                             "state": "transmitting",
-                            "text": "Transmitting CW control" if not needs_audio else f"Transmitting {source_name} to TXITY.",
+                            "text": (
+                                "PTT requested; waiting for TXITY status confirmation."
+                                if needs_audio else "PTT requested; waiting for TXITY status confirmation."
+                            ),
                         })
                         transmission_announced = True
                     else:
