@@ -12,7 +12,7 @@ This release provides a read-only desktop viewer with the official TXITY Discord
 
 Discord sign-in is required before the dashboard can be used. On startup, TXITPY checks the existing app-specific WebView2 profile in a hidden browser window. If TXITY still has a valid saved session, the dashboard unlocks automatically; otherwise the sign-in page remains open. The browser profile keeps the website's normal session across launches. TXITPY keeps the active token in memory and does not write it to an application settings file or log it. Disconnect clears the saved browser profile. The only authenticated control message sent by the desktop client is TXITY's `discordLogout` notification when the user disconnects. It never sends transmitter configuration, push-to-talk commands, or audio frames.
 
-The interface uses a blue Material 3 tonal-spot color scheme with a `#0061A4` source color. `material_theme.py` keeps the Material color-role names and light/dark schemes together, then maps the primary, secondary, tertiary, error, and surface roles to Bootstack's theme tokens.
+The desktop interface uses a blue Material 3 Expressive-inspired scheme based on TeleDrive's light and dark palettes: blue primary (`#1B6EF3`), cyan tertiary (`#00677E`), and layered Material-style surfaces. The colors are mapped onto Bootstack's native semantic accents and surface tokens. Content cards use neutral layered surfaces; blue is reserved for primary actions and navigation. The toolbar includes a light/dark theme switch. Color values are adapted from [TeleDrive](https://github.com/Mahmud0808/TeleDrive), which uses Kotlin Multiplatform and Compose Material 3 Expressive.
 
 ## Requirements
 
