@@ -7,15 +7,15 @@ A Python desktop companion for the TXITY simulated radio-broadcast service, buil
 This release provides a read-only desktop viewer with the official TXITY Discord sign-in flow:
 
 - Live server status and a searchable public station directory.
-- TXITY's official Discord OAuth flow opened in the system browser, followed by a one-use loopback callback into the desktop app.
+- TXITY's official Discord OAuth flow in an embedded browser window, followed by a one-use loopback callback into the desktop app.
 - The authenticated status WebSocket receives the session token through TXITY's `authToken` query parameter.
 
-The system browser keeps the website's normal session in its own browser profile. TXITPY keeps the token in memory and does not write it to an application settings file or log it. The only authenticated control message sent by the desktop client is TXITY's `discordLogout` notification when the user disconnects. It never sends transmitter configuration, push-to-talk commands, or audio frames.
+The embedded browser uses an app-specific WebView2 profile to keep TXITY's normal website session. TXITPY keeps the active token in memory and does not write it to an application settings file or log it. Disconnect clears the embedded browser profile. The only authenticated control message sent by the desktop client is TXITY's `discordLogout` notification when the user disconnects. It never sends transmitter configuration, push-to-talk commands, or audio frames.
 
 ## Requirements
 
 - Python 3.12 or newer
-- A system web browser capable of opening TXITY's Discord sign-in page
+- Microsoft Edge WebView2 Runtime on Windows
 
 Install the dependencies:
 
@@ -37,4 +37,4 @@ python -m unittest discover -s tests -v
 
 ## Notes
 
-The app fetches public data from `https://txity.radiodiscussion.org`. If the service changes its page markup or status protocol, station extraction or live status may stop working. Discord sign-in is enabled only when TXITY reports `secureDiscordAuth: true`. It also depends on TXITY allowing the `return` parameter to point to the app's temporary `127.0.0.1` callback. That callback is bound to loopback only, protected by a single-use random state value, expires after five minutes, and shuts down after use. The supplied frontend code establishes the token fragment format, but it does not establish the server's redirect allowlist; that backend behavior still needs live verification.
+The app fetches public data from `https://txity.radiodiscussion.org`. If the service changes its page markup or status protocol, station extraction or live status may stop working. Discord sign-in is enabled only when TXITY reports `secureDiscordAuth: true`. TXITY currently returns the signed session to its own homepage, so the embedded browser waits for TXITY's frontend to store the session in same-origin browser storage. It reads that value only on `https://txity.radiodiscussion.org` and forwards it through the app's temporary loopback callback. The callback is bound to loopback only, protected by a single-use random state value, expires after five minutes, and shuts down after use.
