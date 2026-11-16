@@ -6,6 +6,9 @@ from main import (
     format_frequency,
     parse_stations,
     parse_users_listing,
+    normalize_media_url,
+    discord_avatar_url,
+    _clean_station_comments,
 )
 
 
@@ -133,6 +136,54 @@ class StationParserTests(unittest.TestCase):
         self.assertEqual(record["comments"][0]["text"], "Clear signal.")
         self.assertEqual(record["page_layout"]["height"], 520)
         self.assertEqual(record["page_layout"]["blocks"][0]["text"], "Welcome to the station.")
+
+    def test_protocol_relative_and_object_media_urls_are_normalized(self):
+        self.assertEqual(
+            normalize_media_url("//cdn.discordapp.com/avatars/123/avatar.png?size=128"),
+            "https://cdn.discordapp.com/avatars/123/avatar.png?size=128",
+        )
+        self.assertEqual(
+            normalize_media_url({"url": "/uploads/stations/example/logo.png"}),
+            "https://txity.radiodiscussion.org/uploads/stations/example/logo.png",
+        )
+        self.assertEqual(normalize_media_url("//untrusted.example/image.png"), "")
+
+    def test_discord_avatar_hash_is_resolved_from_user_id(self):
+        self.assertEqual(
+            discord_avatar_url("a_abcdef123456", "123456789012345678"),
+            "https://cdn.discordapp.com/avatars/123456789012345678/a_abcdef123456.gif?size=128",
+        )
+
+    def test_comment_avatar_accepts_nested_author_and_avatar_aliases(self):
+        comments = _clean_station_comments([{
+            "message": "Good signal.",
+            "author": {
+                "id": "123456789012345678",
+                "username": "listener",
+                "avatar": "a_abcdef123456",
+            },
+            "createdAt": "2026-11-15T18:00:00Z",
+        }])
+        self.assertEqual(len(comments), 1)
+        self.assertEqual(comments[0]["author"], "listener")
+        self.assertEqual(comments[0]["text"], "Good signal.")
+        self.assertEqual(
+            comments[0]["avatar_url"],
+            "https://cdn.discordapp.com/avatars/123456789012345678/a_abcdef123456.gif?size=128",
+        )
+
+    def test_details_can_supply_missing_station_description(self):
+        _metrics, stations = parse_users_listing({
+            "stations": [{
+                "sessionId": "station-details",
+                "name": "Details Radio",
+                "details": {"description": "A longer station description."},
+            }],
+        })
+        record = stations[0].as_record()
+        self.assertEqual(record["description"], "A longer station description.")
+        self.assertEqual(record["description_source"], "details")
+        self.assertEqual(record["details_text"], "A longer station description.")
 
     def test_users_json_uses_frequency_hz_when_formatted_frequency_is_missing(self):
         _metrics, stations = parse_users_listing({
