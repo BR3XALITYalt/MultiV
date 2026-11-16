@@ -1011,6 +1011,19 @@ def build_app() -> None:
         value = saved_tx_settings.get(key, default)
         return value if isinstance(value, bool) else default
 
+    fade_shape_names = {
+        "0": "Smooth QSB dip",
+        "1": "Linear triangle dip",
+        "2": "Deep notch fade",
+        "3": "Fast flutter / multipath",
+        "4": "Rolling multi-rate QSB",
+        "5": "Random QSB",
+    }
+    saved_fade_shape_id = saved_text("fade_shape", "0").split("-", 1)[0].strip()
+    if saved_fade_shape_id not in fade_shape_names:
+        saved_fade_shape_id = "0"
+    fade_shape_saved_value = f"{saved_fade_shape_id} - {fade_shape_names[saved_fade_shape_id]}"
+
     # Tk variables live for the lifetime of the root, even when page widgets
     # are rebuilt after navigation or a theme change.
     connection_var = tk.StringVar(root, "Disconnected")
@@ -1052,7 +1065,7 @@ def build_app() -> None:
     tx_fade_enabled_var = tk.BooleanVar(root, saved_bool("fade_enabled", False))
     tx_fade_seconds_var = tk.StringVar(root, saved_text("fade_seconds", "15"))
     tx_fade_min_dbm_var = tk.StringVar(root, saved_text("fade_min_dbm", "25"))
-    tx_fade_shape_var = tk.StringVar(root, saved_text("fade_shape", "0"))
+    tx_fade_shape_var = tk.StringVar(root, fade_shape_saved_value)
     tx_agc_enabled_var = tk.BooleanVar(root, saved_bool("agc_enabled", True))
     tx_agc_target_var = tk.StringVar(root, saved_text("agc_target", "0.19"))
     tx_mic_gain_var = tk.StringVar(root, saved_text("mic_gain_db", "0"))
@@ -1068,7 +1081,7 @@ def build_app() -> None:
     tx_status_var = tk.StringVar(root, "Not transmitting")
     tx_metrics_var = tk.StringVar(root, "Audio frames sent: 0")
     tx_audio_device_ids: dict[str, int | None] = {"System default": None}
-    tx_profile_initialized = "station_name" in saved_tx_settings
+    tx_profile_initialized = bool(saved_text("station_name", "").strip())
 
     settings_save_after_id: str | None = None
 
@@ -2103,7 +2116,7 @@ def build_app() -> None:
                 fade_enabled=tx_fade_enabled_var.get(),
                 fade_seconds=tx_fade_seconds_var.get(),
                 fade_min_dbm=tx_fade_min_dbm_var.get(),
-                fade_shape=tx_fade_shape_var.get(),
+                fade_shape=tx_fade_shape_var.get().split("-", 1)[0].strip(),
                 agc_enabled=tx_agc_enabled_var.get(),
                 agc_target=tx_agc_target_var.get(),
                 mic_gain_db=tx_mic_gain_var.get(),
@@ -2408,26 +2421,22 @@ def build_app() -> None:
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 5))
+        fade_shape_values = tuple(
+            f"{shape_id} - {shape_name}" for shape_id, shape_name in fade_shape_names.items()
+        )
         fade_shape_picker = ttk.Combobox(
             fade_shape_frame,
             textvariable=tx_fade_shape_var,
-            values=("0", "1", "2", "3", "4", "5"),
+            values=fade_shape_values,
             state="readonly",
             height=6,
         )
         fade_shape_picker.pack(fill="x", ipady=5)
         style_tx_combobox(fade_shape_picker)
-        fade_shape_names = {
-            "0": "Smooth QSB dip",
-            "1": "Linear triangle dip",
-            "2": "Deep notch fade",
-            "3": "Fast flutter / multipath",
-            "4": "Rolling multi-rate QSB",
-            "5": "Random QSB",
-        }
         fade_shape_help_var = tk.StringVar(root)
         def update_fade_shape_help(_event=None) -> None:
-            fade_shape_help_var.set(fade_shape_names.get(tx_fade_shape_var.get(), "Choose a fade curve."))
+            selected_shape_id = tx_fade_shape_var.get().split("-", 1)[0].strip()
+            fade_shape_help_var.set(fade_shape_names.get(selected_shape_id, "Choose a fade curve."))
         fade_shape_picker.bind("<<ComboboxSelected>>", update_fade_shape_help)
         update_fade_shape_help()
         make_label(
