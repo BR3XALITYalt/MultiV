@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import queue
 import random
 import re
@@ -20,15 +21,49 @@ SAMPLE_RATE_HZ = 48_000
 BATCH_SAMPLES = 512
 FRAME_BYTES = BATCH_SAMPLES * 4
 AUDIO_QUEUE_FRAMES = 32
+PLAYLIST_AUDIO_QUEUE_FRAMES = 256
+PLAYLIST_PREROLL_FRAMES = 96
+PLAYLIST_READ_FRAMES = 8_192
 AUDIO_FRAME_INTERVAL_SECONDS = BATCH_SAMPLES / SAMPLE_RATE_HZ
 
 
-def playlist_frame_wait_seconds(last_frame_sent_at: float | None, now: float) -> float:
-    """Return the delay needed to send playlist frames at the configured sample rate."""
-    if last_frame_sent_at is None:
+def playlist_frame_wait_seconds(next_frame_deadline: float | None, now: float) -> float:
+    """Return the time remaining before the next playlist packet should be sent."""
+    if next_frame_deadline is None:
         return 0.0
-    elapsed = max(0.0, now - last_frame_sent_at)
-    return max(0.0, AUDIO_FRAME_INTERVAL_SECONDS - elapsed)
+    return max(0.0, next_frame_deadline - now)
+
+
+def next_playlist_frame_deadline(
+    current_deadline: float | None,
+    now: float,
+) -> float:
+    """Advance the absolute playback clock without accumulating scheduler drift."""
+    if current_deadline is None:
+        return now + AUDIO_FRAME_INTERVAL_SECONDS
+    next_deadline = current_deadline + AUDIO_FRAME_INTERVAL_SECONDS
+    if now >= next_deadline:
+        return now + AUDIO_FRAME_INTERVAL_SECONDS
+    return next_deadline
+
+
+def begin_windows_audio_timer_resolution():
+    """Request 1 ms timer granularity while playlist audio is being streamed."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+
+        winmm = ctypes.WinDLL("winmm")
+        winmm.timeBeginPeriod.argtypes = [ctypes.c_uint]
+        winmm.timeBeginPeriod.restype = ctypes.c_uint
+        winmm.timeEndPeriod.argtypes = [ctypes.c_uint]
+        winmm.timeEndPeriod.restype = ctypes.c_uint
+        if winmm.timeBeginPeriod(1) == 0:
+            return winmm
+    except (AttributeError, OSError):
+        return None
+    return None
 PTT_CONFIRMATION_GRACE_SECONDS = 4.0
 SUPPORTED_MODES = ("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "CW")
 DEFAULT_MODE_BANDWIDTH_HZ = {
@@ -464,7 +499,12 @@ class TxityTransmitter:
             if self._starting or self._active or (self._thread and self._thread.is_alive()):
                 raise RuntimeError("A transmission is already starting or active.")
             self._stop_event.clear()
-            self._audio_queue = queue.Queue(maxsize=AUDIO_QUEUE_FRAMES)
+            queue_frames = (
+                PLAYLIST_AUDIO_QUEUE_FRAMES
+                if selected_source == "playlist"
+                else AUDIO_QUEUE_FRAMES
+            )
+            self._audio_queue = queue.Queue(maxsize=queue_frames)
             self._starting = True
             self._active = False
             self._ptt_sent = False
@@ -523,6 +563,9 @@ class TxityTransmitter:
         playlist_thread: threading.Thread | None = None
         audio_finished = threading.Event()
         playlist_reached_end = False
+        playlist_underruns = 0
+        playlist_next_frame_deadline: float | None = None
+        audio_timer_resolution = None
         ptt_sent = False
         audio_thread_error: list[str] = []
         audio_queue = self._audio_queue
@@ -618,7 +661,6 @@ class TxityTransmitter:
 
         def start_playlist_worker() -> threading.Thread:
             def stream_playlist() -> None:
-                completed = False
                 previous_file: str | None = None
                 rng = random.Random()
                 try:
@@ -653,7 +695,7 @@ class TxityTransmitter:
                                 )
                                 while not self._stop_event.is_set():
                                     block = source.read(
-                                        BATCH_SAMPLES * 4,
+                                        PLAYLIST_READ_FRAMES,
                                         dtype="float32",
                                         always_2d=True,
                                     )
@@ -675,7 +717,6 @@ class TxityTransmitter:
                             wait_for_space=True,
                             flush=True,
                         )
-                        completed = True
                 except Exception as exc:
                     details = _safe_error(exc)
                     audio_thread_error[:] = [details]
@@ -689,8 +730,6 @@ class TxityTransmitter:
                     })
                 finally:
                     audio_finished.set()
-                    if completed:
-                        self.events.put({"kind": "tx_playlist_finished"})
 
             thread = threading.Thread(
                 target=stream_playlist,
@@ -779,6 +818,40 @@ class TxityTransmitter:
                         "text": "Microphone opened at 48 kHz, mono Float32; sending 512-sample batches.",
                     })
 
+            if needs_audio and audio_source == "playlist":
+                audio_timer_resolution = begin_windows_audio_timer_resolution()
+                playlist_thread = start_playlist_worker()
+                self.events.put({
+                    "kind": "tx_log",
+                    "text": "Buffering playlist audio before starting the stream.",
+                })
+                buffer_deadline = time.monotonic() + 12.0
+                while not self._stop_event.is_set():
+                    if audio_thread_error:
+                        raise RuntimeError(audio_thread_error[0])
+                    if (
+                        audio_queue.qsize() >= PLAYLIST_PREROLL_FRAMES
+                        or audio_finished.is_set()
+                    ):
+                        break
+                    if time.monotonic() >= buffer_deadline:
+                        raise TimeoutError(
+                            "Playlist audio did not fill its playback buffer within 12 seconds."
+                        )
+                    self._stop_event.wait(0.02)
+
+                if self._stop_event.is_set():
+                    return
+                if audio_queue.empty():
+                    raise RuntimeError("The playlist did not produce any playable audio samples.")
+                self.events.put({
+                    "kind": "tx_log",
+                    "text": (
+                        f"Playlist buffer ready: {audio_queue.qsize()} audio frames "
+                        f"({audio_queue.qsize() * AUDIO_FRAME_INTERVAL_SECONDS:.2f} seconds)."
+                    ),
+                })
+
             if self._stop_event.is_set():
                 return
 
@@ -801,9 +874,6 @@ class TxityTransmitter:
                 "state": "transmitting",
                 "text": "Transmitting CW control" if not needs_audio else f"Transmitting {source_name} to TXITY.",
             })
-            if needs_audio and audio_source == "playlist":
-                playlist_thread = start_playlist_worker()
-
             while not self._stop_event.is_set():
                 if not self.client.control_connected():
                     raise ConnectionError("TXITY control connection was lost during transmission.")
@@ -815,30 +885,37 @@ class TxityTransmitter:
                     continue
 
                 try:
-                    frame = audio_queue.get(timeout=0.2)
+                    frame = audio_queue.get(
+                        timeout=0.05 if audio_source == "playlist" else 0.2
+                    )
                 except queue.Empty:
                     if audio_source == "playlist" and audio_finished.is_set():
                         if audio_thread_error:
                             raise RuntimeError(audio_thread_error[0])
                         playlist_reached_end = True
                         break
+                    if audio_source == "playlist":
+                        playlist_underruns += 1
                     continue
 
                 if audio_source == "playlist":
                     wait_seconds = playlist_frame_wait_seconds(
-                        playlist_last_frame_sent_at,
-                        time.monotonic(),
+                        playlist_next_frame_deadline,
+                        time.perf_counter(),
                     )
                     if wait_seconds > 0 and self._stop_event.wait(wait_seconds):
                         break
                     if self._stop_event.is_set():
                         break
 
-                now = time.monotonic()
-                if audio_source == "playlist":
-                    playlist_last_frame_sent_at = now
+                now = time.perf_counter()
                 audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
                 send_count += 1
+                if audio_source == "playlist":
+                    playlist_next_frame_deadline = next_playlist_frame_deadline(
+                        playlist_next_frame_deadline,
+                        now,
+                    )
                 now = time.monotonic()
                 if now - last_metrics_at >= 1.0:
                     self.events.put({
@@ -846,6 +923,7 @@ class TxityTransmitter:
                         "frames_sent": send_count,
                         "frames_dropped": drop_count,
                         "queue_depth": audio_queue.qsize(),
+                        "playlist_underruns": playlist_underruns,
                     })
                     last_metrics_at = now
 
@@ -895,6 +973,15 @@ class TxityTransmitter:
                     audio_socket.close()
                 except Exception:
                     pass
+
+            if audio_timer_resolution is not None:
+                try:
+                    audio_timer_resolution.timeEndPeriod(1)
+                except Exception:
+                    pass
+
+            if playlist_completed:
+                self.events.put({"kind": "tx_playlist_finished"})
 
             with self._lock:
                 self._active = False
