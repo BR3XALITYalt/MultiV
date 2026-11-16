@@ -11,6 +11,7 @@ TXITPY is the desktop app. TXITY refers to the website and simulated service tha
 - Live configuration and push-to-talk control through TXITY's authenticated control WebSocket.
 - Microphone or Windows desktop-audio input sent as mono Float32 PCM at 48 kHz in 512-sample frames.
 - Windows WASAPI loopback capture. Stereo playback is downmixed to mono and resampled to 48 kHz.
+- Audio playlists with multi-file and recursive folder import, MP3/WAV/FLAC/OGG/AIFF playback, shuffle, and loop controls.
 - CW control mode without an audio stream.
 - Signal fading, AGC, microphone gain, tone controls, SSB bandwidth and cuts, and AM bandwidth and pre-emphasis.
 - Local autosave for station identity and transmit preferences.
@@ -65,4 +66,4 @@ The Stations page shows refresh results and fetch errors. If TXITY changes its J
 
 TXITY returns the signed Discord session to its homepage. The embedded browser waits for TXITY's frontend to store the session in same-origin browser storage. TXITPY reads the token only on `https://txity.radiodiscussion.org` and sends it through a temporary loopback callback. The callback listens on loopback, uses a single-use random state value, expires after five minutes, and closes after use.
 
-MP3 file playback and the browser's advanced audio source controls are not implemented.
+Playlist audio uses SoundFile to decode supported local audio files before TXITPY converts them to the 48 kHz mono stream.
