@@ -18,7 +18,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from discord_auth import DiscordAuthBrowser, clean_discord_user, is_auth_token
+from discord_auth import DiscordAuthManager, clean_discord_user, is_auth_token
 
 BASE_URL = "https://txity.radiodiscussion.org"
 CONTROL_URL = "wss://txity.radiodiscussion.org/ws/control"
@@ -171,7 +171,17 @@ class TxityClient:
                 return
             self.auth_token = clean_token
             self.discord_user = clean_user
-            active_socket = self.ws
+                active_socket = self.ws
+            had_auth = bool(self.auth_token)
+            self.auth_token = clean_token
+            self.discord_user = clean_user
+
+        if active_socket is not None and had_auth and not clean_token:
+            try:
+                if active_socket.sock and active_socket.sock.connected:
+                    active_socket.send(json.dumps({"type": "discordLogout", "discordLogout": True}))
+            except Exception:
+                pass
 
         self.reconnect_event.set()
         if active_socket is not None:
@@ -314,7 +324,7 @@ def build_app() -> None:
     import bootstack as bs
 
     client = TxityClient()
-    auth_browser = DiscordAuthBrowser(client.events)
+    auth_manager = DiscordAuthManager(client.events)
     auth_account = bs.Signal("Not signed in to Discord")
     auth_browser_status = bs.Signal("The TXITY sign-in browser has not been opened.")
     connection = bs.Signal("Disconnected")
@@ -326,9 +336,14 @@ def build_app() -> None:
     updated = bs.Signal("Waiting for server data")
     summary = bs.Signal("Connect to load public station and server information.")
 
+    def disconnect_discord() -> None:
+        client.set_discord_auth(None, None)
+        auth_account.set("Not connected to Discord")
+        auth_browser_status.set("TXITPY disconnected its Discord session. The system browser may still be signed in.")
+
     def shutdown() -> None:
         client.disconnect()
-        auth_browser.close()
+        auth_manager.close()
 
     with bs.AppShell(
         title="TXITPY | TXITY Desktop",
@@ -400,20 +415,20 @@ def build_app() -> None:
                 bs.Label("Discord account", font="heading-lg")
                 bs.Label(textsignal=auth_account, font="heading-md", accent="primary")
                 bs.Label(textsignal=auth_browser_status, accent="secondary")
-                bs.Button("Open TXITY sign-in browser", accent="primary", on_click=auth_browser.open)
-                bs.Button("Sign out of Discord", variant="outline", on_click=auth_browser.logout)
+                bs.Button("Sign in with Discord", accent="primary", on_click=auth_manager.start_login)
+                bs.Button("Disconnect Discord", variant="outline", on_click=disconnect_discord)
                 bs.Divider()
                 bs.Label("Connection", font="heading-md")
                 bs.Label(BASE_URL, accent="primary")
                 bs.Label(
-                    "TXITPY opens TXITY itself in an embedded browser. Discord OAuth, the redirect, "
-                    "token validation, and sign-out are handled by TXITY's own page.",
+                    "TXITPY opens TXITY's official Discord sign-in route in your system browser. "
+                    "A one-use loopback callback returns the signed token to this app.",
                     wrap_width=760,
                 )
                 bs.Label(
-                    "The browser keeps the website's normal session in its own browser profile. "
-                    "TXITPY keeps the token in memory and supplies it to the status WebSocket; it "
-                    "does not write the token to a settings file or log it.",
+                    "The system browser keeps TXITY's normal website session. TXITPY keeps the "
+                    "returned token in memory and supplies it to the status WebSocket; it does not "
+                    "write the token to a settings file or log it.",
                     wrap_width=760,
                 )
                 bs.Label(
@@ -422,7 +437,7 @@ def build_app() -> None:
                     wrap_width=760,
                 )
                 bs.Button(
-                    "Open TXITY in default browser",
+                    "Open TXITY website",
                     variant="outline",
                     on_click=lambda: webbrowser.open(BASE_URL),
                 )
@@ -479,11 +494,11 @@ def build_app() -> None:
                         client.set_discord_auth(token, user)
                         display_name = (user or {}).get("globalName") or (user or {}).get("username") or "Discord account"
                         auth_account.set(f"Signed in as {display_name}")
-                        auth_browser_status.set("Discord session received from TXITY's official sign-in page.")
+                        auth_browser_status.set("TXITY returned a signed session through the local callback.")
                 elif kind == "auth_signed_out":
                     client.set_discord_auth(None, None)
                     auth_account.set("Not signed in to Discord")
-                    auth_browser_status.set("The TXITY browser signed out of Discord.")
+                    auth_browser_status.set("TXITY's Discord session was disconnected.")
                 elif kind == "auth_browser":
                     auth_browser_status.set(str(event.get("text", "")))
                 elif kind == "auth_error":
