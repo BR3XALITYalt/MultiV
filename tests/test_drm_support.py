@@ -12,6 +12,8 @@ from drm_support import (
     DECDRM_COMMIT,
     DECDRM_VERSION,
     DRM_PLAYLIST_EXTENSIONS,
+    DRM_LANGUAGES,
+    DRM_PROGRAMME_TYPES,
     VISUAL_STUDIO_BUILD_TOOLS_LABEL,
     VISUAL_STUDIO_BUILD_TOOLS_URL,
     VISUAL_STUDIO_WORKLOAD,
@@ -194,6 +196,8 @@ class DRMConfigurationTests(unittest.TestCase):
         self.assertEqual(config["output"]["if_hz"], 1500.0)
         self.assertEqual(len(config["service"]), 1)
         service = config["service"][0]
+        self.assertEqual(service["language"], "English")
+        self.assertEqual(service["programme_type"], "No programme type")
         self.assertEqual(service["audio"]["codec"], "he-aac")
         self.assertEqual(service["audio"]["core_rate"], 12000)
         self.assertFalse(service["audio"]["stereo"])
@@ -201,6 +205,69 @@ class DRMConfigurationTests(unittest.TestCase):
             service["audio"]["input"]["url"],
             "http://127.0.0.1:12345/playlist.m3u",
         )
+
+    def test_writes_custom_drm_service_metadata(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = write_drm_station_config(
+                Path(folder) / "station.toml",
+                station_name="The BLABS Radio",
+                service_label="BLABS Radio",
+                service_id="0x123ABC",
+                language="English",
+                programme_type="Rock Music",
+                iso_language="eng",
+                iso_country="us",
+                input_device_name="USB Microphone",
+            )
+            config = tomllib.loads(path.read_text(encoding="utf-8"))
+
+        service = config["service"][0]
+        self.assertEqual(service["label"], "BLABS Radio")
+        self.assertEqual(service["id"], 0x123ABC)
+        self.assertEqual(service["language"], "English")
+        self.assertEqual(service["programme_type"], "Rock Music")
+        self.assertEqual(service["iso_language"], "eng")
+        self.assertEqual(service["iso_country"], "US")
+
+    def test_drm_metadata_defaults_do_not_claim_pop_music(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = write_drm_station_config(
+                Path(folder) / "station.toml",
+                station_name="Example Radio",
+                input_device_name="default",
+            )
+            service = tomllib.loads(path.read_text(encoding="utf-8"))["service"][0]
+
+        self.assertEqual(service["label"], "Example Radio")
+        self.assertEqual(service["id"], 0xB30001)
+        self.assertEqual(service["language"], "English")
+        self.assertEqual(service["programme_type"], "No programme type")
+        self.assertNotIn("iso_language", service)
+        self.assertNotIn("iso_country", service)
+
+    def test_rejects_invalid_drm_metadata(self):
+        invalid_values = (
+            {"service_id": "0x1000000"},
+            {"service_id": "not-hex"},
+            {"language": "Klingon"},
+            {"programme_type": "Dubstep"},
+            {"iso_language": "english"},
+            {"iso_country": "USA"},
+        )
+        for options in invalid_values:
+            with self.subTest(options=options), tempfile.TemporaryDirectory() as folder:
+                with self.assertRaises(ValueError):
+                    write_drm_station_config(
+                        Path(folder) / "station.toml",
+                        station_name="Test",
+                        input_device_name="default",
+                        **options,
+                    )
+
+    def test_drm_metadata_options_match_decdrm_tables(self):
+        self.assertIn("English", DRM_LANGUAGES)
+        self.assertIn("Rock Music", DRM_PROGRAMME_TYPES)
+        self.assertIn("No programme type", DRM_PROGRAMME_TYPES)
 
     def test_writes_microphone_device_input(self):
         with tempfile.TemporaryDirectory() as folder:
