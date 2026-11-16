@@ -27,6 +27,7 @@ FRAME_BYTES = BATCH_SAMPLES * 4
 AUDIO_QUEUE_FRAMES = 32
 PLAYLIST_AUDIO_QUEUE_FRAMES = 512
 PLAYLIST_PREROLL_FRAMES = 256
+DRM_PREROLL_FRAMES = 94
 PLAYLIST_READ_FRAMES = 8_192
 AUDIO_FRAME_INTERVAL_SECONDS = BATCH_SAMPLES / SAMPLE_RATE_HZ
 LIVE_AUDIO_SILENCE_GRACE_SECONDS = 0.1
@@ -825,6 +826,67 @@ class TxityTransmitter:
         try:
             if self._stop_event.is_set():
                 return
+
+            drm_config_path: Path | None = None
+            encoder_path: Path | None = None
+            if drm_mode:
+                self.events.put({
+                    "kind": "tx_log",
+                    "text": "Preparing the DRM30 encoder and one-service channel.",
+                })
+                if audio_source == "loopback":
+                    raise RuntimeError(
+                        "DRM mode currently supports microphone and playlist inputs, not desktop audio loopback."
+                    )
+                encoder_path = ensure_drm_encoder(
+                    on_log=lambda line: self.events.put({"kind": "tx_log", "text": line})
+                )
+                drm_temp_dir = tempfile.TemporaryDirectory(prefix="txitpy-drm-")
+                drm_temp_path = Path(drm_temp_dir.name)
+                drm_stop_path = drm_temp_path / "stop"
+
+                if audio_source == "playlist":
+                    supported = [
+                        item for item in playlist_files
+                        if Path(item).suffix.casefold() in {".ogg", ".mp3", ".flac"}
+                    ]
+                    if len(supported) != len(playlist_files):
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": "DRM playlists skip WAV and AIFF files. OGG, MP3, and FLAC are supported.",
+                        })
+                    drm_playlist_server = LocalDRMPlaylistServer(
+                        supported,
+                        shuffle=playlist_shuffle,
+                        loop=playlist_loop,
+                        on_track=lambda path, index, count: self.events.put({
+                            "kind": "tx_playlist_track",
+                            "path": path,
+                            "index": index,
+                            "count": count,
+                        }),
+                    )
+                    drm_config_path = write_drm_station_config(
+                        drm_temp_path / "station.toml",
+                        station_name=config.get("stationName", "TXITPY"),
+                        playlist_url=drm_playlist_server.url,
+                    )
+                else:
+                    import sounddevice
+
+                    if input_device is None:
+                        input_name = "default"
+                    else:
+                        input_info = sounddevice.query_devices(input_device, "input")
+                        input_name = str(input_info.get("name") or "").strip()
+                        if not input_name:
+                            raise RuntimeError("The selected microphone does not have a usable device name.")
+                    drm_config_path = write_drm_station_config(
+                        drm_temp_path / "station.toml",
+                        station_name=config.get("stationName", "TXITPY"),
+                        input_device_name=input_name,
+                    )
+
             session_id, session_secret, auth_token = self.client.transmission_credentials()
             if not self.client.control_connected():
                 raise ConnectionError("TXITY control connection is not ready. Reconnect and try again.")
@@ -843,7 +905,7 @@ class TxityTransmitter:
                     "text": "Authenticated TX audio WebSocket connected.",
                 })
 
-                if audio_source == "loopback":
+                if audio_source == "loopback" and not drm_mode:
                     try:
                         import pyaudiowpatch as pyaudio
                     except ImportError as exc:
@@ -883,7 +945,7 @@ class TxityTransmitter:
                             "48 kHz mono Float32."
                         ),
                     })
-                elif audio_source == "mic":
+                elif audio_source == "mic" and not drm_mode:
                     import sounddevice
 
                     input_stream = sounddevice.InputStream(
@@ -901,7 +963,7 @@ class TxityTransmitter:
                         "text": "Microphone opened at 48 kHz, mono Float32; sending 512-sample batches.",
                     })
 
-            if needs_audio and audio_source == "playlist":
+            if needs_audio and audio_source == "playlist" and not drm_mode:
                 audio_timer_resolution = begin_windows_audio_timer_resolution()
                 playlist_thread = start_playlist_worker()
                 self.events.put({
@@ -937,10 +999,110 @@ class TxityTransmitter:
                     ),
                 })
 
+            if drm_mode:
+                if drm_config_path is None or drm_stop_path is None or encoder_path is None:
+                    raise RuntimeError("The DRM encoder configuration was not prepared.")
+                audio_timer_resolution = begin_windows_audio_timer_resolution()
+                drm_process = subprocess.Popen(
+                    [str(encoder_path), str(drm_config_path), str(drm_stop_path)],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    bufsize=0,
+                )
+                process = drm_process
+
+                def read_drm_stdout() -> None:
+                    import numpy as np
+
+                    raw_carry = bytearray()
+                    try:
+                        assert process.stdout is not None
+                        while True:
+                            chunk = process.stdout.read(65_536)
+                            if not chunk:
+                                break
+                            raw_carry.extend(chunk)
+                            usable = len(raw_carry) - (len(raw_carry) % 4)
+                            if usable:
+                                samples = np.frombuffer(raw_carry[:usable], dtype="<f4").copy()
+                                del raw_carry[:usable]
+                                enqueue_pcm_samples(samples, wait_for_space=True)
+                        if raw_carry:
+                            audio_thread_error[:] = [
+                                "The DRM encoder ended in the middle of a Float32 sample."
+                            ]
+                        enqueue_pcm_samples([], wait_for_space=True, flush=True)
+                    except Exception as exc:
+                        audio_thread_error[:] = [_safe_error(exc)]
+                    finally:
+                        return_code = process.wait()
+                        if return_code != 0 and not self._stop_event.is_set():
+                            details = "\n".join(drm_stderr_lines[-12:])
+                            audio_thread_error[:] = [
+                                f"DRM encoder exited with code {return_code}."
+                                + (f" {details}" if details else "")
+                            ]
+                        drm_reader_finished.set()
+
+                def read_drm_stderr() -> None:
+                    assert process.stderr is not None
+                    for raw_line in process.stderr:
+                        line = raw_line.decode("utf-8", errors="replace").strip()
+                        if line:
+                            drm_stderr_lines.append(line[:500])
+                            if len(drm_stderr_lines) > 40:
+                                del drm_stderr_lines[:-40]
+                            self.events.put({"kind": "tx_log", "text": line[:500]})
+
+                drm_reader_thread = threading.Thread(
+                    target=read_drm_stdout,
+                    daemon=True,
+                    name="txitpy-drm-audio",
+                )
+                drm_stderr_thread = threading.Thread(
+                    target=read_drm_stderr,
+                    daemon=True,
+                    name="txitpy-drm-log",
+                )
+                drm_reader_thread.start()
+                drm_stderr_thread.start()
+
+                self.events.put({
+                    "kind": "tx_log",
+                    "text": "Buffering DRM output before opening the TXITY stream.",
+                })
+                buffer_deadline = time.monotonic() + 30.0
+                while not self._stop_event.is_set():
+                    if audio_thread_error:
+                        raise RuntimeError(audio_thread_error[0])
+                    if audio_queue.qsize() >= DRM_PREROLL_FRAMES or drm_reader_finished.is_set():
+                        break
+                    if time.monotonic() >= buffer_deadline:
+                        raise TimeoutError("The DRM encoder did not produce audio within 30 seconds.")
+                    self._stop_event.wait(0.02)
+
+                if self._stop_event.is_set():
+                    return
+                if audio_queue.empty():
+                    details = "\n".join(drm_stderr_lines[-12:])
+                    raise RuntimeError(
+                        "The DRM encoder did not produce a usable signal."
+                        + (f" {details}" if details else "")
+                    )
+                self.events.put({
+                    "kind": "tx_log",
+                    "text": f"DRM signal buffer ready: {audio_queue.qsize() * AUDIO_FRAME_INTERVAL_SECONDS:.2f} seconds.",
+                })
+
             if self._stop_event.is_set():
                 return
 
-            self.client.send_control_message(config)
+            server_config = {
+                key: value for key, value in config.items()
+                if not key.startswith("_txitpy")
+            }
+            self.client.send_control_message(server_config)
             if self._stop_event.is_set():
                 return
             self.client.send_control_message({"type": "ptt", "ptt": True})
@@ -950,7 +1112,7 @@ class TxityTransmitter:
                 self._ptt_requested_at = time.monotonic()
                 self._active = True
                 self._starting = False
-            source_name = {
+            source_name = "DRM30" if drm_mode else {
                 "loopback": "desktop audio",
                 "playlist": "playlist audio",
             }.get(audio_source, "microphone audio")
@@ -987,6 +1149,16 @@ class TxityTransmitter:
 
                 if audio_thread_error:
                     raise RuntimeError(audio_thread_error[0])
+                if drm_playlist_server and drm_playlist_server.finished.is_set():
+                    if drm_playlist_stop_deadline is None:
+                        drm_playlist_stop_deadline = time.monotonic() + 0.6
+                    elif (
+                        not drm_playlist_stop_requested
+                        and time.monotonic() >= drm_playlist_stop_deadline
+                        and drm_stop_path is not None
+                    ):
+                        drm_stop_path.touch(exist_ok=True)
+                        drm_playlist_stop_requested = True
                 if audio_capture_error:
                     details = audio_capture_error.pop()
                     now = time.monotonic()
@@ -1009,11 +1181,20 @@ class TxityTransmitter:
                     queued_frame = audio_queue.get(
                         timeout=(
                             0.05
-                            if audio_source == "playlist"
+                            if audio_source == "playlist" or drm_mode
                             else AUDIO_FRAME_INTERVAL_SECONDS
                         )
                     )
                 except queue.Empty:
+                    if drm_mode:
+                        if drm_reader_finished.is_set():
+                            if audio_thread_error:
+                                raise RuntimeError(audio_thread_error[0])
+                            if drm_playlist_server and drm_playlist_server.finished.is_set():
+                                playlist_reached_end = True
+                                break
+                            raise RuntimeError("The DRM encoder stopped before the audio source finished.")
+                        continue
                     if audio_source == "playlist" and audio_finished.is_set():
                         if audio_thread_error:
                             raise RuntimeError(audio_thread_error[0])
@@ -1033,7 +1214,7 @@ class TxityTransmitter:
                     else:
                         continue
 
-                if audio_source == "playlist":
+                if audio_source == "playlist" and not drm_mode:
                     frame, playlist_info = queued_frame
                     playlist_underrun_active = False
                     if playlist_info != playlist_current_track:
@@ -1056,11 +1237,21 @@ class TxityTransmitter:
                 else:
                     frame = queued_frame
 
+                if drm_mode:
+                    wait_seconds = playlist_frame_wait_seconds(
+                        playlist_next_frame_deadline,
+                        time.perf_counter(),
+                    )
+                    if wait_seconds > 0 and self._stop_event.wait(wait_seconds):
+                        break
+                    if self._stop_event.is_set():
+                        break
+
                 audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
                 send_count += 1
                 if audio_source in {"mic", "loopback"} and not using_silence_frame:
                     last_audio_frame_at = time.monotonic()
-                if audio_source == "playlist":
+                if audio_source == "playlist" or drm_mode:
                     playlist_next_frame_deadline = next_playlist_frame_deadline(
                         playlist_next_frame_deadline,
                         time.perf_counter(),
@@ -1088,6 +1279,35 @@ class TxityTransmitter:
                     pass
 
             self._stop_event.set()
+            if drm_stop_path is not None:
+                try:
+                    drm_stop_path.touch(exist_ok=True)
+                except OSError:
+                    pass
+            if drm_process is not None:
+                try:
+                    drm_process.wait(timeout=3.0)
+                except subprocess.TimeoutExpired:
+                    drm_process.terminate()
+                    try:
+                        drm_process.wait(timeout=2.0)
+                    except subprocess.TimeoutExpired:
+                        drm_process.kill()
+                        drm_process.wait(timeout=2.0)
+            if drm_reader_thread is not None and drm_reader_thread is not threading.current_thread():
+                drm_reader_thread.join(timeout=3.0)
+            if drm_stderr_thread is not None and drm_stderr_thread is not threading.current_thread():
+                drm_stderr_thread.join(timeout=2.0)
+            if drm_playlist_server is not None:
+                try:
+                    drm_playlist_server.close()
+                except Exception:
+                    pass
+            if drm_temp_dir is not None:
+                try:
+                    drm_temp_dir.cleanup()
+                except Exception:
+                    pass
             if playlist_thread is not None and playlist_thread is not threading.current_thread():
                 playlist_thread.join(timeout=2.0)
 
