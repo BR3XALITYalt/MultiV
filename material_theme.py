@@ -40,6 +40,41 @@ def rounded_rectangle_points(
 
 
 
+def render_rounded_rectangle(
+    width: int,
+    height: int,
+    radius: int,
+    fill: str,
+    *,
+    outline: str | None = None,
+    outline_width: int = 1,
+    scale: int = 4,
+):
+    """Render an antialiased rounded rectangle as a transparent RGBA image."""
+    if width < 1 or height < 1:
+        raise ValueError("Rounded rectangle dimensions must be positive.")
+    if scale < 2:
+        raise ValueError("Antialiasing scale must be at least 2.")
+
+    from PIL import Image, ImageDraw
+
+    scaled_width = width * scale
+    scaled_height = height * scale
+    scaled_radius = max(0, min(radius * scale, scaled_width // 2, scaled_height // 2))
+    image = Image.new("RGBA", (scaled_width, scaled_height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    bounds = (0, 0, scaled_width - 1, scaled_height - 1)
+    draw.rounded_rectangle(
+        bounds,
+        radius=scaled_radius,
+        fill=fill,
+        outline=outline,
+        width=max(1, outline_width * scale) if outline else 1,
+    )
+    return image.resize((width, height), Image.Resampling.LANCZOS)
+
+
+
 MATERIAL_3_EXPRESSIVE = {
     "name": "txity-m3",
     "display_name": "TXITY Material 3",
@@ -226,7 +261,7 @@ def rounded_widget_classes(tk):
     from tkinter import font as tkfont
 
     class RoundedSurface(tk.Frame):
-        """A frame with a rounded surface painted behind its child widgets."""
+        """A frame with an antialiased rounded surface painted behind its children."""
 
         def __init__(
             self,
@@ -236,21 +271,27 @@ def rounded_widget_classes(tk):
             outside: str | None = None,
             outline: str | None = None,
             padding: int = 18,
-            radius: int = 18,
+            padding_x: int | None = None,
+            padding_y: int | None = None,
+            radius: int = 24,
             width: int | None = None,
         ) -> None:
             self._surface_background = background
             self._outside_background = outside or parent.cget("bg")
             self._outline_color = outline or background
             self._corner_radius = radius
-            inset = max(padding, math.ceil(radius * 0.34))
+
+            # Child widgets have square backgrounds. Keep them inside the
+            # rounded corner tangent so those backgrounds cannot cover the arcs.
+            inset_x = max(padding if padding_x is None else padding_x, radius + 2)
+            inset_y = max(padding if padding_y is None else padding_y, radius + 2)
             super().__init__(
                 parent,
                 bg=self._outside_background,
                 bd=0,
                 highlightthickness=0,
-                padx=inset,
-                pady=inset,
+                padx=inset_x,
+                pady=inset_y,
                 width=width if width is not None else 0,
             )
             self._surface_canvas = tk.Canvas(
@@ -261,36 +302,39 @@ def rounded_widget_classes(tk):
                 takefocus=0,
             )
             self._surface_canvas.place(x=0, y=0, relwidth=1, relheight=1)
-            # Canvas.lower() lowers canvas items; use Tk's window command to stack this widget.
             self.tk.call("lower", self._surface_canvas._w)
+            self._surface_photo = None
             self.bind("<Configure>", self._redraw_surface, add="+")
 
         def _redraw_surface(self, event=None) -> None:
             width = self.winfo_width()
             height = self.winfo_height()
-
-            # Tk sends an initial configure event before geometry is assigned.
-            # Wait until the surface has room for its 1-pixel outline.
             if width <= 2 or height <= 2:
                 return
 
-            self._surface_canvas.delete("surface")
-            coordinates = rounded_rectangle_points(
-                width - 2,
-                height - 2,
-                min(self._corner_radius, (min(width, height) - 2) / 2),
-            )
-            coordinates = [value + 1 for value in coordinates]
-            self._surface_canvas.create_polygon(
-                *coordinates,
-                fill=self._surface_background,
+            from PIL import ImageTk
+
+            image = render_rounded_rectangle(
+                width,
+                height,
+                self._corner_radius,
+                self._surface_background,
                 outline=self._outline_color,
-                width=1,
+                outline_width=1,
+                scale=4,
+            )
+            self._surface_photo = ImageTk.PhotoImage(image, master=self)
+            self._surface_canvas.delete("surface")
+            self._surface_canvas.create_image(
+                0,
+                0,
+                image=self._surface_photo,
+                anchor="nw",
                 tags="surface",
             )
 
     class RoundedButton(tk.Canvas):
-        """A keyboard-accessible button with a rounded background."""
+        """A keyboard-accessible button with an antialiased rounded background."""
 
         def __init__(
             self,
@@ -308,7 +352,7 @@ def rounded_widget_classes(tk):
             font=("Segoe UI", 10),
             padding_x: int = 16,
             padding_y: int = 9,
-            radius: int = 14,
+            radius: int = 18,
             anchor: str = "center",
             min_width: int = 0,
         ) -> None:
@@ -323,6 +367,7 @@ def rounded_widget_classes(tk):
             self._focus_color = focus_color or foreground
             self._corner_radius = radius
             self._padding_x = padding_x
+            self._padding_y = padding_y
             self._anchor = anchor
             self._hovered = False
             self._focused = False
@@ -332,9 +377,10 @@ def rounded_widget_classes(tk):
                 self._font.measure(text) + padding_x * 2,
             )
             self._requested_height = max(
-                34,
+                38,
                 self._font.metrics("linespace") + padding_y * 2,
             )
+            self._button_photo = None
             super().__init__(
                 parent,
                 width=self._requested_width,
@@ -356,28 +402,31 @@ def rounded_widget_classes(tk):
             self._redraw()
 
         def _redraw(self, event=None) -> None:
-            width = max(2, self.winfo_width())
-            height = max(2, self.winfo_height())
+            width = self.winfo_width()
+            height = self.winfo_height()
             if width <= 2:
                 width = self._requested_width
             if height <= 2:
                 height = self._requested_height
+
             fill = self._hover_background if self._hovered else self._background
             foreground = self._hover_foreground if self._hovered else self._foreground
             outline = self._focus_color if self._focused else self._outline
-            self.delete("all")
-            coordinates = rounded_rectangle_points(
-                width - 2,
-                height - 2,
-                min(self._corner_radius, (min(width, height) - 2) / 2),
-            )
-            coordinates = [value + 1 for value in coordinates]
-            self.create_polygon(
-                *coordinates,
-                fill=fill,
+
+            from PIL import ImageTk
+
+            image = render_rounded_rectangle(
+                width,
+                height,
+                self._corner_radius,
+                fill,
                 outline=outline,
-                width=2 if self._focused else 1,
+                outline_width=2 if self._focused else 1,
+                scale=4,
             )
+            self._button_photo = ImageTk.PhotoImage(image, master=self)
+            self.delete("all")
+            self.create_image(0, 0, image=self._button_photo, anchor="nw")
             x = self._padding_x if self._anchor == "w" else width / 2
             self.create_text(
                 x,
