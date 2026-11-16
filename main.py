@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import queue
+import secrets
 import threading
 import uuid
 import webbrowser
@@ -16,6 +17,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from discord_auth import DiscordAuthBrowser, clean_discord_user, is_auth_token
 
 BASE_URL = "https://txity.radiodiscussion.org"
 CONTROL_URL = "wss://txity.radiodiscussion.org/ws/control"
@@ -149,13 +152,39 @@ class TxityClient:
         self.events: queue.Queue[dict[str, Any]] = queue.Queue()
         self.stop_event = threading.Event()
         self.refresh_lock = threading.Lock()
+        self.auth_lock = threading.Lock()
+        self.reconnect_event = threading.Event()
+        self.session_id = str(uuid.uuid4())
+        self.session_secret = secrets.token_hex(32)
+        self.auth_token = ""
+        self.discord_user: dict[str, str] | None = None
         self.ws: Any = None
         self.ws_thread: threading.Thread | None = None
+
+    def set_discord_auth(self, token: Any, user: Any = None) -> None:
+        """Attach a token obtained from TXITY's official embedded browser."""
+        clean_token = token if is_auth_token(token) else ""
+        clean_user = clean_discord_user(user) if clean_token else None
+        with self.auth_lock:
+            if clean_token == self.auth_token:
+                self.discord_user = clean_user
+                return
+            self.auth_token = clean_token
+            self.discord_user = clean_user
+            active_socket = self.ws
+
+        self.reconnect_event.set()
+        if active_socket is not None:
+            try:
+                active_socket.close()
+            except Exception:
+                pass
 
     def connect(self) -> None:
         if self.ws_thread and self.ws_thread.is_alive():
             return
         self.stop_event.clear()
+        self.reconnect_event.clear()
         self.events.put({"kind": "connection", "text": "Connecting to TXITY..."})
         threading.Thread(target=self._fetch_public_data, daemon=True, name="txity-http").start()
         self.ws_thread = threading.Thread(
@@ -203,16 +232,14 @@ class TxityClient:
     def _run_status_socket(self) -> None:
         import websocket
 
-        # Generate a fresh anonymous session. Never reuse captured browser IDs,
-        # session secrets, login tokens, or Discord credentials.
-        query = urlencode({
-            "session": str(uuid.uuid4()),
-            "sessionSecret": str(uuid.uuid4()),
-        })
-        socket_url = f"{CONTROL_URL}?{query}"
+        # Reuse this app session across reconnects. TXITY itself supplies the
+        # signed token after the official Discord flow completes.
 
         def on_open(ws: websocket.WebSocketApp) -> None:
-            self.events.put({"kind": "connection", "text": "Connected (public status only)"})
+            self.events.put({
+                "kind": "connection",
+                "text": "Connected (Discord session supplied)" if auth_token else "Connected (public status only)",
+            })
             # The status request is read-only. No config, PTT, or audio messages
             # are sent by this desktop client.
             ws.send(json.dumps({"type": "status"}))
@@ -238,33 +265,47 @@ class TxityClient:
 
         def on_error(_ws: websocket.WebSocketApp, error: Any) -> None:
             if not self.stop_event.is_set():
-                self.events.put({"kind": "socket_error", "text": str(error)})
+                # Never include a WebSocket URL or its authToken in error text.
+                self.events.put({"kind": "socket_error", "text": "The TXITY status connection failed."})
 
         def on_close(_ws: websocket.WebSocketApp, _code: Any, _reason: Any) -> None:
             if not self.stop_event.is_set():
                 self.events.put({"kind": "connection", "text": "Status connection closed"})
 
         try:
-            self.ws = websocket.WebSocketApp(
-                socket_url,
-                on_open=on_open,
-                on_message=on_message,
-                on_error=on_error,
-                on_close=on_close,
-            )
             while not self.stop_event.is_set():
-                self.ws.run_forever(
+                with self.auth_lock:
+                    auth_token = self.auth_token
+                query_values = {
+                    "session": self.session_id,
+                    "sessionSecret": self.session_secret,
+                }
+                if auth_token:
+                    query_values["authToken"] = auth_token
+                socket_url = f"{CONTROL_URL}?{urlencode(query_values)}"
+                ws = websocket.WebSocketApp(
+                    socket_url,
+                    on_open=on_open,
+                    on_message=on_message,
+                    on_error=on_error,
+                    on_close=on_close,
+                )
+                self.ws = ws
+                ws.run_forever(
                     origin=BASE_URL,
                     ping_interval=25,
                     ping_timeout=10,
                     reconnect=0,
                 )
+                if self.ws is ws:
+                    self.ws = None
                 if not self.stop_event.is_set():
-                    self.events.put({"kind": "connection", "text": "Reconnecting to status feed..."})
-                    self.stop_event.wait(4)
-        except Exception as exc:
+                    self.events.put({"kind": "connection", "text": "Reconnecting status connection..."})
+                    if self.reconnect_event.wait(4):
+                        self.reconnect_event.clear()
+        except Exception:
             if not self.stop_event.is_set():
-                self.events.put({"kind": "socket_error", "text": str(exc)})
+                self.events.put({"kind": "socket_error", "text": "The TXITY status connection failed."})
         finally:
             self.ws = None
 
@@ -273,6 +314,9 @@ def build_app() -> None:
     import bootstack as bs
 
     client = TxityClient()
+    auth_browser = DiscordAuthBrowser(client.events)
+    auth_account = bs.Signal("Not signed in to Discord")
+    auth_browser_status = bs.Signal("The TXITY sign-in browser has not been opened.")
     connection = bs.Signal("Disconnected")
     center = bs.Signal("Not reported")
     band = bs.Signal("Not reported")
@@ -282,11 +326,15 @@ def build_app() -> None:
     updated = bs.Signal("Waiting for server data")
     summary = bs.Signal("Connect to load public station and server information.")
 
+    def shutdown() -> None:
+        client.disconnect()
+        auth_browser.close()
+
     with bs.AppShell(
         title="TXITPY | TXITY Desktop",
         size=(1120, 760),
         theme="bootstrap-dark",
-        on_close=client.disconnect,
+        on_close=shutdown,
     ) as shell:
         with shell.page_nav() as nav:
             with nav.add_page("overview", text="Overview", icon="house", padding=20, gap=12):
@@ -348,27 +396,36 @@ def build_app() -> None:
                     font="caption",
                 )
 
-            with nav.add_page("about", text="Connection", icon="info-circle", padding=20, gap=10):
-                bs.Label("Connection and scope", font="heading-lg")
-                bs.Label("Server", font="heading-md")
+            with nav.add_page("about", text="Discord / Connection", icon="info-circle", padding=20, gap=10):
+                bs.Label("Discord account", font="heading-lg")
+                bs.Label(textsignal=auth_account, font="heading-md", accent="primary")
+                bs.Label(textsignal=auth_browser_status, accent="secondary")
+                bs.Button("Open TXITY sign-in browser", accent="primary", on_click=auth_browser.open)
+                bs.Button("Sign out of Discord", variant="outline", on_click=auth_browser.logout)
+                bs.Divider()
+                bs.Label("Connection", font="heading-md")
                 bs.Label(BASE_URL, accent="primary")
                 bs.Label(
-                    "This app currently runs in public viewer mode. It reads the public station page, "
-                    "public configuration, and status messages only.",
+                    "TXITPY opens TXITY itself in an embedded browser. Discord OAuth, the redirect, "
+                    "token validation, and sign-out are handled by TXITY's own page.",
                     wrap_width=760,
                 )
                 bs.Label(
-                    "Transmitter control, microphone/MP3 audio, profile editing, comments, and Discord "
-                    "account actions are not implemented. TXITY requires its official Discord sign-in "
-                    "for transmitter and station-edit permissions.",
+                    "The browser keeps the website's normal session in its own browser profile. "
+                    "TXITPY keeps the token in memory and supplies it to the status WebSocket; it "
+                    "does not write the token to a settings file or log it.",
                     wrap_width=760,
                 )
                 bs.Label(
-                    "No captured browser session keys or login tokens are included. This client does "
-                    "not send transmitter configuration, push-to-talk commands, or audio data.",
+                    "The desktop client remains read-only. It sends status requests only, never "
+                    "transmitter configuration, push-to-talk commands, or audio frames.",
                     wrap_width=760,
                 )
-                bs.Button("Open TXITY login page", accent="primary", on_click=lambda: webbrowser.open(BASE_URL))
+                bs.Button(
+                    "Open TXITY in default browser",
+                    variant="outline",
+                    on_click=lambda: webbrowser.open(BASE_URL),
+                )
                 bs.Button(
                     "Open project repository",
                     variant="outline",
@@ -415,6 +472,22 @@ def build_app() -> None:
                     rows = event.get("rows", [])
                     station_table.set_rows(rows)
                     updated.set(f"Station list refreshed: {len(rows)} entries")
+                elif kind == "auth_token":
+                    token = event.get("token")
+                    user = clean_discord_user(event.get("user"))
+                    if is_auth_token(token):
+                        client.set_discord_auth(token, user)
+                        display_name = (user or {}).get("globalName") or (user or {}).get("username") or "Discord account"
+                        auth_account.set(f"Signed in as {display_name}")
+                        auth_browser_status.set("Discord session received from TXITY's official sign-in page.")
+                elif kind == "auth_signed_out":
+                    client.set_discord_auth(None, None)
+                    auth_account.set("Not signed in to Discord")
+                    auth_browser_status.set("The TXITY browser signed out of Discord.")
+                elif kind == "auth_browser":
+                    auth_browser_status.set(str(event.get("text", "")))
+                elif kind == "auth_error":
+                    auth_browser_status.set(str(event.get("text", "Sign-in browser error")))
                 elif kind in {"error", "socket_error"}:
                     summary.set(str(event.get("text", "Network error")))
                     if kind == "socket_error":
