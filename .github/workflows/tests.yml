@@ -101,15 +101,19 @@ jobs:
       - name: Validate the one-service 4.5 kHz configuration
         working-directory: decdrm
         run: |
-          cat > drm-validation.toml <<'TOML'
-          [channel]
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          base = """[channel]
           mode = "B"
           occupancy = 0
-          msc_mode = "16-QAM"
+          msc_mode = "64-QAM"
           sdc_mode = "4-QAM"
           interleaving = "short"
           protection_a = 0
-          protection_b = 1
+          protection_b = 0
 
           [output]
           sample_format = "float32"
@@ -134,5 +138,32 @@ jobs:
           [service.audio.input]
           tone_hz = 1000.0
           level_dbfs = -12.0
-          TOML
-          cargo run --release -p txitpy-drm-bridge -- --check drm-validation.toml
+          """
+
+          for protection in range(4):
+              config = base.replace(
+                  "protection_b = 0",
+                  f"protection_b = {protection}",
+              )
+              Path("drm-validation.toml").write_text(config, encoding="utf-8")
+              result = subprocess.run(
+                  [
+                      "cargo", "run", "--release", "-q",
+                      "-p", "txitpy-drm-bridge", "--",
+                      "--check", "drm-validation.toml",
+                  ],
+                  text=True,
+                  capture_output=True,
+                  check=False,
+              )
+              print(f"64-QAM protection_b={protection}:")
+              if result.stdout:
+                  print(result.stdout, end="")
+              if result.stderr:
+                  print(result.stderr, end="")
+              if result.returncode == 0:
+                  print(f"Selected 64-QAM protection_b={protection}.")
+                  sys.exit(0)
+
+          raise SystemExit("No tested 64-QAM protection level can carry the HE-AAC service.")
+          PY
