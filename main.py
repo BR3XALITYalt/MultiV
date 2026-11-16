@@ -516,9 +516,9 @@ def _system_theme_mode() -> str:
 def build_app() -> None:
     import tkinter as tk
     from tkinter import ttk
-    from material_theme import apply_tk_theme
+    from material_theme import apply_tk_theme, rounded_widget_classes
 
-    client = TxityClient()
+    RoundedSurface, RoundedButton = rounded_widget_classes(tk)\n\n    client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
 
     theme_mode = _system_theme_mode()
@@ -614,38 +614,43 @@ def build_app() -> None:
         kind: str = "primary",
         padx: int = 16,
         pady: int = 9,
-    ) -> tk.Button:
+    ) -> tk.Widget:
+        outside = getattr(parent, "_surface_background", parent.cget("bg"))
         if kind == "primary":
             background = palette["primary"]
             foreground = palette["onPrimary"]
-            active_background = palette["primaryContainer"]
-            active_foreground = palette["onPrimaryContainer"]
+            hover_background = palette["primaryContainer"]
+            hover_foreground = palette["onPrimaryContainer"]
         elif kind == "tonal":
             background = palette["secondaryContainer"]
             foreground = palette["onSecondaryContainer"]
-            active_background = palette["surfaceContainerHighest"]
-            active_foreground = palette["onSurface"]
+            hover_background = palette["surfaceContainerHighest"]
+            hover_foreground = palette["onSurface"]
+        elif kind == "text":
+            background = outside
+            foreground = palette["primary"]
+            hover_background = palette["surfaceContainerHigh"]
+            hover_foreground = palette["primary"]
         else:
             background = palette["surfaceContainerLow"]
             foreground = palette["onSurface"]
-            active_background = palette["surfaceContainerHigh"]
-            active_foreground = palette["onSurface"]
-        return tk.Button(
+            hover_background = palette["surfaceContainerHigh"]
+            hover_foreground = palette["onSurface"]
+        return RoundedButton(
             parent,
-            text=text,
-            command=command,
+            text,
+            command,
+            background=background,
+            foreground=foreground,
+            hover_background=hover_background,
+            hover_foreground=hover_foreground,
+            outside=outside,
+            outline=background,
+            focus_color=palette["primary"],
             font=("Segoe UI", 10, "bold" if kind == "primary" else "normal"),
-            fg=foreground,
-            bg=background,
-            activeforeground=active_foreground,
-            activebackground=active_background,
-            relief="flat",
-            borderwidth=0,
-            highlightthickness=0,
-            padx=padx,
-            pady=pady,
-            cursor="hand2",
-            takefocus=True,
+            padding_x=padx,
+            padding_y=pady,
+            radius=15,
         )
 
     def make_card(
@@ -654,15 +659,14 @@ def build_app() -> None:
         background: str | None = None,
         padding: int = 18,
     ) -> tk.Frame:
-        return tk.Frame(
+        surface_color = background or palette["surfaceContainerLow"]
+        return RoundedSurface(
             parent,
-            bg=background or palette["surfaceContainerLow"],
-            padx=padding,
-            pady=padding,
-            borderwidth=1,
-            relief="solid",
-            highlightthickness=0,
-            highlightbackground=palette["outlineVariant"],
+            background=surface_color,
+            outside=parent.cget("bg"),
+            outline=palette["outlineVariant"],
+            padding=padding,
+            radius=20,
         )
 
     def set_auth_status(message: str) -> None:
@@ -952,12 +956,29 @@ def build_app() -> None:
         controls = tk.Frame(page, bg=palette["background"])
         controls.pack(fill="x", pady=(0, 10))
 
-        search = ttk.Entry(
+        search_shell = RoundedSurface(
             controls,
-            textvariable=station_search_var,
-            style="Material.TEntry",
+            background=palette["surfaceContainerLowest"],
+            outside=palette["background"],
+            outline=palette["outlineVariant"],
+            padding=2,
+            radius=15,
         )
-        search.pack(side="left", fill="x", expand=True, ipady=7)
+        search_shell.pack(side="left", fill="x", expand=True)
+        search = tk.Entry(
+            search_shell,
+            textvariable=station_search_var,
+            font=("Segoe UI", 10),
+            bg=palette["surfaceContainerLowest"],
+            fg=palette["onSurface"],
+            insertbackground=palette["onSurface"],
+            selectbackground=palette["primaryContainer"],
+            selectforeground=palette["onPrimaryContainer"],
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        search.pack(fill="x", expand=True, ipady=7)
         search.bind("<KeyRelease>", lambda _event: update_station_tree())
 
         make_button(
@@ -1116,14 +1137,16 @@ def build_app() -> None:
         shell_frame = tk.Frame(root, bg=palette["background"])
         shell_frame.pack(fill="both", expand=True)
 
-        topbar = tk.Frame(
+        topbar = RoundedSurface(
             shell_frame,
-            bg=palette["surface"],
-            height=66,
-            padx=20,
-            pady=10,
+            background=palette["surfaceContainerLow"],
+            outside=palette["background"],
+            outline=palette["outlineVariant"],
+            padding=14,
+            radius=22,
         )
-        topbar.pack(fill="x")
+        topbar.configure(height=68)
+        topbar.pack(fill="x", padx=14, pady=(12, 8))
         topbar.pack_propagate(False)
 
         make_label(
@@ -1162,14 +1185,17 @@ def build_app() -> None:
             body = tk.Frame(shell_frame, bg=palette["background"])
             body.pack(fill="both", expand=True)
 
-            nav_frame = tk.Frame(
+            nav_frame = RoundedSurface(
                 body,
-                bg=palette["surfaceContainerLow"],
+                background=palette["surfaceContainerLow"],
+                outside=palette["background"],
+                outline=palette["outlineVariant"],
                 width=190,
-                padx=12,
-                pady=18,
+                padding=12,
+                radius=22,
             )
-            nav_frame.pack(side="left", fill="y")
+            nav_frame.pack(side="left", fill="y", padx=(12, 8), pady=12)
+            nav_frame.configure(width=190)
             nav_frame.pack_propagate(False)
 
             make_label(
@@ -1187,28 +1213,35 @@ def build_app() -> None:
             )
             for label, destination in navigation:
                 selected = current_page == destination
-                button = tk.Button(
+                button = RoundedButton(
                     nav_frame,
-                    text=label,
-                    command=lambda target=destination: navigate(target),
-                    anchor="w",
-                    font=("Segoe UI", 10, "bold" if selected else "normal"),
-                    fg=(
-                        palette["onPrimaryContainer"]
-                        if selected else palette["onSurfaceVariant"]
-                    ),
-                    bg=(
+                    label,
+                    lambda target=destination: navigate(target),
+                    background=(
                         palette["primaryContainer"]
                         if selected else palette["surfaceContainerLow"]
                     ),
-                    activeforeground=palette["onPrimaryContainer"],
-                    activebackground=palette["primaryContainer"],
-                    relief="flat",
-                    borderwidth=0,
-                    highlightthickness=0,
-                    padx=14,
-                    pady=11,
-                    cursor="hand2",
+                    foreground=(
+                        palette["onPrimaryContainer"]
+                        if selected else palette["onSurfaceVariant"]
+                    ),
+                    hover_background=(
+                        palette["primaryContainer"]
+                        if selected else palette["surfaceContainerHigh"]
+                    ),
+                    hover_foreground=palette["onPrimaryContainer"],
+                    outside=palette["surfaceContainerLow"],
+                    outline=(
+                        palette["primaryContainer"]
+                        if selected else palette["surfaceContainerLow"]
+                    ),
+                    focus_color=palette["primary"],
+                    font=("Segoe UI", 10, "bold" if selected else "normal"),
+                    padding_x=14,
+                    padding_y=11,
+                    radius=15,
+                    anchor="w",
+                    min_width=145,
                 )
                 button.pack(fill="x", pady=2)
 
