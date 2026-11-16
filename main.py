@@ -324,7 +324,7 @@ def build_app() -> None:
     client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
     auth_account = bs.Signal("Not signed in to Discord")
-    auth_browser_status = bs.Signal("The TXITY sign-in browser has not been opened.")
+    auth_browser_status = bs.Signal("Waiting for TXITY server configuration.")
     connection = bs.Signal("Disconnected")
     center = bs.Signal("Not reported")
     band = bs.Signal("Not reported")
