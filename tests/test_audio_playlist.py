@@ -64,6 +64,29 @@ class AudioPlaylistTests(unittest.TestCase):
         self.assertEqual(order, ["two.wav", "three.wav", "one.wav"])
         self.assertNotEqual(order[0], "three.wav")
 
+    def test_ogg_vorbis_files_can_be_decoded(self):
+        import numpy as np
+        import soundfile
+
+        self.assertIn("OGG", soundfile.available_formats())
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "test.ogg"
+            source = np.linspace(-0.5, 0.5, 4_800, dtype=np.float32)
+            soundfile.write(
+                str(path),
+                source,
+                48_000,
+                format="OGG",
+                subtype="VORBIS",
+            )
+
+            with soundfile.SoundFile(str(path)) as audio:
+                decoded = audio.read(dtype="float32", always_2d=True)
+
+            self.assertGreater(decoded.size, 0)
+            self.assertEqual(decoded.shape[1], 1)
+            self.assertEqual(audio.samplerate, 48_000)
+
     def test_single_track_playlist_remains_valid_when_shuffled(self):
         self.assertEqual(
             build_playlist_order(
