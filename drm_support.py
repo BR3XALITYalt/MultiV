@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import platform
 import random
 import re
 import secrets
@@ -14,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, Iterable
 from urllib.parse import quote, urlsplit
+from urllib.request import Request, urlopen
 
 from audio_playlist import build_playlist_order
 
@@ -29,6 +32,212 @@ def _cache_root() -> Path:
         return root / "TXITPY" / "DRM"
     root = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache"))
     return root / "txitpy" / "drm"
+
+
+
+RUST_MINIMUM_VERSION = (1, 88)
+RUSTUP_DOWNLOAD_BASE = "https://static.rust-lang.org/rustup/dist"
+
+
+def _rust_bin_directory() -> Path:
+    cargo_home = Path(os.environ.get("CARGO_HOME") or (Path.home() / ".cargo"))
+    return cargo_home / "bin"
+
+
+def _refresh_rust_path() -> None:
+    """Make an existing per-user rustup installation visible to this process."""
+    rust_bin = _rust_bin_directory()
+    if not rust_bin.is_dir():
+        return
+    current = os.environ.get("PATH", "")
+    entries = current.split(os.pathsep) if current else []
+    if str(rust_bin) not in entries:
+        os.environ["PATH"] = str(rust_bin) + (os.pathsep + current if current else "")
+
+
+def _rust_toolchain_version() -> tuple[int, int] | None:
+    _refresh_rust_path()
+    rustc = shutil.which("rustc")
+    cargo = shutil.which("cargo")
+    if not rustc or not cargo:
+        return None
+    try:
+        result = subprocess.run(
+            [rustc, "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    match = re.search(r"rustc ([0-9]+)[.]([0-9]+)", result.stdout or result.stderr)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def _encoder_executable() -> Path:
+    return _cache_root() / f"DecDRM-{DECDRM_COMMIT[:12]}" / "target" / "release" / (
+        "txitpy-drm-bridge.exe" if os.name == "nt" else "txitpy-drm-bridge"
+    )
+
+
+def _decdrm_source_is_ready() -> bool:
+    upstream = _cache_root() / f"DecDRM-{DECDRM_COMMIT[:12]}"
+    return (
+        (upstream / ".git").is_dir()
+        and (upstream / "crates" / "decdrm-station" / "src" / "plan.rs").is_file()
+    )
+
+
+def _missing_native_build_tools() -> list[str]:
+    missing = [
+        name for name in ("git", "cmake")
+        if shutil.which(name) is None
+    ]
+    compiler_names = ("cl", "clang-cl") if os.name == "nt" else ("c++", "g++", "clang++")
+    if not any(shutil.which(name) for name in compiler_names):
+        missing.append("a C/C++ compiler")
+    return missing
+
+
+def drm_setup_status() -> dict[str, object]:
+    """Report whether DRM is ready and which setup components are missing."""
+    encoder = _encoder_executable()
+    encoder_ready = encoder.is_file()
+    rust_version = _rust_toolchain_version()
+    rust_ready = rust_version is not None and rust_version >= RUST_MINIMUM_VERSION
+    decdrm_ready = _decdrm_source_is_ready() or encoder_ready
+    missing: list[str] = []
+    if not encoder_ready:
+        if not rust_ready:
+            missing.append("Rust 1.88 or newer")
+        if not decdrm_ready:
+            missing.append(f"DecDRM {DECDRM_VERSION}")
+        if not missing:
+            missing.append("the TXITPY DRM encoder build")
+    return {
+        "ready": encoder_ready,
+        "encoder_path": str(encoder) if encoder_ready else "",
+        "rust_ready": rust_ready,
+        "rust_version": rust_version,
+        "decdrm_ready": decdrm_ready,
+        "missing": missing,
+        "missing_build_tools": _missing_native_build_tools() if not encoder_ready else [],
+    }
+
+
+def _rustup_windows_target() -> str:
+    machine = platform.machine().casefold()
+    if machine in {"arm64", "aarch64"}:
+        return "aarch64-pc-windows-msvc"
+    if machine in {"x86_64", "amd64"} or platform.architecture()[0] == "64bit":
+        return "x86_64-pc-windows-msvc"
+    return "i686-pc-windows-msvc"
+
+
+def _download_verified_rustup_installer(on_log: Callable[[str], None] | None = None) -> Path:
+    if os.name != "nt":
+        raise RuntimeError(
+            "Automatic Rust installation is currently supported on Windows. "
+            "Install Rust 1.88 or newer from https://rust-lang.org/tools/install, then reopen TXITPY."
+        )
+    target = _rustup_windows_target()
+    url = f"{RUSTUP_DOWNLOAD_BASE}/{target}/rustup-init.exe"
+    installer_dir = _cache_root() / "installers"
+    installer_dir.mkdir(parents=True, exist_ok=True)
+    installer = installer_dir / f"rustup-init-{target}.exe"
+
+    if on_log:
+        on_log("Downloading the official Rust installer.")
+    request = Request(url, headers={"User-Agent": "TXITPY/0.1"})
+    with urlopen(request, timeout=45) as response:
+        installer_data = response.read(32 * 1024 * 1024 + 1)
+    if not installer_data or len(installer_data) > 32 * 1024 * 1024:
+        raise RuntimeError("The downloaded Rust installer was empty or unexpectedly large.")
+
+    checksum_request = Request(url + ".sha256", headers={"User-Agent": "TXITPY/0.1"})
+    with urlopen(checksum_request, timeout=30) as response:
+        checksum_text = response.read(4_096).decode("ascii", errors="replace")
+    expected_hash = checksum_text.strip().split()[0].casefold() if checksum_text.strip() else ""
+    actual_hash = hashlib.sha256(installer_data).hexdigest()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_hash) or actual_hash != expected_hash:
+        raise RuntimeError("The Rust installer checksum did not match. The file was not run.")
+
+    temporary = installer.with_suffix(".download")
+    temporary.write_bytes(installer_data)
+    temporary.replace(installer)
+    return installer
+
+
+def _install_rust_toolchain(on_log: Callable[[str], None] | None = None) -> None:
+    version = _rust_toolchain_version()
+    if version is not None and version >= RUST_MINIMUM_VERSION:
+        return
+
+    installer = _download_verified_rustup_installer(on_log)
+    if on_log:
+        on_log("Installing the stable Rust toolchain. This can download several hundred megabytes.")
+    command = [
+        str(installer),
+        "--default-toolchain", "stable",
+        "--profile", "minimal",
+        "-y",
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=1_800,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError("Rust installation did not finish within 30 minutes.") from exc
+    except OSError as exc:
+        raise RuntimeError(f"Could not start the Rust installer: {exc}") from exc
+
+    _refresh_rust_path()
+    version = _rust_toolchain_version()
+    if result.returncode != 0 or version is None or version < RUST_MINIMUM_VERSION:
+        output = "\n".join(part for part in (result.stdout, result.stderr) if part).strip()
+        detail = "\n".join(output.splitlines()[-20:])
+        raise RuntimeError(
+            "Rust installation did not produce a working Rust 1.88+ toolchain."
+            + (f"\n{detail}" if detail else "")
+        )
+    if on_log:
+        on_log(f"Rust {version[0]}.{version[1]} is ready.")
+
+
+def prepare_drm_encoder(on_log: Callable[[str], None] | None = None) -> Path:
+    """Install missing Rust, fetch the pinned DecDRM source, and build the encoder."""
+    status = drm_setup_status()
+    if status["ready"]:
+        return Path(str(status["encoder_path"]))
+
+    missing_tools = status["missing_build_tools"]
+    if missing_tools:
+        raise RuntimeError(
+            "DRM setup also requires these build tools, which were not detected: "
+            + ", ".join(str(item) for item in missing_tools)
+            + ". Install them and restart TXITPY before selecting DRM."
+        )
+
+    if not status["rust_ready"]:
+        _install_rust_toolchain(on_log)
+
+    if on_log and not status["decdrm_ready"]:
+        on_log(f"Downloading DecDRM {DECDRM_VERSION} and its codec dependencies.")
+
+    return ensure_drm_encoder(on_log=on_log)
 
 
 def _run_command(
@@ -87,6 +296,7 @@ def _patch_decdrm_output_validation(plan_file: Path) -> bool:
 
 def ensure_drm_encoder(on_log: Callable[[str], None] | None = None) -> Path:
     """Build the pinned DecDRM bridge once and return its executable path."""
+    _refresh_rust_path()
     required_tools = ("git", "cargo", "rustc", "cmake")
     missing_tools = [tool for tool in required_tools if shutil.which(tool) is None]
     compiler_names = ("cl", "clang-cl") if os.name == "nt" else ("c++", "g++", "clang++")
