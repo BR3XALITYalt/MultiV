@@ -763,6 +763,44 @@ def build_app() -> None:
     shell_frame: tk.Frame | None = None
     content_frame: tk.Frame | None = None
     nav_frame: tk.Frame | None = None
+    active_scroll_canvas: tk.Canvas | None = None
+    wheel_remainder = 0.0
+
+    def scroll_active_canvas(event, direction: int | None = None):
+        nonlocal wheel_remainder
+        canvas = active_scroll_canvas
+        if canvas is None:
+            return
+
+        try:
+            if not canvas.winfo_exists():
+                return
+            left = canvas.winfo_rootx()
+            top = canvas.winfo_rooty()
+            right = left + canvas.winfo_width()
+            bottom = top + canvas.winfo_height()
+            if not (left <= event.x_root < right and top <= event.y_root < bottom):
+                return
+        except tk.TclError:
+            return
+
+        if direction is not None:
+            canvas.yview_scroll(direction * 3, "units")
+            return "break"
+
+        delta = getattr(event, "delta", 0)
+        if not delta:
+            return
+        wheel_remainder += -delta / 120.0
+        units = int(wheel_remainder)
+        if units:
+            canvas.yview_scroll(units, "units")
+            wheel_remainder -= units
+        return "break"
+
+    root.bind_all("<MouseWheel>", scroll_active_canvas, add="+")
+    root.bind_all("<Button-4>", lambda event: scroll_active_canvas(event, -1), add="+")
+    root.bind_all("<Button-5>", lambda event: scroll_active_canvas(event, 1), add="+")
 
     def apply_current_theme() -> None:
         nonlocal palette
@@ -923,7 +961,7 @@ def build_app() -> None:
             return
         try:
             from io import BytesIO
-            from PIL import Image, ImageTk
+            from PIL import Image, ImageOps, ImageTk
 
             source = Image.open(BytesIO(data))
             source.load()
@@ -935,11 +973,21 @@ def build_app() -> None:
             try:
                 if not label.winfo_exists():
                     continue
-                image = source.copy()
-                image.thumbnail((size, size), Image.Resampling.LANCZOS)
+                image = ImageOps.fit(
+                    source,
+                    (size, size),
+                    method=Image.Resampling.LANCZOS,
+                    centering=(0.5, 0.5),
+                )
                 photo = ImageTk.PhotoImage(image)
                 image_cache[(url, size)] = photo
-                label.configure(image=photo, text="", width=0, height=0, bg=label.cget("bg"))
+                label.configure(
+                    image=photo,
+                    text="",
+                    width=size,
+                    height=size,
+                    bg=label.cget("bg"),
+                )
                 label.image = photo
             except tk.TclError:
                 continue
@@ -1200,49 +1248,31 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(20, 0))
 
     def create_scrollable_page(parent: tk.Frame) -> tuple[tk.Frame, tk.Canvas]:
-        shell = tk.Frame(parent, bg=palette["background"])
-        shell.pack(fill="both", expand=True)
-        canvas = tk.Canvas(
-            shell,
-            background=palette["background"],
-            highlightthickness=0,
-            borderwidth=0,
-        )
-        scrollbar = ttk.Scrollbar(shell, orient="vertical", command=canvas.yview)
-        page = tk.Frame(canvas, background=palette["background"])
-        window_id = canvas.create_window((0, 0), window=page, anchor="nw")
-
-        def update_region(_event=None) -> None:
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            canvas.itemconfigure(window_id, width=canvas.winfo_width())
-
-        page.bind("<Configure>", update_region)
-        canvas.bind("<Configure>", update_region)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        return page, canvas
-
-    def show_overview(parent: tk.Frame) -> None:
+        nonlocal active_scroll_canvas
         canvas = tk.Canvas(
             parent,
             background=palette["background"],
             highlightthickness=0,
             borderwidth=0,
+            yscrollincrement=28,
         )
-        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         page = tk.Frame(canvas, background=palette["background"])
-        page_id = canvas.create_window((0, 0), window=page, anchor="nw")
+        window_id = canvas.create_window((0, 0), window=page, anchor="nw")
 
-        def update_scroll_region(_event: Any = None) -> None:
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            canvas.itemconfigure(page_id, width=canvas.winfo_width())
+        def update_region(_event=None) -> None:
+            bounds = canvas.bbox("all")
+            if bounds:
+                canvas.configure(scrollregion=bounds)
+            canvas.itemconfigure(window_id, width=canvas.winfo_width())
 
-        page.bind("<Configure>", update_scroll_region)
-        canvas.bind("<Configure>", update_scroll_region)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        page.bind("<Configure>", update_region)
+        canvas.bind("<Configure>", update_region)
+        canvas.pack(fill="both", expand=True)
+        active_scroll_canvas = canvas
+        return page, canvas
+
+    def show_overview(parent: tk.Frame) -> None:
+        page, canvas = create_scrollable_page(parent)
 
         make_label(
             page,
@@ -1398,15 +1428,8 @@ def build_app() -> None:
             background=palette["background"],
         ).pack(side="right")
 
-        station_cards_frame = tk.Frame(canvas, bg=palette["background"])
-        canvas_window = canvas.create_window((0, 0), window=station_cards_frame, anchor="nw")
-
-        def resize_cards(event=None) -> None:
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            canvas.itemconfigure(canvas_window, width=canvas.winfo_width())
-
-        station_cards_frame.bind("<Configure>", resize_cards)
-        canvas.bind("<Configure>", resize_cards)
+        station_cards_frame = tk.Frame(page, bg=palette["background"])
+        station_cards_frame.pack(fill="x", expand=True)
         update_station_tree()
 
     def show_station_detail(parent: tk.Frame) -> None:
@@ -1750,6 +1773,8 @@ def build_app() -> None:
     def build_shell() -> None:
         nonlocal shell_frame, content_frame, nav_frame, station_cards_frame
 
+        nonlocal active_scroll_canvas
+        active_scroll_canvas = None
         for child in root.winfo_children():
             child.destroy()
 
