@@ -513,6 +513,7 @@ class TxityTransmitter:
         loopback_manager = None
         playlist_thread: threading.Thread | None = None
         audio_finished = threading.Event()
+        playlist_reached_end = False
         ptt_sent = False
         audio_thread_error: list[str] = []
         audio_queue = self._audio_queue
@@ -798,6 +799,7 @@ class TxityTransmitter:
                     frame = audio_queue.get(timeout=0.2)
                 except queue.Empty:
                     if audio_source == "playlist" and audio_finished.is_set():
+                        playlist_reached_end = True
                         break
                     continue
 
@@ -816,12 +818,7 @@ class TxityTransmitter:
         except Exception as exc:
             self.events.put({"kind": "tx_error", "text": _safe_error(exc)})
         finally:
-            playlist_completed = (
-                audio_source == "playlist"
-                and audio_finished.is_set()
-                and not self._stop_event.is_set()
-                and not audio_thread_error
-            )
+            playlist_completed = playlist_reached_end and not audio_thread_error
             if ptt_sent:
                 try:
                     self.client.send_control_message({"type": "ptt", "ptt": False})
