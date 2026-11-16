@@ -9,8 +9,9 @@ This release provides a native desktop client for TXITY with the official Discor
 - Live server status and a searchable station directory with image cards and profile detail pages.
 - TXITY's official Discord OAuth flow in an embedded browser window, followed by a one-use loopback callback into the desktop app.
 - An authenticated control WebSocket for TXITY configuration and push-to-talk messages.
-- A separate authenticated audio WebSocket for microphone transmission using mono Float32 PCM at 48 kHz, sent in 512-sample binary frames.
-- CW mode using TXITY's control protocol without opening a microphone audio stream.
+- A separate authenticated audio WebSocket for microphone or desktop-audio transmission using mono Float32 PCM at 48 kHz, sent in 512-sample binary frames.
+- Windows WASAPI loopback capture for selecting a speaker, headset, or other playback endpoint as the audio source. Stereo playback is downmixed to mono and resampled to 48 kHz.
+- CW mode using TXITY's control protocol without opening an audio stream.
 
 Discord sign-in is required before the dashboard can be used. On startup, TXITPY checks the existing app-specific WebView2 profile in a hidden browser window. If TXITY still has a valid saved session, the dashboard unlocks automatically; otherwise the sign-in page remains open. The browser profile keeps the website's normal session across launches. TXITPY keeps the active token in memory and does not write it to an application settings file or log it. Disconnect clears the saved browser profile. Microphone transmission uses the TXITY virtual service only; TXITPY does not control physical radio hardware.
 
@@ -22,6 +23,7 @@ The desktop interface uses native Tkinter and ttk widgets with horizontal top na
 
 - Python 3.12 or newer
 - Microsoft Edge WebView2 Runtime on Windows
+- Windows desktop-audio loopback uses PyAudioWPatch and a WASAPI playback device
 
 Install the dependencies:
 
