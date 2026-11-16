@@ -1,4 +1,4 @@
-""""Embedded TXITY sign-in window.
+"""Embedded TXITY sign-in window.
 
 The TXITY server returns its signed session to its own homepage fragment. The
 website then stores that session in its same-origin localStorage. This helper
@@ -12,15 +12,12 @@ import json
 import os
 import sys
 import threading
-from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from discord_auth import user_from_txity_token
 
 TXITY_ORIGIN = "https://txity.radiodiscussion.org"
-TOKEN_STORAGE_KEY = "txity.discordAuthToken.v1"
-CALLBACK_TIMEOUT_SECONDS = 300
 
 WATCHER_SCRIPT = r"""
 (() => {
