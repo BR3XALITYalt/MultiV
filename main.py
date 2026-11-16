@@ -1208,54 +1208,9 @@ def build_app() -> None:
     content_frame: tk.Frame | None = None
     nav_frame: tk.Frame | None = None
     active_scroll_canvas: tk.Canvas | None = None
-    scroll_animation_id: str | None = None
-    scroll_animation_canvas: tk.Canvas | None = None
-    scroll_target_offset = 0.0
-    SCROLL_PIXELS_PER_NOTCH = 102.0
-    SCROLL_ANIMATION_STEPS = 8
-    SCROLL_ANIMATION_INTERVAL_MS = 10
-
-    def animate_canvas_scroll(
-        canvas: tk.Canvas,
-        start_offset: float,
-        target_offset: float,
-        step: int = 0,
-    ) -> None:
-        nonlocal scroll_animation_id, scroll_animation_canvas
-        if canvas is not active_scroll_canvas or canvas is not scroll_animation_canvas:
-            scroll_animation_id = None
-            scroll_animation_canvas = None
-            return
-        try:
-            bounds = canvas.bbox("all")
-            if not bounds:
-                scroll_animation_id = None
-                scroll_animation_canvas = None
-                return
-            content_height = max(1, bounds[3] - bounds[1])
-            viewport_height = max(1, canvas.winfo_height())
-            max_offset = max(0, content_height - viewport_height)
-            progress = min(1.0, (step + 1) / SCROLL_ANIMATION_STEPS)
-            eased = 1.0 - (1.0 - progress) ** 3
-            offset = start_offset + (target_offset - start_offset) * eased
-            offset = max(0.0, min(float(max_offset), offset))
-            canvas.yview_moveto(offset / content_height)
-        except tk.TclError:
-            scroll_animation_id = None
-            scroll_animation_canvas = None
-            return
-
-        if step + 1 >= SCROLL_ANIMATION_STEPS:
-            scroll_animation_id = None
-            scroll_animation_canvas = None
-        else:
-            scroll_animation_id = root.after(
-                SCROLL_ANIMATION_INTERVAL_MS,
-                lambda: animate_canvas_scroll(canvas, start_offset, target_offset, step + 1),
-            )
+    SCROLL_PIXELS_PER_NOTCH = 102
 
     def scroll_active_canvas(event, direction: int | None = None):
-        nonlocal scroll_animation_id, scroll_animation_canvas, scroll_target_offset
         canvas = active_scroll_canvas
         if canvas is None:
             return
@@ -1269,13 +1224,8 @@ def build_app() -> None:
             bottom = top + canvas.winfo_height()
             if not (left <= event.x_root < right and top <= event.y_root < bottom):
                 return
-            bounds = canvas.bbox("all")
-            if not bounds:
+            if not canvas.bbox("all"):
                 return
-            content_height = max(1, bounds[3] - bounds[1])
-            viewport_height = max(1, canvas.winfo_height())
-            max_offset = max(0.0, float(content_height - viewport_height))
-            current_offset = canvas.yview()[0] * content_height
         except tk.TclError:
             return
 
@@ -1287,22 +1237,7 @@ def build_app() -> None:
                 return
             scroll_delta = -(float(delta) / 120.0) * SCROLL_PIXELS_PER_NOTCH
 
-        if scroll_animation_id is not None:
-            try:
-                root.after_cancel(scroll_animation_id)
-            except tk.TclError:
-                pass
-            base_offset = scroll_target_offset if scroll_animation_canvas is canvas else current_offset
-        else:
-            base_offset = current_offset
-
-        target_offset = max(0.0, min(max_offset, base_offset + scroll_delta))
-        if abs(target_offset - current_offset) < 0.5:
-            return "break"
-
-        scroll_target_offset = target_offset
-        scroll_animation_canvas = canvas
-        animate_canvas_scroll(canvas, current_offset, target_offset)
+        canvas.yview_scroll(int(round(scroll_delta)), "units")
         return "break"
 
     root.bind_all("<MouseWheel>", scroll_active_canvas, add="+")
@@ -1564,15 +1499,58 @@ def build_app() -> None:
                 flush=True,
             )
 
-    def bind_station_card(widget: tk.Widget, station_id: str) -> None:
+    def bind_station_card(
+        widget: tk.Widget,
+        station_id: str,
+        *,
+        card_root: bool = True,
+    ) -> None:
         widget.configure(cursor="hand2")
         widget.bind(
             "<Button-1>",
             lambda _event, target=station_id: open_station(target),
             add="+",
         )
+        if card_root:
+            widget.configure(
+                takefocus=True,
+                highlightthickness=2,
+                highlightbackground=palette["outline"],
+                highlightcolor=palette["primary"],
+            )
+
+            def open_with_keyboard(_event=None, target=station_id):
+                open_station(target)
+                return "break"
+
+            widget.bind("<Return>", open_with_keyboard, add="+")
+            widget.bind("<space>", open_with_keyboard, add="+")
+            widget.bind(
+                "<FocusIn>",
+                lambda _event: widget.configure(highlightbackground=palette["primary"]),
+                add="+",
+            )
+            widget.bind(
+                "<FocusOut>",
+                lambda _event: widget.configure(highlightbackground=palette["outline"]),
+                add="+",
+            )
+            widget.bind(
+                "<Enter>",
+                lambda _event: widget.configure(highlightbackground=palette["primary"]),
+                add="+",
+            )
+            widget.bind(
+                "<Leave>",
+                lambda _event: widget.configure(
+                    highlightbackground=(
+                        palette["primary"] if widget.focus_get() is widget else palette["outline"]
+                    )
+                ),
+                add="+",
+            )
         for child in widget.winfo_children():
-            bind_station_card(child, station_id)
+            bind_station_card(child, station_id, card_root=False)
 
     def set_auth_status(message: str) -> None:
         auth_status_var.set(message)
@@ -1667,7 +1645,15 @@ def build_app() -> None:
         if not visible:
             empty = make_card(station_cards_frame, padding=16)
             empty.pack(fill="x", padx=6, pady=6)
-            message = "No stations match that search." if query else "No stations are currently listed."
+            if not users_listing_received:
+                message = station_status_var.get().strip() or "Waiting for TXITY station data."
+                status = message.casefold()
+                if "error" in status or "failed" in status:
+                    message += " Select Refresh to try again."
+            elif query:
+                message = "No stations match that search."
+            else:
+                message = "TXITY returned an empty station list. Select Refresh to try again."
             make_label(
                 empty,
                 message,
@@ -1827,14 +1813,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(20, 0))
 
     def create_scrollable_page(parent: tk.Frame) -> tuple[tk.Frame, tk.Canvas]:
-        nonlocal active_scroll_canvas, scroll_animation_id, scroll_animation_canvas
-        if scroll_animation_id is not None:
-            try:
-                root.after_cancel(scroll_animation_id)
-            except tk.TclError:
-                pass
-            scroll_animation_id = None
-            scroll_animation_canvas = None
+        nonlocal active_scroll_canvas
         canvas = tk.Canvas(
             parent,
             background=palette["background"],
@@ -1961,6 +1940,14 @@ def build_app() -> None:
             background=palette["background"],
         ).pack(anchor="w", pady=(0, 17))
 
+        make_label(
+            page,
+            "Search stations",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["background"],
+        ).pack(anchor="w", pady=(0, 5))
+
         controls = tk.Frame(page, bg=palette["background"])
         controls.pack(fill="x", pady=(0, 10))
 
@@ -1985,7 +1972,9 @@ def build_app() -> None:
             selectforeground=palette["onPrimaryContainer"],
             relief="flat",
             borderwidth=0,
-            highlightthickness=0,
+            highlightthickness=2,
+            highlightbackground=palette["outline"],
+            highlightcolor=palette["primary"],
         )
         search.pack(fill="x", expand=True, ipady=5)
         search.bind("<KeyRelease>", lambda _event: update_station_tree())
@@ -2207,7 +2196,7 @@ def build_app() -> None:
                 relief="flat",
                 borderwidth=1,
                 highlightthickness=1,
-                highlightbackground=palette["outlineVariant"],
+                highlightbackground=palette["outline"],
                 highlightcolor=palette["primary"],
             )
             entry.pack(fill="x", ipady=7)
@@ -2221,9 +2210,9 @@ def build_app() -> None:
                 background=palette["surfaceContainerHigh"],
                 foreground=palette["onSurface"],
                 arrowcolor=palette["onSurface"],
-                bordercolor=palette["outlineVariant"],
-                lightcolor=palette["outlineVariant"],
-                darkcolor=palette["outlineVariant"],
+                bordercolor=palette["outline"],
+                lightcolor=palette["outline"],
+                darkcolor=palette["outline"],
                 padding=(10, 8),
             )
             style.map(
@@ -2235,6 +2224,10 @@ def build_app() -> None:
                 foreground=[
                     ("readonly", palette["onSurface"]),
                     ("disabled", palette["onSurfaceVariant"]),
+                ],
+                bordercolor=[
+                    ("focus", palette["primary"]),
+                    ("!focus", palette["outline"]),
                 ],
             )
             widget.configure(style="TXITY.Transmit.TCombobox", font=("Segoe UI", 11))
@@ -2344,7 +2337,11 @@ def build_app() -> None:
             resolution=1,
             orient="horizontal",
             showvalue=True,
-            highlightthickness=0,
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
             borderwidth=0,
             relief="flat",
             bg=palette["surfaceContainerLow"],
@@ -2372,7 +2369,11 @@ def build_app() -> None:
             activebackground=palette["surfaceContainerLow"],
             activeforeground=palette["onSurface"],
             selectcolor=palette["surfaceContainerHighest"],
-            highlightthickness=0,
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
             bd=0,
             anchor="w",
         )
@@ -2395,7 +2396,11 @@ def build_app() -> None:
             activebackground=palette["surfaceContainerLow"],
             activeforeground=palette["onSurface"],
             selectcolor=palette["surfaceContainerHighest"],
-            highlightthickness=0,
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
             bd=0,
             anchor="w",
         )
@@ -2474,7 +2479,11 @@ def build_app() -> None:
             activebackground=palette["surfaceContainerLow"],
             activeforeground=palette["onSurface"],
             selectcolor=palette["surfaceContainerHighest"],
-            highlightthickness=0,
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
             bd=0,
             anchor="w",
         )
@@ -2519,7 +2528,11 @@ def build_app() -> None:
                 resolution=step,
                 orient="horizontal",
                 showvalue=False,
-                highlightthickness=0,
+                highlightthickness=2,
+                highlightbackground=palette["surfaceContainerLow"],
+                highlightcolor=palette["primary"],
+                cursor="hand2",
+                takefocus=True,
                 borderwidth=0,
                 relief="flat",
                 bg=palette["surfaceContainerLow"],
@@ -2566,7 +2579,11 @@ def build_app() -> None:
             activebackground=palette["surfaceContainerLow"],
             activeforeground=palette["onSurface"],
             selectcolor=palette["surfaceContainerHighest"],
-            highlightthickness=0,
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
             bd=0,
             anchor="w",
         )
@@ -2716,7 +2733,11 @@ def build_app() -> None:
             activebackground=palette["surfaceContainerLow"],
             activeforeground=palette["onSurface"],
             selectcolor=palette["surfaceContainerHighest"],
-            highlightthickness=0,
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
             bd=0,
             anchor="w",
         )
@@ -3567,6 +3588,7 @@ def build_app() -> None:
                 )
                 station_status_var.set(details)
                 summary_var.set(details)
+                update_station_tree()
                 print(f"[TXITPY] {details}", file=sys.stderr, flush=True)
 
             elif kind == "auth_token":
