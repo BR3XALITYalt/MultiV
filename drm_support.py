@@ -852,7 +852,7 @@ def write_drm_station_config(
         "share = 1.0",
         "",
         "[service.audio.input]",
-    ]
+    ])
     if playlist_url:
         lines.extend((f"url = {_toml_string(playlist_url)}", "stream_titles = false"))
     else:
