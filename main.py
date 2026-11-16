@@ -2468,6 +2468,72 @@ def build_app() -> None:
             row=2,
         )
 
+        make_label(
+            drm_metadata_card,
+            "Audio settings",
+            font=("Segoe UI", 12, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(14, 8))
+
+        drm_audio_fields = tk.Frame(drm_metadata_card, bg=palette["surfaceContainerLow"])
+        drm_audio_fields.pack(fill="x")
+        drm_audio_fields.grid_columnconfigure(0, weight=1, uniform="drm-audio")
+        drm_audio_fields.grid_columnconfigure(1, weight=1, uniform="drm-audio")
+
+        codec_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        codec_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            codec_frame,
+            "Audio codec",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        drm_codec_picker = ttk.Combobox(
+            codec_frame,
+            textvariable=tx_drm_audio_codec_var,
+            values=DRM_AUDIO_CODECS,
+            state="readonly",
+            height=4,
+        )
+        drm_codec_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_codec_picker)
+        make_label(
+            codec_frame,
+            "xHE-AAC is designed for better quality at low bitrates. Use HE-AAC for older decoders.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
+        interleaving_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        interleaving_frame.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
+        make_label(
+            interleaving_frame,
+            "Interleaving",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        drm_interleaving_picker = ttk.Combobox(
+            interleaving_frame,
+            textvariable=tx_drm_interleaving_var,
+            values=("Long (2 s)", "Short (400 ms)"),
+            state="readonly",
+            height=4,
+        )
+        drm_interleaving_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_interleaving_picker)
+        make_label(
+            interleaving_frame,
+            "Long interleaving improves resistance to fading, with a little more decoding delay.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
         def update_drm_metadata_visibility() -> None:
             if tx_mode_var.get().strip().upper() == "DRM":
                 if not drm_metadata_card.winfo_manager():
@@ -2523,7 +2589,7 @@ def build_app() -> None:
                 "USB+C": "USB+C - upper sideband with carrier.",
                 "LSB+C": "LSB+C - lower sideband with carrier.",
                 "DSB": "DSB - double-sideband suppressed carrier.",
-                "DRM": "DRM30 - one audio service in a 4.5 kHz OFDM channel. Selecting DRM checks for its encoder and offers setup if needed. Microphone and OGG, MP3, or FLAC playlists are supported.",
+                "DRM": "DRM30 - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Microphone and OGG, MP3, or FLAC playlists are supported.",
                 "CW": "CW - carrier only. The microphone and desktop audio sources are not used.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
