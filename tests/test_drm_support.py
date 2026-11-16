@@ -1,3 +1,4 @@
+import sys
 import tempfile
 import tomllib
 import unittest
@@ -11,11 +12,29 @@ from drm_support import (
     DRM_PLAYLIST_EXTENSIONS,
     LocalDRMPlaylistServer,
     _patch_decdrm_output_validation,
+    _run_command,
     write_drm_station_config,
 )
 
 
 class DRMConfigurationTests(unittest.TestCase):
+    def test_build_command_streams_output_to_progress_callback(self):
+        updates = []
+        output = _run_command(
+            [
+                sys.executable,
+                "-c",
+                "print('Compiling station encoder'); print('Finished release build')",
+            ],
+            on_log=updates.append,
+        )
+
+        self.assertEqual(
+            updates,
+            ["Compiling station encoder", "Finished release build"],
+        )
+        self.assertIn("Finished release build", output)
+
     def test_decdrm_source_is_pinned(self):
         self.assertEqual(DECDRM_VERSION, "0.7.1")
         self.assertRegex(DECDRM_COMMIT, r"^[0-9a-f]{40}$")
