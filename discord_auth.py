@@ -399,15 +399,25 @@ class DiscordAuthManager:
         if process is not None and process.poll() is None:
             try:
                 process.terminate()
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
             except OSError:
                 pass
 
-    def clear_browser_session(self) -> None:
+    def clear_browser_session(self) -> bool:
         """Remove the embedded browser profile used for TXITY sign-in."""
         self.close()
         local_app_data = os.environ.get("LOCALAPPDATA")
         profile_root = Path(local_app_data) if local_app_data else Path.home()
-        shutil.rmtree(profile_root / "TXITPY" / "BrowserProfile", ignore_errors=True)
+        profile_path = profile_root / "TXITPY" / "BrowserProfile"
+        try:
+            shutil.rmtree(profile_path, ignore_errors=False)
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+        return not profile_path.exists()
 
     def _state_matches(self, value: Any) -> bool:
         with self._lock:
