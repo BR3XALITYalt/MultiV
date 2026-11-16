@@ -218,6 +218,7 @@ def rounded_widget_classes(tk):
             outline: str | None = None,
             padding: int = 18,
             radius: int = 18,
+            width: int | None = None,
         ) -> None:
             self._surface_background = background
             self._outside_background = outside or parent.cget("bg")
@@ -231,6 +232,7 @@ def rounded_widget_classes(tk):
                 highlightthickness=0,
                 padx=inset,
                 pady=inset,
+                width=width if width is not None else 0,
             )
             self._surface_canvas = tk.Canvas(
                 self,
@@ -252,10 +254,7 @@ def rounded_widget_classes(tk):
                 height - 2,
                 min(self._corner_radius, (min(width, height) - 2) / 2),
             )
-            coordinates = [
-                value + 1 if index % 2 == 0 else value + 1
-                for index, value in enumerate(coordinates)
-            ]
+            coordinates = [value + 1 for value in coordinates]
             self._surface_canvas.create_polygon(
                 *coordinates,
                 fill=self._surface_background,
