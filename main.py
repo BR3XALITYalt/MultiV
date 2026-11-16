@@ -343,7 +343,7 @@ def build_app() -> None:
                 "input": "#000000",
             }
         },
-    ).install(activate="txity-dark")
+    ).install()
 
     # Use Lexend when the font is installed; otherwise retain Bootstack's
     # native system sans-serif fallback, as in the website's CSS stack.
