@@ -5,7 +5,9 @@ from pathlib import Path
 from audio_playlist import (
     SUPPORTED_AUDIO_EXTENSIONS,
     build_playlist_order,
+    build_playlist_snapshot,
     collect_audio_files,
+    normalize_audio_sources,
 )
 
 
@@ -39,6 +41,54 @@ class AudioPlaylistTests(unittest.TestCase):
                 [Path(item).name for item in collected],
                 ["a-track.wav", "b-track.flac", "z-track.MP3"],
             )
+
+    def test_normalizes_file_and_folder_sources(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            track = root / "track.ogg"
+            folder = root / "music"
+            folder.mkdir()
+            track.write_bytes(b"audio")
+
+            sources = normalize_audio_sources([track, folder, track, root / "missing"])
+            self.assertEqual(
+                sources,
+                [str(track.resolve()), str(folder.resolve()), str((root / "missing").resolve())],
+            )
+
+    def test_playlist_snapshot_detects_added_and_modified_tracks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = root / "first.ogg"
+            first.write_bytes(b"first")
+
+            initial_files, initial_signature = build_playlist_snapshot([root])
+            self.assertEqual([Path(path).name for path in initial_files], ["first.ogg"])
+
+            second = root / "second.ogg"
+            second.write_bytes(b"second")
+            added_files, added_signature = build_playlist_snapshot([root])
+            self.assertEqual(
+                [Path(path).name for path in added_files],
+                ["first.ogg", "second.ogg"],
+            )
+            self.assertNotEqual(initial_signature, added_signature)
+
+            first.write_bytes(b"first track changed")
+            modified_files, modified_signature = build_playlist_snapshot([root])
+            self.assertEqual(modified_files, added_files)
+            self.assertNotEqual(added_signature, modified_signature)
+
+    def test_playlist_snapshot_honors_removed_tracks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = root / "first.wav"
+            second = root / "second.wav"
+            first.write_bytes(b"first")
+            second.write_bytes(b"second")
+
+            files, _signature = build_playlist_snapshot([root], [first])
+            self.assertEqual([Path(path).name for path in files], ["second.wav"])
 
     def test_ignores_missing_paths_and_unsupported_files(self):
         with tempfile.TemporaryDirectory() as temporary:
