@@ -4,13 +4,17 @@ A Python desktop companion for the TXITY simulated radio-broadcast service, buil
 
 ## Current scope
 
-This release provides a read-only desktop viewer with the official TXITY Discord sign-in flow:
+This release provides a native desktop client for TXITY with the official Discord sign-in flow:
 
 - Live server status and a searchable station directory with image cards and profile detail pages.
 - TXITY's official Discord OAuth flow in an embedded browser window, followed by a one-use loopback callback into the desktop app.
-- The authenticated status WebSocket receives the session token through TXITY's `authToken` query parameter.
+- An authenticated control WebSocket for TXITY configuration and push-to-talk messages.
+- A separate authenticated audio WebSocket for microphone transmission using mono Float32 PCM at 48 kHz, sent in 512-sample binary frames.
+- CW mode using TXITY's control protocol without opening a microphone audio stream.
 
-Discord sign-in is required before the dashboard can be used. On startup, TXITPY checks the existing app-specific WebView2 profile in a hidden browser window. If TXITY still has a valid saved session, the dashboard unlocks automatically; otherwise the sign-in page remains open. The browser profile keeps the website's normal session across launches. TXITPY keeps the active token in memory and does not write it to an application settings file or log it. Disconnect clears the saved browser profile. The only authenticated control message sent by the desktop client is TXITY's `discordLogout` notification when the user disconnects. It never sends transmitter configuration, push-to-talk commands, or audio frames.
+Discord sign-in is required before the dashboard can be used. On startup, TXITPY checks the existing app-specific WebView2 profile in a hidden browser window. If TXITY still has a valid saved session, the dashboard unlocks automatically; otherwise the sign-in page remains open. The browser profile keeps the website's normal session across launches. TXITPY keeps the active token in memory and does not write it to an application settings file or log it. Disconnect clears the saved browser profile. Microphone transmission uses the TXITY virtual service only; TXITPY does not control physical radio hardware.
+
+The current Transmit page supports microphone audio in AM, USB, LSB, USB+C, LSB+C, and DSB modes, plus CW control mode. MP3 file playback and the browser's advanced audio processing controls are not yet included.
 
 The desktop interface uses native Tkinter and ttk widgets with horizontal top navigation, square-corner station cards, station profile views with thumbnails, gallery images, custom page blocks and comments, plus a blue Material 3 Expressive-inspired scheme based on TeleDrive's light and dark palettes: blue primary (`#1B6EF3`), cyan tertiary (`#00677E`), and layered Material-style surfaces. A light/dark switch follows the Windows application theme on startup and can be changed from the toolbar. Color values are adapted from [TeleDrive](https://github.com/Mahmud0808/TeleDrive), which uses Kotlin Multiplatform and Compose Material 3 Expressive.
 
