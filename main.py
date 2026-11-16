@@ -1754,7 +1754,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(14, 6))
         make_label(
             card,
-            "Your Discord account is required to use the TXITY desktop dashboard. "
+            "Your Discord account is required to use the TXITPY desktop app. 
             "TXITPY checks your saved session automatically on later launches.",
             font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
@@ -2047,7 +2047,7 @@ def build_app() -> None:
         hero.pack(fill="x", pady=(6, 16))
         make_label(
             hero,
-            "TXITY",
+            "TXITPY",
             font=("Segoe UI", 28, "bold"),
             background=palette["background"],
         ).pack(side="left")
@@ -2754,7 +2754,7 @@ def build_app() -> None:
         upper = tk.Frame(profile, bg=palette["surfaceContainerLow"])
         upper.pack(fill="x")
 
-        logo = make_image_label(upper, str(row.get("logo_url") or ""), size=176, placeholder="TXITY", role=f"station profile logo: {row.get('station', 'unknown')}")
+        logo = make_image_label(upper, str(row.get("logo_url") or ""), size=176, placeholder="ST", role=f"station profile logo: {row.get('station', 'unknown')}")
         logo.pack(side="left", padx=(0, 16), pady=(0, 12))
 
         heading = tk.Frame(upper, bg=palette["surfaceContainerLow"])
