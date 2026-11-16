@@ -4265,12 +4265,21 @@ def build_app() -> None:
                         transmitter.stop()
 
             elif kind == "tx_metrics":
-                tx_metrics_var.set(
-                    f"Audio frames sent: {event.get('frames_sent', 0)}"
-                    f" · dropped: {event.get('frames_dropped', 0)}"
-                    f" · queued: {event.get('queue_depth', 0)}"
-                    f" · playlist buffer underruns: {event.get('playlist_underruns', 0)}"
-                )
+                if event.get("drm_mode"):
+                    tx_metrics_var.set(
+                        f"DRM blocks queued: {event.get('queue_depth', 0)}"
+                        f" · low-water: {event.get('drm_queue_min_frames', 0)}"
+                        f" · underruns: {event.get('drm_queue_underruns', 0)}"
+                        f" · slow sends: {event.get('drm_send_slow_count', 0)}"
+                        f" · reconnects: {event.get('drm_send_reconnects', 0)}"
+                    )
+                else:
+                    tx_metrics_var.set(
+                        f"Audio frames sent: {event.get('frames_sent', 0)}"
+                        f" · dropped: {event.get('frames_dropped', 0)}"
+                        f" · queued: {event.get('queue_depth', 0)}"
+                        f" · playlist buffer underruns: {event.get('playlist_underruns', 0)}"
+                    )
 
             elif kind == "playlist_refresh":
                 revision = event.get("revision")
