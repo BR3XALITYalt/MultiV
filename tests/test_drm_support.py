@@ -10,6 +10,9 @@ from drm_support import (
     DECDRM_COMMIT,
     DECDRM_VERSION,
     DRM_PLAYLIST_EXTENSIONS,
+    VISUAL_STUDIO_BUILD_TOOLS_LABEL,
+    VISUAL_STUDIO_BUILD_TOOLS_URL,
+    VISUAL_STUDIO_WORKLOAD,
     LocalDRMPlaylistServer,
     _patch_decdrm_output_validation,
     _run_command,
@@ -34,6 +37,17 @@ class DRMConfigurationTests(unittest.TestCase):
             ["Compiling station encoder", "Finished release build"],
         )
         self.assertIn("Finished release build", output)
+
+    def test_windows_build_tools_installer_uses_cpp_desktop_workload(self):
+        self.assertEqual(
+            VISUAL_STUDIO_BUILD_TOOLS_URL,
+            "https://aka.ms/vs/stable/vs_buildtools.exe",
+        )
+        self.assertEqual(
+            VISUAL_STUDIO_WORKLOAD,
+            "Microsoft.VisualStudio.Workload.VCTools",
+        )
+        self.assertIn("Desktop development with C++", VISUAL_STUDIO_BUILD_TOOLS_LABEL)
 
     def test_decdrm_source_is_pinned(self):
         self.assertEqual(DECDRM_VERSION, "0.7.1")
