@@ -863,6 +863,10 @@ def write_drm_station_config(
         "",
         "[service.audio]",
         f'codec = "{selected_codec}"',
+    ])
+    if selected_codec == "he-aac":
+        lines.append("core_rate = 12000")
+    lines.extend([
         "stereo = false",
         'part = "B"',
         "share = 1.0",
