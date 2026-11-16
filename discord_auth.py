@@ -426,10 +426,14 @@ class DiscordAuthManager:
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
         try:
             process = subprocess.Popen(
-                [sys.executable, str(helper_path), login_url, complete_url, state],
+                [sys.executable, "-u", str(helper_path), login_url, complete_url, state],
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
                 creationflags=creation_flags,
             )
         except OSError as exc:
@@ -447,6 +451,13 @@ class DiscordAuthManager:
 
         with self._lock:
             self._browser_process = process
+        if process.stdout is not None:
+            threading.Thread(
+                target=self._capture_browser_output,
+                args=(process.stdout,),
+                daemon=True,
+                name="txity-browser-output",
+            ).start()
         self.events.put({
             "kind": "auth_browser",
             "text": "TXITY sign-in opened in the embedded browser. Waiting for Discord authorization.",
@@ -457,6 +468,21 @@ class DiscordAuthManager:
             daemon=True,
             name="txity-auth-browser-monitor",
         ).start()
+
+    def _capture_browser_output(self, stream: Any) -> None:
+        """Capture browser backend output after removing URLs and credentials."""
+        try:
+            for line in stream:
+                detail = safe_error_text(line.rstrip("\r\n"), max_chars=3_000)
+                if detail:
+                    write_diagnostic_text("browser-output", detail)
+        except Exception as exc:
+            write_diagnostic("capture-browser-output", exc)
+        finally:
+            try:
+                stream.close()
+            except OSError:
+                pass
 
     def _watch_browser(
         self,
