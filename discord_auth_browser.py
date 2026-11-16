@@ -83,7 +83,7 @@ class AuthBridge:
         self.state = state
         self._lock = threading.Lock()
         self._finished = False
-        self.window = None
+        self._window = None
 
     def _send_failure(self, message: str) -> None:
         """Send a sanitized browser failure to the parent desktop process."""
@@ -154,7 +154,7 @@ class AuthBridge:
             self._send_failure(message)
             return {"ok": False}
 
-        window = self.window
+        window = self._window
         if window is not None:
             try:
                 window.destroy()
@@ -240,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
         bridge.report_startup_failure("create-window", exc)
         return 1
 
-    bridge.window = window
+    bridge._window = window
     report_stage("Browser window object created.")
 
     window_shown = threading.Event()
