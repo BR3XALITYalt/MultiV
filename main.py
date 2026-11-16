@@ -34,7 +34,12 @@ from discord_auth import (
     write_diagnostic,
     write_diagnostic_text,
 )
-from drm_support import drm_setup_status, prepare_drm_encoder
+from drm_support import (
+    DRM_LANGUAGES,
+    DRM_PROGRAMME_TYPES,
+    drm_setup_status,
+    prepare_drm_encoder,
+)
 from transmitter import (
     TxityTransmitter,
     build_transmit_config,
@@ -1060,6 +1065,12 @@ def build_app() -> None:
     tx_frequency_check_var = tk.StringVar(root, "Waiting for TXITY station data.")
     tx_mode_var = tk.StringVar(root, saved_text("mode", "AM"))
     tx_mode_help_var = tk.StringVar(root, "AM uses a carrier with upper and lower sidebands.")
+    tx_drm_service_label_var = tk.StringVar(root, saved_text("drm_service_label", ""))
+    tx_drm_service_id_var = tk.StringVar(root, saved_text("drm_service_id", "0xB30001"))
+    tx_drm_language_var = tk.StringVar(root, saved_text("drm_language", "English"))
+    tx_drm_programme_type_var = tk.StringVar(root, saved_text("drm_programme_type", "No programme type"))
+    tx_drm_iso_language_var = tk.StringVar(root, saved_text("drm_iso_language", ""))
+    tx_drm_iso_country_var = tk.StringVar(root, saved_text("drm_iso_country", ""))
     drm_setup_state: dict[str, Any] = {
         "running": False,
         "previous_mode": (
@@ -1144,6 +1155,12 @@ def build_app() -> None:
             "description": tx_description_var.get(),
             "frequency": tx_frequency_var.get(),
             "mode": tx_mode_var.get(),
+            "drm_service_label": tx_drm_service_label_var.get(),
+            "drm_service_id": tx_drm_service_id_var.get(),
+            "drm_language": tx_drm_language_var.get(),
+            "drm_programme_type": tx_drm_programme_type_var.get(),
+            "drm_iso_language": tx_drm_iso_language_var.get(),
+            "drm_iso_country": tx_drm_iso_country_var.get(),
             "station_dbm": tx_power_var.get(),
             "audio_source": tx_audio_source_var.get(),
             "audio_device": tx_audio_device_var.get(),
@@ -1235,6 +1252,8 @@ def build_app() -> None:
 
     tx_setting_variables = (
         tx_station_name_var, tx_description_var, tx_frequency_var, tx_mode_var,
+        tx_drm_service_label_var, tx_drm_service_id_var, tx_drm_language_var,
+        tx_drm_programme_type_var, tx_drm_iso_language_var, tx_drm_iso_country_var,
         tx_power_var, tx_audio_source_var, tx_audio_device_var,
         tx_playlist_shuffle_var, tx_playlist_loop_var, tx_cw_text_var,
         tx_cw_wpm_var, tx_cw_loop_var, tx_allow_overlap_var, tx_logo_url_var,
@@ -2184,6 +2203,12 @@ def build_app() -> None:
                 ssb_high_cut_hz=tx_ssb_high_cut_var.get(),
                 am_bandwidth_hz=tx_am_bandwidth_var.get(),
                 am_pre_emphasis=tx_am_pre_emphasis_var.get(),
+                drm_service_label=tx_drm_service_label_var.get(),
+                drm_service_id=tx_drm_service_id_var.get(),
+                drm_language=tx_drm_language_var.get(),
+                drm_programme_type=tx_drm_programme_type_var.get(),
+                drm_iso_language=tx_drm_iso_language_var.get(),
+                drm_iso_country=tx_drm_iso_country_var.get(),
             )
             if config["mode"] == "CW":
                 audio_source = "mic"
