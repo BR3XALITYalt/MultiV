@@ -736,7 +736,7 @@ def write_drm_station_config(
         'mode = "B"',
         "occupancy = 0",
         'msc_mode = "64-QAM"',
-        'sdc_mode = "4-QAM"',
+        'sdc_mode = "16-QAM"',
         'interleaving = "short"',
         "protection_b = 1",
         "protection_a = 0",
