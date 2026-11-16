@@ -3595,6 +3595,7 @@ def build_app() -> None:
 
     def watch_playlist_sources() -> None:
         """Refresh imported folders and files when their contents change on disk."""
+        nonlocal playlist_watch_signature
         while not playlist_watch_stop.wait(4.0):
             with playlist_watch_lock:
                 sources = list(tx_playlist_sources)
