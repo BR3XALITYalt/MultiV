@@ -3506,6 +3506,15 @@ def build_app() -> None:
                     tx_negative_status_reason = None
                     tx_negative_status_count = 0
                 tx_status_var.set(str(event.get("text") or state))
+                if tx_audio_source_var.get() == "Audio playlist":
+                    if state == "transmitting":
+                        tx_playlist_status_var.set("Connected. Loading the first track...")
+                    elif state == "stopped" and (
+                        tx_playlist_status_var.get().startswith("Preparing")
+                        or tx_playlist_status_var.get().startswith("Playing")
+                        or tx_playlist_status_var.get().startswith("Connected")
+                    ):
+                        tx_playlist_status_var.set("Playlist stopped before completion.")
                 update_transmit_button()
                 print(f"[TXITPY] Transmission state: {state}.", file=sys.stderr, flush=True)
 
@@ -3554,6 +3563,11 @@ def build_app() -> None:
 
             elif kind == "tx_playlist_finished":
                 tx_playlist_status_var.set("Playlist finished.")
+
+            elif kind == "tx_playlist_error":
+                details = safe_error_text(str(event.get("text") or "Unknown audio decoder error."), 500)
+                tx_playlist_status_var.set(f"Playlist error: {details}")
+                print(f"[TXITPY] Playlist decoder error: {details}", file=sys.stderr, flush=True)
 
             elif kind == "config":
                 config = event.get("data", {})
