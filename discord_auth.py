@@ -500,7 +500,7 @@ class DiscordAuthManager:
                         continue
 
                     lowered = detail.lower()
-                    is_problem = any(
+                    is_problem = detail.startswith("[TXITPY]") or any(
                         marker in lowered
                         for marker in (
                             "error",
