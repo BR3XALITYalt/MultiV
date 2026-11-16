@@ -1154,14 +1154,14 @@ def build_app() -> None:
             "TXITY",
             font=("Segoe UI", 17, "bold"),
             color=palette["primary"],
-            background=palette["surface"],
+            background=palette["surfaceContainerLow"],
         ).pack(side="left")
         make_label(
             topbar,
             "Desktop",
             font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
-            background=palette["surface"],
+            background=palette["surfaceContainerLow"],
         ).pack(side="left", padx=(10, 0))
 
         make_button(
