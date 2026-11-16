@@ -2407,6 +2407,24 @@ def build_app() -> None:
             except tk.TclError:
                 pass
 
+        drm_progressbar: ttk.Progressbar | None = None
+
+        def set_drm_progress_visible(visible: bool) -> None:
+            progress = drm_progressbar
+            if progress is None:
+                return
+            try:
+                if not progress.winfo_exists():
+                    return
+                if visible:
+                    progress.pack(fill="x", pady=(12, 0))
+                    progress.start(25)
+                else:
+                    progress.stop()
+                    progress.pack_forget()
+            except tk.TclError:
+                pass
+
         def poll_drm_setup() -> None:
             completed = False
             while True:
@@ -2420,6 +2438,7 @@ def build_app() -> None:
                 elif kind == "success":
                     completed = True
                     drm_setup_state["running"] = False
+                    set_drm_progress_visible(False)
                     drm_setup_state["previous_mode"] = "DRM"
                     tx_mode_var.set("DRM")
                     tx_status_var.set("DRM encoder is ready.")
@@ -2428,6 +2447,7 @@ def build_app() -> None:
                 elif kind == "error":
                     completed = True
                     drm_setup_state["running"] = False
+                    set_drm_progress_visible(False)
                     restore_previous_mode()
                     tx_status_var.set("DRM setup failed.")
                     set_mode_picker_enabled(True)
@@ -2500,6 +2520,7 @@ def build_app() -> None:
             tx_mode_var.set(previous_mode)
             tx_mode_help_var.set("Setting up DRM30. Downloading and building its encoder...")
             tx_status_var.set("Preparing DRM dependencies...")
+            set_drm_progress_visible(True)
             set_mode_picker_enabled(False)
 
             def setup_worker() -> None:
@@ -3279,6 +3300,22 @@ def build_app() -> None:
             font=("Segoe UI", 11, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w")
+        progress_style = ttk.Style(root)
+        progress_style.configure(
+            "TXITY.Horizontal.TProgressbar",
+            background=palette["primary"],
+            troughcolor=palette["surfaceContainerHighest"],
+            bordercolor=palette["surfaceContainerLow"],
+            lightcolor=palette["primary"],
+            darkcolor=palette["primary"],
+            thickness=8,
+        )
+        drm_progressbar = ttk.Progressbar(
+            status_card,
+            mode="indeterminate",
+            maximum=100,
+            style="TXITY.Horizontal.TProgressbar",
+        )
         make_label(
             status_card,
             variable=tx_metrics_var,
