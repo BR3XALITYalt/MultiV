@@ -535,7 +535,7 @@ class TxityTransmitter:
             if pcm.size:
                 carry.extend(pcm.tobytes())
             if flush and carry and len(carry) < FRAME_BYTES:
-                carry.extend(b"\\x00" * (FRAME_BYTES - len(carry)))
+                carry.extend(bytes(FRAME_BYTES - len(carry)))
 
             while len(carry) >= FRAME_BYTES:
                 frame = bytes(carry[:FRAME_BYTES])
@@ -607,13 +607,13 @@ class TxityTransmitter:
 
         def start_playlist_worker() -> threading.Thread:
             def stream_playlist() -> None:
-                import numpy as np
-                import soundfile
-
                 completed = False
                 previous_file: str | None = None
                 rng = random.Random()
                 try:
+                    import numpy as np
+                    import soundfile
+
                     while not self._stop_event.is_set():
                         order = build_playlist_order(
                             playlist_files,
