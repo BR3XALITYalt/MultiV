@@ -26,6 +26,7 @@ from transmitter import (
     StreamingLinearResampler,
     find_frequency_overlaps,
     mode_bandwidth_hz,
+    tx_status_diagnostic_snapshot,
 )
 
 
@@ -323,6 +324,32 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(mode_bandwidth_hz("USB"), 10_000)
         self.assertEqual(mode_bandwidth_hz("LSB+C"), 10_000)
         self.assertEqual(mode_bandwidth_hz("CW"), 500)
+
+    def test_tx_status_diagnostics_include_request_context_without_credentials(self):
+        snapshot = tx_status_diagnostic_snapshot(
+            {
+                "ptt": False,
+                "txStartUsable": False,
+                "txStartReason": 3,
+                "txBlockReason": 3,
+                "discordAuthToken": "must-not-be-logged",
+            },
+            request_frequency_hz=7_250_000,
+            request_mode="DRM",
+            allow_overlap=False,
+        )
+        self.assertEqual(snapshot["ptt"], False)
+        self.assertEqual(snapshot["txStartReason"], 3)
+        self.assertEqual(snapshot["requestRfHz"], 7_250_000)
+        self.assertEqual(snapshot["requestMode"], "DRM")
+        self.assertFalse(snapshot["requestAllowOverlapVisitors"])
+        self.assertNotIn("discordAuthToken", snapshot)
+
+    def test_tx_status_diagnostics_ignore_unrelated_payload_fields(self):
+        snapshot = tx_status_diagnostic_snapshot(
+            {"ptt": True, "someOtherField": "ignored"}
+        )
+        self.assertEqual(snapshot, {"ptt": True})
 
     def test_detects_overlapping_virtual_station_frequency(self):
         overlaps = find_frequency_overlaps(
