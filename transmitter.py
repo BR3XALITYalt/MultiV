@@ -79,6 +79,7 @@ def build_transmit_config(
     auth_token: str,
     cw_text: str = "CQ CQ DE TXITY",
     cw_wpm: Any = 18,
+    cw_loop: bool = True,
     station_logo_url: str = "",
     station_details: str = "",
     station_page_layout: str = "",
@@ -126,7 +127,7 @@ def build_transmit_config(
         "allowOverlapVisitors": bool(allow_overlap),
         "cwText": str(cw_text or "CQ CQ DE TXITY").strip()[:300],
         "cwWpm": words_per_minute,
-        "cwLoop": True,
+        "cwLoop": bool(cw_loop),
         "agcEnabled": True,
         "agcTarget": 0.19,
         "micGainDb": 0,
@@ -397,7 +398,7 @@ class TxityTransmitter:
                     if raw.size:
                         usable = raw.size - (raw.size % channels)
                         if usable <= 0:
-                            return (None, pyaudio.paContinue)
+                            return (in_data, pyaudio.paContinue)
                         audio = raw[:usable].reshape(-1, channels)
                         mono = audio.mean(axis=1, dtype=np.float32) if channels > 1 else audio[:, 0]
                         enqueue_pcm_samples(resampler.process(mono))
