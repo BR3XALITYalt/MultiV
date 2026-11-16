@@ -158,7 +158,7 @@ def fetch_text(url: str) -> str:
 def describe_status_socket_error(error: BaseException) -> str:
     """Describe a WebSocket failure without exposing credentials in its URL."""
     details = re.sub(
-        r"(?i)wss?://[^\\s'\\"<>]+",
+        r"(?i)wss?://\S+",
         "[WebSocket URL redacted]",
         str(error),
     )
