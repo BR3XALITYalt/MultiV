@@ -114,11 +114,15 @@ def _vswhere_executable() -> Path | None:
     return None
 
 
-def _visual_studio_installation_path(*, require_cpp: bool) -> Path | None:
-    """Return the newest Visual Studio installation, optionally requiring MSVC."""
+def _visual_studio_installation_info(
+    *,
+    require_cpp: bool,
+) -> tuple[Path, str] | None:
+    """Return an installed Visual Studio path and its four-part version."""
     vswhere = _vswhere_executable()
     if vswhere is None:
         return None
+
     command = [
         str(vswhere),
         "-all" if require_cpp else "-latest",
@@ -127,7 +131,8 @@ def _visual_studio_installation_path(*, require_cpp: bool) -> Path | None:
     ]
     if require_cpp:
         command.extend(["-requires", VISUAL_STUDIO_CPP_COMPONENT])
-    command.extend(["-property", "installationPath"])
+    command.extend(["-format", "json"])
+
     try:
         result = subprocess.run(
             command,
@@ -142,23 +147,67 @@ def _visual_studio_installation_path(*, require_cpp: bool) -> Path | None:
         return None
     if result.returncode != 0:
         return None
-    for line in (result.stdout or "").splitlines():
-        candidate_text = line.strip()
-        if not candidate_text:
+
+    try:
+        installations = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(installations, list):
+        return None
+
+    for installation in installations:
+        if not isinstance(installation, dict):
+            continue
+        candidate_text = installation.get("installationPath")
+        if not isinstance(candidate_text, str) or not candidate_text.strip():
             continue
         candidate = Path(candidate_text)
-        if not require_cpp:
-            return candidate if candidate.is_dir() else None
-        vc_root = candidate / "VC"
-        tool_root = vc_root / "Tools" / "MSVC"
-        build_environment = vc_root / "Auxiliary" / "Build" / "vcvars64.bat"
-        if (
-            build_environment.is_file()
-            and tool_root.is_dir()
-            and any(item.is_dir() for item in tool_root.iterdir())
-        ):
-            return candidate
+        if not candidate.is_dir():
+            continue
+        version = str(installation.get("installationVersion") or "")
+
+        if require_cpp:
+            vc_root = candidate / "VC"
+            tool_root = vc_root / "Tools" / "MSVC"
+            build_environment = vc_root / "Auxiliary" / "Build" / "vcvars64.bat"
+            if not (
+                build_environment.is_file()
+                and tool_root.is_dir()
+                and any(item.is_dir() for item in tool_root.iterdir())
+            ):
+                continue
+        return candidate, version
     return None
+
+
+def _visual_studio_installation_path(*, require_cpp: bool) -> Path | None:
+    """Return the newest Visual Studio installation, optionally requiring MSVC."""
+    installation = _visual_studio_installation_info(require_cpp=require_cpp)
+    return installation[0] if installation else None
+
+
+def _visual_studio_cmake_generator_for_version(version: str) -> str | None:
+    """Map a Visual Studio installation version to its matching CMake generator."""
+    match = re.match(r"^\\s*([0-9]+)", version)
+    if not match:
+        return None
+    generators = {
+        15: "Visual Studio 15 2017",
+        16: "Visual Studio 16 2019",
+        17: "Visual Studio 17 2022",
+        18: "Visual Studio 18 2026",
+    }
+    return generators.get(int(match.group(1)))
+
+
+def _visual_studio_cmake_generator() -> str | None:
+    """Choose the CMake generator that matches the installed MSVC toolchain."""
+    if os.name != "nt":
+        return None
+    installation = _visual_studio_installation_info(require_cpp=True)
+    if installation is None:
+        return None
+    return _visual_studio_cmake_generator_for_version(installation[1])
 
 
 def _visual_studio_cpp_tools_ready() -> bool:
@@ -451,12 +500,14 @@ def _run_command(
     command: list[str],
     *,
     cwd: Path | None = None,
+    env: dict[str, str] | None = None,
     on_log: Callable[[str], None] | None = None,
 ) -> str:
     try:
         process = subprocess.Popen(
             command,
             cwd=str(cwd) if cwd else None,
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -596,9 +647,19 @@ decdrm-station = { path = "../../crates/decdrm-station" }
     if changed or not executable.is_file():
         if on_log:
             on_log("Building the DRM encoder. The first build also compiles its codec libraries.")
+        build_environment = None
+        if os.name == "nt":
+            generator = _visual_studio_cmake_generator()
+            if generator:
+                build_environment = os.environ.copy()
+                build_environment["CMAKE_GENERATOR"] = generator
+                if on_log:
+                    on_log(f"Using {generator} to match the installed C++ build tools.")
+
         _run_command(
             ["cargo", "build", "--release", "-p", "txitpy-drm-bridge"],
             cwd=upstream,
+            env=build_environment,
             on_log=on_log,
         )
 
