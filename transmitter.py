@@ -25,6 +25,8 @@ PLAYLIST_AUDIO_QUEUE_FRAMES = 512
 PLAYLIST_PREROLL_FRAMES = 256
 PLAYLIST_READ_FRAMES = 8_192
 AUDIO_FRAME_INTERVAL_SECONDS = BATCH_SAMPLES / SAMPLE_RATE_HZ
+LIVE_AUDIO_SILENCE_GRACE_SECONDS = 0.1
+CONTROL_RECONNECT_GRACE_SECONDS = 20.0
 
 
 def playlist_frame_wait_seconds(next_frame_deadline: float | None, now: float) -> float:
@@ -64,6 +66,43 @@ def begin_windows_audio_timer_resolution():
     except (AttributeError, OSError):
         return None
     return None
+
+
+def begin_windows_system_awake():
+    """Prevent Windows from entering system sleep while this thread transmits."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        set_execution_state = kernel32.SetThreadExecutionState
+        set_execution_state.argtypes = [ctypes.c_uint]
+        set_execution_state.restype = ctypes.c_uint
+        previous_state = set_execution_state(0x80000001)
+        if previous_state:
+            return kernel32, set_execution_state
+    except (AttributeError, OSError):
+        return None
+    return None
+
+
+def end_windows_system_awake(handle) -> None:
+    """Release the system-sleep request on the same thread that created it."""
+    if handle is None:
+        return
+    _kernel32, set_execution_state = handle
+    try:
+        set_execution_state(0x80000000)
+    except (AttributeError, OSError):
+        pass
+
+
+def should_send_live_audio_silence(last_audio_at: float, now: float) -> bool:
+    """Fill a sustained microphone or loopback input gap with a silent audio frame."""
+    return now - last_audio_at >= LIVE_AUDIO_SILENCE_GRACE_SECONDS
+
+
 PTT_CONFIRMATION_GRACE_SECONDS = 4.0
 SUPPORTED_MODES = ("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "CW")
 DEFAULT_MODE_BANDWIDTH_HZ = {
@@ -555,6 +594,7 @@ class TxityTransmitter:
     ) -> None:
         import websocket
 
+        system_awake_handle = begin_windows_system_awake()
         mode = str(config.get("mode", "AM")).upper()
         needs_audio = mode != "CW"
         audio_socket = None
@@ -571,10 +611,14 @@ class TxityTransmitter:
         audio_timer_resolution = None
         ptt_sent = False
         audio_thread_error: list[str] = []
+        audio_capture_error: list[str] = []
         audio_queue = self._audio_queue
         send_count = 0
         drop_count = 0
         last_metrics_at = time.monotonic()
+        last_audio_frame_at = time.monotonic()
+        last_capture_error_at = 0.0
+        control_disconnected_at: float | None = None
         carry = bytearray()
         last_callback_warning = 0.0
 
@@ -639,7 +683,7 @@ class TxityTransmitter:
             try:
                 enqueue_pcm_samples(indata[:, 0])
             except Exception as exc:
-                audio_thread_error[:] = [_safe_error(exc)]
+                audio_capture_error[:] = [_safe_error(exc)]
 
         def loopback_callback_factory(channels: int, source_rate: int, pyaudio):
             import numpy as np
@@ -658,7 +702,7 @@ class TxityTransmitter:
                         mono = audio.mean(axis=1, dtype=np.float32) if channels > 1 else audio[:, 0]
                         enqueue_pcm_samples(resampler.process(mono))
                 except Exception as exc:
-                    audio_thread_error[:] = [_safe_error(exc)]
+                    audio_capture_error[:] = [_safe_error(exc)]
                 return (None, pyaudio.paContinue)
 
             return callback
@@ -885,17 +929,57 @@ class TxityTransmitter:
             })
             while not self._stop_event.is_set():
                 if not self.client.control_connected():
-                    raise ConnectionError("TXITY control connection was lost during transmission.")
+                    now = time.monotonic()
+                    if control_disconnected_at is None:
+                        control_disconnected_at = now
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": "TXITY control connection interrupted; holding transmission for reconnection.",
+                        })
+                    elif now - control_disconnected_at >= CONTROL_RECONNECT_GRACE_SECONDS:
+                        raise ConnectionError(
+                            "TXITY control connection did not return within 20 seconds."
+                        )
+                    self._stop_event.wait(0.1)
+                    continue
+
+                if control_disconnected_at is not None:
+                    self.client.send_control_message({"type": "ptt", "ptt": True})
+                    with self._lock:
+                        self._ptt_requested_at = time.monotonic()
+                    control_disconnected_at = None
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": "TXITY control connection restored; transmission resumed.",
+                    })
+
                 if audio_thread_error:
                     raise RuntimeError(audio_thread_error[0])
+                if audio_capture_error:
+                    details = audio_capture_error.pop()
+                    now = time.monotonic()
+                    if now - last_capture_error_at >= 5.0:
+                        self.events.put({
+                            "kind": "tx_audio_warning",
+                            "text": (
+                                "Audio input reported an error. TXITPY will keep the stream open "
+                                f"and send silence until input resumes: {details}"
+                            ),
+                        })
+                        last_capture_error_at = now
 
                 if not needs_audio:
                     self._stop_event.wait(0.2)
                     continue
 
+                using_silence_frame = False
                 try:
                     queued_frame = audio_queue.get(
-                        timeout=0.05 if audio_source == "playlist" else 0.2
+                        timeout=(
+                            0.05
+                            if audio_source == "playlist"
+                            else AUDIO_FRAME_INTERVAL_SECONDS
+                        )
                     )
                 except queue.Empty:
                     if audio_source == "playlist" and audio_finished.is_set():
@@ -903,10 +987,19 @@ class TxityTransmitter:
                             raise RuntimeError(audio_thread_error[0])
                         playlist_reached_end = True
                         break
-                    if audio_source == "playlist" and not playlist_underrun_active:
-                        playlist_underruns += 1
-                        playlist_underrun_active = True
-                    continue
+                    if audio_source == "playlist":
+                        if not playlist_underrun_active:
+                            playlist_underruns += 1
+                            playlist_underrun_active = True
+                        continue
+                    if should_send_live_audio_silence(
+                        last_audio_frame_at,
+                        time.monotonic(),
+                    ):
+                        queued_frame = bytes(FRAME_BYTES)
+                        using_silence_frame = True
+                    else:
+                        continue
 
                 if audio_source == "playlist":
                     frame, playlist_info = queued_frame
@@ -933,6 +1026,8 @@ class TxityTransmitter:
 
                 audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
                 send_count += 1
+                if audio_source in {"mic", "loopback"} and not using_silence_frame:
+                    last_audio_frame_at = time.monotonic()
                 if audio_source == "playlist":
                     playlist_next_frame_deadline = next_playlist_frame_deadline(
                         playlist_next_frame_deadline,
@@ -1002,6 +1097,8 @@ class TxityTransmitter:
                     audio_timer_resolution.timeEndPeriod(1)
                 except Exception:
                     pass
+
+            end_windows_system_awake(system_awake_handle)
 
             if playlist_completed:
                 self.events.put({"kind": "tx_playlist_finished"})
