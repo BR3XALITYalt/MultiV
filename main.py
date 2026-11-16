@@ -1017,6 +1017,16 @@ def build_app() -> None:
     tx_status_var = tk.StringVar(root, "Not transmitting")
     tx_metrics_var = tk.StringVar(root, "Audio frames sent: 0")
     tx_audio_device_ids: dict[str, int | None] = {"System default": None}
+
+    def update_tx_power_readout(*_args) -> None:
+        try:
+            value = float(tx_power_var.get())
+            tx_power_readout_var.set(f"{value:.0f} dBm")
+        except (TypeError, ValueError):
+            tx_power_readout_var.set("Invalid power")
+
+    tx_power_var.trace_add("write", update_tx_power_readout)
+    update_tx_power_readout()
     tx_transmit_button: tk.Button | None = None
     tx_profile_initialized = False
 
@@ -2182,16 +2192,6 @@ def build_app() -> None:
             color=palette["primary"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="e", pady=(3, 0))
-
-        def update_power_readout(*_args) -> None:
-            try:
-                value = float(tx_power_var.get())
-                tx_power_readout_var.set(f"{value:.0f} dBm")
-            except (TypeError, ValueError):
-                tx_power_readout_var.set("Invalid power")
-
-        tx_power_var.trace_add("write", update_power_readout)
-        update_power_readout()
 
         sharing = tk.Checkbutton(
             signal_card,
