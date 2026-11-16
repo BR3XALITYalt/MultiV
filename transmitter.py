@@ -707,6 +707,15 @@ class TxityTransmitter:
         last_metrics_at = time.monotonic()
         last_audio_frame_at = time.monotonic()
         last_capture_error_at = 0.0
+        drm_queue_underruns = 0
+        drm_queue_underrun_since: float | None = None
+        drm_queue_min_frames = audio_queue.maxsize
+        drm_low_queue_active = False
+        drm_send_slow_count = 0
+        drm_send_max_ms = 0.0
+        drm_send_reconnects = 0
+        last_drm_transport_report = time.monotonic()
+        last_slow_send_log_at = 0.0
         control_configured = False
         control_disconnect_reported = False
         last_control_generation: int | None = None
@@ -1389,6 +1398,17 @@ class TxityTransmitter:
                         )
                 except queue.Empty:
                     if drm_mode:
+                        drm_queue_min_frames = 0
+                        if drm_queue_underrun_since is None:
+                            drm_queue_underruns += 1
+                            drm_queue_underrun_since = time.monotonic()
+                            self.events.put({
+                                "kind": "tx_log",
+                                "text": (
+                                    "DRM transport underrun: the encoder queue supplied no "
+                                    "complete audio block within 50 ms."
+                                ),
+                            })
                         if drm_reader_finished.is_set():
                             if audio_thread_error:
                                 raise RuntimeError(audio_thread_error[0])
@@ -1415,6 +1435,38 @@ class TxityTransmitter:
                         using_silence_frame = True
                     else:
                         continue
+
+                if drm_mode:
+                    queue_depth = audio_queue.qsize()
+                    drm_queue_min_frames = min(drm_queue_min_frames, queue_depth)
+                    if drm_queue_underrun_since is not None:
+                        stalled_ms = (time.monotonic() - drm_queue_underrun_since) * 1000.0
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": (
+                                f"DRM transport recovered after {stalled_ms:.0f} ms; "
+                                f"{queue_depth} audio blocks are queued."
+                            ),
+                        })
+                        drm_queue_underrun_since = None
+                    if not drm_low_queue_active and queue_depth < 24:
+                        drm_low_queue_active = True
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": (
+                                f"DRM transport buffer is low: {queue_depth} blocks "
+                                f"({queue_depth * AUDIO_FRAME_INTERVAL_SECONDS:.2f} s)."
+                            ),
+                        })
+                    elif drm_low_queue_active and queue_depth >= 48:
+                        drm_low_queue_active = False
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": (
+                                f"DRM transport buffer recovered: {queue_depth} blocks "
+                                f"({queue_depth * AUDIO_FRAME_INTERVAL_SECONDS:.2f} s)."
+                            ),
+                        })
 
                 if audio_source == "playlist" and not drm_mode:
                     frame, playlist_info = queued_frame
@@ -1449,11 +1501,28 @@ class TxityTransmitter:
                     if self._stop_event.is_set():
                         break
 
+                send_started = time.perf_counter()
                 try:
                     audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
+                    send_elapsed_ms = (time.perf_counter() - send_started) * 1000.0
+                    if drm_mode:
+                        drm_send_max_ms = max(drm_send_max_ms, send_elapsed_ms)
+                        if send_elapsed_ms >= 20.0:
+                            drm_send_slow_count += 1
+                            if time.monotonic() - last_slow_send_log_at >= 5.0:
+                                last_slow_send_log_at = time.monotonic()
+                                self.events.put({
+                                    "kind": "tx_log",
+                                    "text": (
+                                        f"DRM WebSocket send took {send_elapsed_ms:.1f} ms; "
+                                        "the normal audio block interval is 10.7 ms."
+                                    ),
+                                })
                 except Exception as exc:
                     if self._stop_event.is_set():
                         break
+                    if drm_mode:
+                        drm_send_reconnects += 1
                     pending_frame = queued_frame
                     audio_reconnect_attempt += 1
                     delay = reconnect_delay(audio_reconnect_attempt)
@@ -1480,14 +1549,41 @@ class TxityTransmitter:
                     )
                 now = time.monotonic()
                 if now - last_metrics_at >= 1.0:
+                    queue_depth = audio_queue.qsize()
+                    if drm_mode:
+                        drm_queue_min_frames = min(drm_queue_min_frames, queue_depth)
                     self.events.put({
                         "kind": "tx_metrics",
                         "frames_sent": send_count,
                         "frames_dropped": drop_count,
-                        "queue_depth": audio_queue.qsize(),
+                        "queue_depth": queue_depth,
                         "playlist_underruns": playlist_underruns,
+                        "drm_mode": drm_mode,
+                        "drm_queue_underruns": drm_queue_underruns,
+                        "drm_queue_min_frames": drm_queue_min_frames if drm_mode else 0,
+                        "drm_send_slow_count": drm_send_slow_count,
+                        "drm_send_max_ms": drm_send_max_ms,
+                        "drm_send_reconnects": drm_send_reconnects,
                     })
                     last_metrics_at = now
+
+                if drm_mode and now - last_drm_transport_report >= 5.0:
+                    queue_depth = audio_queue.qsize()
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": (
+                            f"DRM transport health: queue={queue_depth} blocks "
+                            f"({queue_depth * AUDIO_FRAME_INTERVAL_SECONDS:.2f} s), "
+                            f"low-water={drm_queue_min_frames} blocks, "
+                            f"underruns={drm_queue_underruns}, "
+                            f"slow_sends={drm_send_slow_count}, "
+                            f"max_send={drm_send_max_ms:.1f} ms, "
+                            f"reconnects={drm_send_reconnects}."
+                        ),
+                    })
+                    drm_queue_min_frames = queue_depth
+                    drm_send_max_ms = 0.0
+                    last_drm_transport_report = now
 
         except Exception as exc:
             if not self._stop_event.is_set():
