@@ -5,6 +5,7 @@ Discord sign-in uses TXITY's official OAuth route and a one-use loopback callbac
 from __future__ import annotations
 
 import json
+import os
 import queue
 import re
 import secrets
@@ -14,6 +15,7 @@ import uuid
 import webbrowser
 from dataclasses import dataclass
 from html.parser import HTMLParser
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin, urlparse
@@ -42,6 +44,28 @@ CONTROL_URL = "wss://txity.radiodiscussion.org/ws/control"
 USER_AGENT = "TXITPY/0.1 (+https://github.com/BR3XALITYalt/TXITPY)"
 HTTP_TIMEOUT = 12
 MAX_STATION_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def tx_settings_file() -> Path:
+    """Return the per-user settings file path without storing account credentials."""
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming"))
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
+    return base / "TXITPY" / "transmit-settings.json"
+
+
+def load_tx_settings() -> dict[str, Any]:
+    """Load local station and transmit preferences, ignoring invalid files safely."""
+    path = tx_settings_file()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[TXITPY] Saved settings could not be read: {exc}", file=sys.stderr, flush=True)
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 @dataclass(slots=True)
