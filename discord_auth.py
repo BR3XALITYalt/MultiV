@@ -1,19 +1,32 @@
-"""Launch and manage the embedded browser used for TXITY Discord sign-in."""
+"""Native Discord sign-in handoff for TXITY using the system browser.
+
+TXITY performs Discord OAuth and issues its own signed token. This module opens
+that official route in the user's normal browser and receives the resulting URL
+fragment through a one-use loopback callback. The token is held in memory only.
+"""
 
 from __future__ import annotations
 
+import base64
+import hmac
 import json
-import os
-import subprocess
-import sys
+import secrets
 import threading
-from pathlib import Path
+import time
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from queue import Queue
 from typing import Any
+from urllib.parse import parse_qs, urlencode, urlsplit
+
+BASE_URL = "https://txity.radiodiscussion.org"
+AUTH_START_URL = f"{BASE_URL}/auth/discord/start"
+CALLBACK_TIMEOUT_SECONDS = 300
+MAX_CALLBACK_BODY = 12_000
 
 
 def is_auth_token(value: Any) -> bool:
-    """Validate an opaque TXITY token without decoding or logging it."""
+    """Validate an opaque TXITY token without logging or persisting it."""
     return (
         isinstance(value, str)
         and 16 <= len(value) <= 8192
@@ -40,131 +53,279 @@ def clean_discord_user(value: Any) -> dict[str, str] | None:
     return user
 
 
-def _storage_directory() -> Path:
-    if os.name == "nt":
-        root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    elif sys.platform == "darwin":
-        root = Path.home() / "Library" / "Application Support"
-    else:
-        root = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return root / "TXITPY" / "browser-profile"
+def user_from_txity_token(token: str) -> dict[str, str] | None:
+    """Read the same first-segment identity payload that TXITY's page reads.
+
+    This is only for the account label. The TXITY server remains responsible
+    for validating the token signature when the status WebSocket connects.
+    """
+    if not is_auth_token(token):
+        return None
+    payload_part = token.split(".", 1)[0]
+    try:
+        padded = payload_part + "=" * ((4 - len(payload_part) % 4) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+    except (ValueError, UnicodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    expires = payload.get("exp")
+    if isinstance(expires, (int, float)) and expires * 1000 < time.time() * 1000:
+        return None
+    return clean_discord_user(payload)
 
 
-class DiscordAuthBrowser:
-    """Run TXITY itself so its OAuth redirects and account code remain authoritative."""
+def _callback_page(state: str) -> tuple[bytes, str]:
+    nonce = secrets.token_urlsafe(18)
+    state_js = json.dumps(state).replace("<", "\\u003c")
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TXITPY sign-in</title>
+<style>
+body{{font:16px system-ui,sans-serif;max-width:36rem;margin:12vh auto;padding:0 1.25rem;color:#171717}}
+p{{line-height:1.5;color:#444}}
+</style>
+</head>
+<body>
+<h1>Returning to TXITPY</h1>
+<p id="message">Completing Discord sign-in…</p>
+<script nonce="{nonce}">
+(() => {{
+  const state = {state_js};
+  const params = new URLSearchParams(location.hash.slice(1));
+  const token = params.get("discord_auth") || "";
+  const joined = params.get("discord_join") === "1";
+  history.replaceState(null, "", location.pathname + location.search);
+  const message = document.getElementById("message");
+  if (!token) {{
+    message.textContent = "TXITY did not return a Discord session token. You can close this tab.";
+    return;
+  }}
+  fetch("/complete", {{
+    method: "POST",
+    headers: {{ "Content-Type": "application/json" }},
+    body: JSON.stringify({{ state, token, joined }})
+  }}).then(async response => {{
+    const result = await response.json().catch(() => ({{}}));
+    if (!response.ok || !result.ok) throw new Error(result.error || "Sign-in could not be completed.");
+    message.textContent = "Discord sign-in complete. You can return to TXITPY.";
+  }}).catch(error => {{
+    message.textContent = error instanceof Error ? error.message : "Sign-in could not be completed.";
+  }});
+}})();
+</script>
+</body>
+</html>"""
+    headers = (
+        "default-src 'none'; "
+        f"script-src 'nonce-{nonce}'; "
+        "style-src 'unsafe-inline'; "
+        "connect-src 'self'; "
+        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    )
+    return html.encode("utf-8"), headers
+
+
+class DiscordAuthManager:
+    """Open TXITY in the system browser and receive its signed token locally."""
 
     def __init__(self, events: Queue[dict[str, Any]]) -> None:
         self.events = events
-        self.process: subprocess.Popen[str] | None = None
-        self._lock = threading.Lock()
-        self._reader: threading.Thread | None = None
+        self._lock = threading.RLock()
+        self._server: ThreadingHTTPServer | None = None
+        self._state = ""
+        self._timeout: threading.Timer | None = None
 
-    def open(self) -> None:
-        with self._lock:
-            if self.process is not None and self.process.poll() is None:
-                self.events.put({
-                    "kind": "auth_browser",
-                    "text": "TXITY's sign-in browser is already open.",
-                })
+    def start_login(self) -> None:
+        self.close()
+
+        manager = self
+        state = secrets.token_urlsafe(32)
+
+        class CallbackHandler(BaseHTTPRequestHandler):
+            def log_message(self, _format: str, *_args: Any) -> None:
                 return
 
-            helper = Path(__file__).with_name("auth_browser.py")
-            if not helper.is_file():
-                self.events.put({"kind": "auth_error", "text": "The TXITY browser helper is missing."})
-                return
+            def _respond(self, status: int, body: bytes, content_type: str) -> None:
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(body)
 
-            storage_path = _storage_directory()
-            try:
-                storage_path.mkdir(parents=True, exist_ok=True)
-                self.process = subprocess.Popen(
-                    [sys.executable, str(helper), "--storage-path", str(storage_path)],
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    bufsize=1,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            def _json(self, status: int, value: dict[str, Any]) -> None:
+                self._respond(
+                    status,
+                    json.dumps(value, separators=(",", ":")).encode("utf-8"),
+                    "application/json; charset=utf-8",
                 )
-            except OSError:
-                self.process = None
-                self.events.put({"kind": "auth_error", "text": "Could not open the TXITY sign-in browser."})
-                return
 
-            self._reader = threading.Thread(
-                target=self._read_messages,
-                args=(self.process,),
-                daemon=True,
-                name="txity-auth-bridge",
+            def do_GET(self) -> None:
+                if self.client_address[0] != "127.0.0.1":
+                    self._json(403, {"ok": False, "error": "Loopback access only."})
+                    return
+                parts = urlsplit(self.path)
+                if parts.path != "/callback":
+                    self._json(404, {"ok": False, "error": "Not found."})
+                    return
+                query_state = parse_qs(parts.query).get("state", [""])[0]
+                if not manager._state_matches(query_state):
+                    self._json(400, {"ok": False, "error": "This sign-in request is invalid or expired."})
+                    return
+                html, csp = _callback_page(state)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(html)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Content-Security-Policy", csp)
+                self.end_headers()
+                self.wfile.write(html)
+
+            def do_POST(self) -> None:
+                if self.client_address[0] != "127.0.0.1":
+                    self._json(403, {"ok": False, "error": "Loopback access only."})
+                    return
+                if urlsplit(self.path).path != "/complete":
+                    self._json(404, {"ok": False, "error": "Not found."})
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                except ValueError:
+                    length = 0
+                if length <= 0 or length > MAX_CALLBACK_BODY:
+                    self._json(413, {"ok": False, "error": "Invalid callback size."})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(length))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    self._json(400, {"ok": False, "error": "Invalid callback data."})
+                    return
+                if not isinstance(payload, dict) or not manager._state_matches(payload.get("state")):
+                    self._json(400, {"ok": False, "error": "This sign-in request is invalid or expired."})
+                    return
+                token = payload.get("token")
+                user = user_from_txity_token(token) if isinstance(token, str) else None
+                if user is None:
+                    self._json(400, {"ok": False, "error": "TXITY returned an invalid or expired session."})
+                    return
+                if not manager._complete(state, token, user, payload.get("joined") is True):
+                    self._json(400, {"ok": False, "error": "This sign-in request is no longer active."})
+                    return
+                self._json(200, {"ok": True})
+                threading.Thread(
+                    target=manager._stop_server_for_state,
+                    args=(state,),
+                    daemon=True,
+                    name="txity-auth-callback-close",
+                ).start()
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), CallbackHandler)
+        server.daemon_threads = True
+
+        with self._lock:
+            self._server = server
+            self._state = state
+            self._timeout = threading.Timer(
+                CALLBACK_TIMEOUT_SECONDS,
+                self._expire,
+                args=(state,),
             )
-            self._reader.start()
+            timeout = self._timeout
+
+        threading.Thread(
+            target=server.serve_forever,
+            daemon=True,
+            name="txity-auth-callback",
+        ).start()
+        timeout.start()
+
+        callback_url = (
+            f"http://127.0.0.1:{server.server_port}/callback?"
+            + urlencode({"state": state})
+        )
+        login_url = AUTH_START_URL + "?" + urlencode({"return": callback_url})
 
         self.events.put({
             "kind": "auth_browser",
-            "text": "TXITY's sign-in browser opened. Use its Discord login button.",
+            "text": "Discord sign-in opened in your default browser. Waiting for TXITY to return to TXITPY.",
+        })
+        try:
+            opened = webbrowser.open(login_url, new=2)
+        except Exception:
+            opened = False
+        if not opened:
+            self.events.put({
+                "kind": "auth_error",
+                "text": "Could not open the system browser for Discord sign-in.",
+            })
+            self._stop_server_for_state(state)
+
+    def _state_matches(self, value: Any) -> bool:
+        with self._lock:
+            return (
+                isinstance(value, str)
+                and bool(self._state)
+                and hmac.compare_digest(value, self._state)
+            )
+
+    def _complete(
+        self,
+        state: str,
+        token: str,
+        user: dict[str, str],
+        joined: bool,
+    ) -> bool:
+        if not self._state_matches(state):
+            return False
+        with self._lock:
+            timeout = self._timeout
+            self._timeout = None
+        if timeout is not None:
+            timeout.cancel()
+        self.events.put({
+            "kind": "auth_token",
+            "token": token,
+            "user": user,
+            "joined": joined,
+        })
+        return True
+
+    def _expire(self, state: str) -> None:
+        if not self._state_matches(state):
+            return
+        self._stop_server_for_state(state)
+        self.events.put({
+            "kind": "auth_error",
+            "text": "Discord sign-in timed out. Start the sign-in flow again.",
         })
 
-    def _read_messages(self, process: subprocess.Popen[str]) -> None:
-        stream = process.stdout
-        if stream is None:
-            return
-        for line in stream:
-            try:
-                message = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(message, dict):
-                continue
-
-            message_type = message.get("type")
-            if message_type == "auth_token":
-                token = message.get("token")
-                user = clean_discord_user(message.get("user"))
-                if is_auth_token(token):
-                    self.events.put({"kind": "auth_token", "token": token, "user": user})
-            elif message_type == "signed_out":
-                self.events.put({"kind": "auth_signed_out"})
-            elif message_type == "browser_error":
-                message_text = message.get("text")
-                if isinstance(message_text, str):
-                    self.events.put({"kind": "auth_error", "text": message_text[:300]})
-            elif message_type == "closed":
-                self.events.put({
-                    "kind": "auth_browser",
-                    "text": "TXITY's sign-in browser was closed.",
-                })
-
+    def _stop_server_for_state(self, state: str) -> None:
         with self._lock:
-            if self.process is process:
-                self.process = None
-
-    def logout(self) -> None:
-        """Ask the official page to run its own Discord logout handler."""
-        with self._lock:
-            process = self.process
-            if process is None or process.poll() is not None or process.stdin is None:
-                self.events.put({
-                    "kind": "auth_error",
-                    "text": "Open the TXITY sign-in browser before signing out.",
-                })
+            if not self._state or not hmac.compare_digest(state, self._state):
                 return
-            try:
-                process.stdin.write('{"command":"logout"}\n')
-                process.stdin.flush()
-            except OSError:
-                self.events.put({
-                    "kind": "auth_error",
-                    "text": "Could not send the sign-out request to TXITY's browser.",
-                })
+            server = self._server
+            timeout = self._timeout
+            self._server = None
+            self._timeout = None
+            self._state = ""
+        if timeout is not None:
+            timeout.cancel()
+        if server is not None:
+            server.shutdown()
+            server.server_close()
 
     def close(self) -> None:
         with self._lock:
-            process = self.process
-            self.process = None
-        if process is not None and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                process.kill()
+            state = self._state
+        if state:
+            self._stop_server_for_state(state)
