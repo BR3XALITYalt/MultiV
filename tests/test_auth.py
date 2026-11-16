@@ -11,6 +11,7 @@ from discord_auth import (
     is_auth_token,
     user_from_txity_token,
 )
+from discord_auth_browser import token_from_storage
 
 
 def fake_txity_token(payload):
@@ -68,6 +69,33 @@ class DiscordAuthValidationTests(unittest.TestCase):
             "exp": time.time() - 60,
         })
         self.assertIsNone(user_from_txity_token(token))
+
+
+    def test_accepts_session_only_from_txity_origin(self):
+        token = fake_txity_token({
+            "id": "123456789",
+            "username": "example",
+        })
+        self.assertEqual(
+            token_from_storage("https://txity.radiodiscussion.org", token),
+            token,
+        )
+
+    def test_rejects_session_from_other_origins(self):
+        token = fake_txity_token({
+            "id": "123456789",
+            "username": "example",
+        })
+        self.assertIsNone(token_from_storage("https://discord.com", token))
+        self.assertIsNone(token_from_storage("http://txity.radiodiscussion.org", token))
+
+    def test_rejects_expired_session_from_txity_storage(self):
+        token = fake_txity_token({
+            "id": "123456789",
+            "username": "example",
+            "exp": time.time() - 60,
+        })
+        self.assertIsNone(token_from_storage("https://txity.radiodiscussion.org", token))
 
     def test_auth_route_defaults_to_txity_route(self):
         manager = DiscordAuthManager(Queue())
