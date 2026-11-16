@@ -9,6 +9,7 @@ from transmitter import (
     build_audio_socket_url,
     build_transmit_config,
     parse_rf_frequency,
+    StreamingLinearResampler,
 )
 
 
@@ -39,6 +40,7 @@ class TransmitterProtocolTests(unittest.TestCase):
             station_dbm=50,
             allow_overlap=True,
             auth_token="test-token",
+            cw_loop=False,
         )
         expected = {
             "type", "rfHz", "stationName", "stationDescription",
@@ -55,6 +57,7 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["sampleRate"], 48_000)
         self.assertEqual(config["mode"], "USB")
         self.assertTrue(config["allowOverlapVisitors"])
+        self.assertFalse(config["cwLoop"])
         self.assertEqual(config["discordAuthToken"], "test-token")
 
     def test_validates_required_config_values(self):
@@ -89,6 +92,28 @@ class TransmitterProtocolTests(unittest.TestCase):
     def test_audio_url_requires_all_credentials(self):
         with self.assertRaises(ValueError):
             build_audio_socket_url("session-id", "", "token-value")
+
+    def test_streaming_resampler_keeps_48khz_output_rate(self):
+        import numpy as np
+
+        resampler = StreamingLinearResampler(44_100, 48_000)
+        chunks = [
+            resampler.process(np.ones(512, dtype=np.float32))
+            for _ in range(20)
+        ]
+        output = np.concatenate(chunks)
+        expected = round(20 * 512 * 48_000 / 44_100)
+
+        self.assertLessEqual(abs(len(output) - expected), 2)
+        self.assertTrue(np.allclose(output, 1.0, atol=1e-6))
+
+    def test_equal_rate_resampler_preserves_input_samples(self):
+        import numpy as np
+
+        samples = np.linspace(-1.0, 1.0, 512, dtype=np.float32)
+        resampler = StreamingLinearResampler(48_000, 48_000)
+        np.testing.assert_array_equal(resampler.process(samples), samples)
+
 
 
 if __name__ == "__main__":
