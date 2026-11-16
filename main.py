@@ -2366,7 +2366,7 @@ def build_app() -> None:
                 "USB+C": "USB+C — upper sideband with carrier.",
                 "LSB+C": "LSB+C — lower sideband with carrier.",
                 "DSB": "DSB - double-sideband suppressed carrier.",
-                "DRM": "DRM30 - one audio service in a 4.5 kHz OFDM channel. Requires the Rust/CMake build tools on first use. Microphone and OGG, MP3, or FLAC playlists are supported.",
+                "DRM": "DRM30 - one audio service in a 4.5 kHz OFDM channel. First use builds the encoder and requires Git, Rust 1.88+, CMake, and C/C++ build tools. Microphone and OGG, MP3, or FLAC playlists are supported.",
                 "CW": "CW - carrier only. The microphone and desktop audio sources are not used.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
