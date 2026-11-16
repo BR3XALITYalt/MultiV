@@ -1,8 +1,8 @@
-"""Native Discord sign-in handoff for TXITY using the system browser.
+"""Discord sign-in handoff for TXITY through an embedded browser window.
 
-TXITY performs Discord OAuth and issues its own signed token. This module opens
-that official route in the user's normal browser and receives the resulting URL
-fragment through a one-use loopback callback. The token is held in memory only.
+TXITY performs Discord OAuth and stores its signed session in its own
+same-origin browser storage. An embedded WebView reads that value and sends it
+to this process through a one-use loopback callback.
 """
 
 from __future__ import annotations
@@ -10,10 +10,14 @@ from __future__ import annotations
 import base64
 import hmac
 import json
+import os
 import secrets
+import shutil
+import subprocess
+import sys
 import threading
 import time
-import webbrowser
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from queue import Queue
 from typing import Any
@@ -130,7 +134,7 @@ p{{line-height:1.5;color:#444}}
 
 
 class DiscordAuthManager:
-    """Open TXITY in the system browser and receive its signed token locally."""
+    """Open TXITY in an embedded browser and receive its signed token locally."""
 
     def __init__(self, events: Queue[dict[str, Any]]) -> None:
         self.events = events
@@ -139,6 +143,7 @@ class DiscordAuthManager:
         self._state = ""
         self._completed = False
         self._timeout: threading.Timer | None = None
+        self._browser_process: subprocess.Popen[Any] | None = None
         self.auth_start_url = AUTH_START_URL
         self.secure_auth_enabled = False
 
@@ -244,7 +249,8 @@ class DiscordAuthManager:
                 if request_origin and request_origin != expected_origin:
                     self._json(403, {"ok": False, "error": "Invalid callback origin."})
                     return
-                if urlsplit(self.path).path != "/complete":
+                path = urlsplit(self.path).path
+                if path not in {"/complete", "/failure"}:
                     self._json(404, {"ok": False, "error": "Not found."})
                     return
                 try:
@@ -262,6 +268,24 @@ class DiscordAuthManager:
                 if not isinstance(payload, dict) or not manager._state_matches(payload.get("state")):
                     self._json(400, {"ok": False, "error": "This sign-in request is invalid or expired."})
                     return
+
+                if path == "/failure":
+                    message = (
+                        "The embedded sign-in window could not start. "
+                        "Install the Microsoft Edge WebView2 Runtime, then restart TXITPY."
+                    )
+                    if not manager._fail(state, message):
+                        self._json(400, {"ok": False, "error": "This sign-in request is no longer active."})
+                        return
+                    self._json(200, {"ok": True})
+                    threading.Thread(
+                        target=manager._stop_server_for_state,
+                        args=(state,),
+                        daemon=True,
+                        name="txity-auth-failure-close",
+                    ).start()
+                    return
+
                 token = payload.get("token")
                 user = user_from_txity_token(token) if isinstance(token, str) else None
                 if user is None:
@@ -305,20 +329,85 @@ class DiscordAuthManager:
         )
         login_url = auth_start_url + "?" + urlencode({"return": callback_url})
 
-        self.events.put({
-            "kind": "auth_browser",
-            "text": "Discord sign-in opened in your default browser. Waiting for TXITY to return to TXITPY.",
-        })
+        complete_url = f"http://127.0.0.1:{server.server_port}/complete"
+        helper_path = Path(__file__).with_name("discord_auth_browser.py")
+        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
         try:
-            opened = webbrowser.open(login_url, new=2)
-        except Exception:
-            opened = False
-        if not opened:
+            process = subprocess.Popen(
+                [sys.executable, str(helper_path), login_url, complete_url, state],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=creation_flags,
+            )
+        except OSError:
+            self._stop_server_for_state(state)
             self.events.put({
                 "kind": "auth_error",
-                "text": "Could not open the system browser for Discord sign-in.",
+                "text": "The embedded sign-in window could not be started.",
             })
+            return
+
+        with self._lock:
+            self._browser_process = process
+        self.events.put({
+            "kind": "auth_browser",
+            "text": "TXITY sign-in opened in the embedded browser. Waiting for Discord authorization.",
+        })
+        threading.Thread(
+            target=self._watch_browser,
+            args=(process, state),
+            daemon=True,
+            name="txity-auth-browser-monitor",
+        ).start()
+
+    def _watch_browser(self, process: subprocess.Popen[Any], state: str) -> None:
+        exit_code = process.wait()
+        with self._lock:
+            if self._browser_process is process:
+                self._browser_process = None
+            active = (
+                bool(self._state)
+                and not self._completed
+                and hmac.compare_digest(state, self._state)
+            )
+        if active:
             self._stop_server_for_state(state)
+            message = (
+                "The sign-in window was closed before Discord sign-in completed."
+                if exit_code == 0
+                else "The embedded sign-in window stopped unexpectedly. Check that WebView2 is installed."
+            )
+            self.events.put({"kind": "auth_error", "text": message})
+
+    def _fail(self, state: str, message: str) -> bool:
+        with self._lock:
+            if not self._state or self._completed or not hmac.compare_digest(state, self._state):
+                return False
+            self._completed = True
+            timeout = self._timeout
+            self._timeout = None
+        if timeout is not None:
+            timeout.cancel()
+        self.events.put({"kind": "auth_error", "text": message})
+        return True
+
+    def _terminate_browser_process(self) -> None:
+        with self._lock:
+            process = self._browser_process
+            self._browser_process = None
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+            except OSError:
+                pass
+
+    def clear_browser_session(self) -> None:
+        """Remove the embedded browser profile used for TXITY sign-in."""
+        self.close()
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        profile_root = Path(local_app_data) if local_app_data else Path.home()
+        shutil.rmtree(profile_root / "TXITPY" / "BrowserProfile", ignore_errors=True)
 
     def _state_matches(self, value: Any) -> bool:
         with self._lock:
@@ -356,6 +445,7 @@ class DiscordAuthManager:
         if not self._state_matches(state):
             return
         self._stop_server_for_state(state)
+        self._terminate_browser_process()
         self.events.put({
             "kind": "auth_error",
             "text": "Discord sign-in timed out. Start the sign-in flow again.",
@@ -381,3 +471,4 @@ class DiscordAuthManager:
             state = self._state
         if state:
             self._stop_server_for_state(state)
+        self._terminate_browser_process()
