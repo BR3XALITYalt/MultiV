@@ -321,6 +321,39 @@ class DRMConfigurationTests(unittest.TestCase):
             "USB Microphone",
         )
         self.assertNotIn("url", config["service"][0]["audio"]["input"])
+        self.assertNotIn("tone_hz", config["service"][0]["audio"]["input"])
+
+    def test_writes_a_deterministic_drm_test_tone(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = write_drm_station_config(
+                Path(folder) / "station.toml",
+                station_name="Tone Test",
+                tone_hz=1_000.0,
+                tone_level_dbfs=-12.041,
+            )
+            config = tomllib.loads(path.read_text(encoding="utf-8"))
+
+        audio_input = config["service"][0]["audio"]["input"]
+        self.assertEqual(audio_input["tone_hz"], 1_000.0)
+        self.assertAlmostEqual(audio_input["level_dbfs"], -12.041)
+        self.assertNotIn("device", audio_input)
+        self.assertNotIn("url", audio_input)
+
+    def test_rejects_invalid_or_ambiguous_drm_test_tone_inputs(self):
+        invalid_inputs = (
+            {"tone_hz": 0.0},
+            {"tone_hz": 12_000.0},
+            {"tone_hz": float("nan")},
+            {"input_device_name": "default", "tone_hz": 1_000.0},
+        )
+        for options in invalid_inputs:
+            with self.subTest(options=options), tempfile.TemporaryDirectory() as folder:
+                with self.assertRaises(ValueError):
+                    write_drm_station_config(
+                        Path(folder) / "station.toml",
+                        station_name="Test",
+                        **options,
+                    )
 
     def test_requires_exactly_one_audio_input(self):
         with tempfile.TemporaryDirectory() as folder:
