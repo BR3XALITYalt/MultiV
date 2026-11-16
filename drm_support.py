@@ -24,6 +24,8 @@ DECDRM_REPOSITORY = "https://github.com/CasualArclamp/DecDRM.git"
 DECDRM_COMMIT = "05845c9a754309b86d4985b25b1c3a787b988104"
 DECDRM_VERSION = "0.7.1"
 DRM_PLAYLIST_EXTENSIONS = frozenset({".flac", ".mp3", ".ogg"})
+DRM_AUDIO_CODECS = ("xHE-AAC", "HE-AAC")
+DRM_INTERLEAVING_OPTIONS = ("long", "short")
 
 DRM_LANGUAGES = (
     "No language specified",
@@ -783,6 +785,8 @@ def write_drm_station_config(
     programme_type: str = "No programme type",
     iso_language: str = "",
     iso_country: str = "",
+    audio_codec: str = "xHE-AAC",
+    interleaving: str = "long",
 ) -> Path:
     """Write a one-service, 4.5 kHz DRM30 station configuration."""
     if bool(input_device_name) == bool(playlist_url):
@@ -815,13 +819,26 @@ def write_drm_station_config(
     if selected_iso_country and not re.fullmatch(r"[a-z]{2}", selected_iso_country):
         raise ValueError("Country code must be a two-letter ISO 3166 code, such as us.")
 
+    codec_aliases = {
+        "xhe-aac": "xhe-aac",
+        "heaac": "he-aac",
+        "he-aac": "he-aac",
+    }
+    selected_codec = codec_aliases.get(str(audio_codec or "").strip().casefold())
+    if selected_codec is None:
+        raise ValueError("Choose xHE-AAC or HE-AAC for the DRM audio codec.")
+
+    selected_interleaving = str(interleaving or "").strip().casefold()
+    if selected_interleaving not in DRM_INTERLEAVING_OPTIONS:
+        raise ValueError("DRM interleaving must be long or short.")
+
     lines = [
         "[channel]",
         'mode = "B"',
         "occupancy = 0",
         'msc_mode = "64-QAM"',
         'sdc_mode = "16-QAM"',
-        'interleaving = "short"',
+        f'interleaving = "{selected_interleaving}"',
         "protection_b = 1",
         "protection_a = 0",
         "",
@@ -845,8 +862,7 @@ def write_drm_station_config(
     lines.extend([
         "",
         "[service.audio]",
-        'codec = "he-aac"',
-        "core_rate = 12000",
+        f'codec = "{selected_codec}"',
         "stereo = false",
         'part = "B"',
         "share = 1.0",
