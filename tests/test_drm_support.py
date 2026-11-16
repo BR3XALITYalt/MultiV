@@ -227,7 +227,7 @@ class DRMConfigurationTests(unittest.TestCase):
         self.assertEqual(service["language"], "English")
         self.assertEqual(service["programme_type"], "Rock Music")
         self.assertEqual(service["iso_language"], "eng")
-        self.assertEqual(service["iso_country"], "US")
+        self.assertEqual(service["iso_country"], "us")
 
     def test_drm_metadata_defaults_do_not_claim_pop_music(self):
         with tempfile.TemporaryDirectory() as folder:
