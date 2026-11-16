@@ -122,6 +122,12 @@ class AuthBridge:
             self._send_failure(message)
             return {"ok": False}
 
+        print(
+            "[TXITPY] Discord session detected in TXITY browser storage.",
+            file=sys.stderr,
+            flush=True,
+        )
+
         with self._lock:
             if self._finished:
                 return {"ok": False}
@@ -143,6 +149,11 @@ class AuthBridge:
                 result = json.loads(response.read().decode("utf-8"))
             if not isinstance(result, dict) or result.get("ok") is not True:
                 raise RuntimeError("The local sign-in callback returned an invalid response.")
+            print(
+                "[TXITPY] TXITPY accepted the Discord session through the local callback.",
+                file=sys.stderr,
+                flush=True,
+            )
         except Exception as exc:
             details = format_exception_details(exc)
             log_path = write_diagnostic("complete-local-callback", exc)
