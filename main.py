@@ -1645,11 +1645,15 @@ def build_app() -> None:
         if not visible:
             empty = make_card(station_cards_frame, padding=16)
             empty.pack(fill="x", padx=6, pady=6)
-            if not users_listing_received:
-                message = station_status_var.get().strip() or "Waiting for TXITY station data."
-                status = message.casefold()
-                if "error" in status or "failed" in status:
-                    message += " Select Refresh to try again."
+            status_message = station_status_var.get().strip()
+            status = status_message.casefold()
+            if "error" in status or "failed" in status:
+                message = f"{status_message} Select Refresh to try again."
+            elif (
+                not users_listing_received
+                or status.startswith(("waiting for", "loading", "refreshing"))
+            ):
+                message = status_message or "Waiting for TXITY station data."
             elif query:
                 message = "No stations match that search."
             else:
@@ -1741,6 +1745,8 @@ def build_app() -> None:
             navigate("discord")
             return
         station_status_var.set("Refreshing station data from TXITY...")
+        if not station_rows:
+            update_station_tree()
         client.refresh_stations()
 
     def show_gate(parent: tk.Frame) -> None:
