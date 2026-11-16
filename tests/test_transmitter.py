@@ -310,7 +310,11 @@ class TransmitterProtocolTests(unittest.TestCase):
             drm_programme_type="Rock Music",
             drm_iso_language="eng",
             drm_iso_country="US",
+            drm_audio_codec="HE-AAC",
+            drm_interleaving="short",
         )
+        self.assertEqual(config["_txitpyDrmAudioCodec"], "HE-AAC")
+        self.assertEqual(config["_txitpyDrmInterleaving"], "short")
         self.assertEqual(config["_txitpyDrmServiceLabel"], "BLABS Radio")
         self.assertEqual(config["_txitpyDrmServiceId"], "0x123ABC")
         self.assertEqual(config["_txitpyDrmLanguage"], "English")
@@ -345,6 +349,8 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["_txitpyDrmProgrammeType"], "No programme type")
         self.assertEqual(config["_txitpyDrmIsoLanguage"], "")
         self.assertEqual(config["_txitpyDrmIsoCountry"], "")
+        self.assertEqual(config["_txitpyDrmAudioCodec"], "xHE-AAC")
+        self.assertEqual(config["_txitpyDrmInterleaving"], "long")
 
     def test_mode_bandwidth_defaults_match_txity_transmit_config(self):
         self.assertEqual(mode_bandwidth_hz("DRM"), 12_000)
