@@ -334,6 +334,14 @@ class TxityClient:
         )
         self.ws_thread.start()
 
+    def load_public_data(self) -> None:
+        """Fetch the public configuration and station listing without a socket."""
+        threading.Thread(
+            target=self._fetch_public_data,
+            daemon=True,
+            name="txity-public-data",
+        ).start()
+
     def disconnect(self) -> None:
         self.stop_event.set()
         if self.ws is not None:
@@ -357,7 +365,10 @@ class TxityClient:
                     "rows": [station.as_row() for station in stations],
                 })
             except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as exc:
-                self.events.put({"kind": "error", "text": f"Station refresh failed: {safe_error_text(str(exc))}"})
+                self.events.put({
+                    "kind": "stations_error",
+                    "text": f"Station refresh failed: {safe_error_text(str(exc))}",
+                })
             finally:
                 self.refresh_lock.release()
 
@@ -477,25 +488,10 @@ class TxityClient:
 
 def build_app() -> None:
     import bootstack as bs
-    from bootstack.style import Theme, get_font_families, set_font_family
+    from bootstack.style import get_font_families, set_font_family
+    from material_theme import install_theme
 
-    Theme.from_existing(
-        "bootstrap",
-        name="txity",
-        primary="#ffffff",
-        neutral="#cfcfcf",
-        dark={"background": "#000000", "foreground": "#ffffff"},
-        surfaces={
-            "dark": {
-                "content": "#000000",
-                "card": "#040404",
-                "chrome": "#000000",
-                "raised": "#0b0b0b",
-                "overlay": "#111111",
-                "input": "#000000",
-            }
-        },
-    ).install()
+    install_theme()
 
     client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
@@ -511,18 +507,46 @@ def build_app() -> None:
     web_audio_clients = bs.Signal("Not reported")
     sdrpp_streaming_clients = bs.Signal("Not reported")
     updated = bs.Signal("Waiting for server data")
+    station_status = bs.Signal("Waiting for TXITY station data.")
     users_listing_received = False
-    summary = bs.Signal("Connect to load public station and server information.")
+    summary = bs.Signal("Sign in with Discord to load TXITY server information.")
+    discord_authenticated = False
+    auth_restore_started = False
 
     def disconnect_discord() -> None:
+        nonlocal discord_authenticated
         client.set_discord_auth(None, None)
+        client.disconnect()
+        discord_authenticated = False
         profile_cleared = auth_manager.clear_browser_session()
         auth_account.set("Not connected to Discord")
         auth_browser_status.set(
-            "TXITPY disconnected and cleared its embedded browser profile."
+            "Discord was disconnected and the saved browser session was cleared."
             if profile_cleared
-            else "TXITPY disconnected, but the embedded browser profile could not be cleared."
+            else "Discord was disconnected, but the saved browser session could not be cleared."
         )
+        shell.navigate("about")
+
+    def require_discord(page: str | None = None) -> None:
+        if not discord_authenticated:
+            auth_browser_status.set("Sign in with Discord to unlock the TXITY dashboard.")
+            shell.navigate("about")
+            return
+        if page is not None:
+            shell.navigate(page)
+
+    def connect_if_authenticated() -> None:
+        if not discord_authenticated:
+            require_discord()
+            return
+        client.connect()
+
+    def refresh_station_list() -> None:
+        if not discord_authenticated:
+            require_discord()
+            return
+        station_status.set("Refreshing station data from TXITY...")
+        client.refresh_stations()
 
     def shutdown() -> None:
         client.disconnect()
@@ -532,7 +556,9 @@ def build_app() -> None:
         title="TXITPY | TXITY Desktop",
         size=(1120, 760),
         min_size=(860, 620),
-        theme="txity-dark",
+        theme="txity-m3-dark",
+        light_theme="txity-m3-light",
+        dark_theme="txity-m3-dark",
         show_sidebar=False,
         sidebar_mode="hidden",
         nav_accent="primary",
@@ -556,13 +582,13 @@ def build_app() -> None:
             "Overview",
             icon="house",
             accent="primary",
-            on_click=lambda: shell.navigate("overview"),
+            on_click=lambda: require_discord("overview"),
         )
         toolbar.add_button(
             "Stations",
             icon="list",
             accent="primary",
-            on_click=lambda: shell.navigate("stations"),
+            on_click=lambda: require_discord("stations"),
         )
         toolbar.add_button(
             "Discord",
@@ -588,7 +614,7 @@ def build_app() -> None:
                 )
                 bs.Divider()
                 with bs.Row(gap=12):
-                    bs.Button("Connect", accent="primary", on_click=client.connect)
+                    bs.Button("Connect", accent="primary", on_click=connect_if_authenticated)
                     bs.Button("Disconnect", variant="outline", on_click=client.disconnect)
                     bs.Button("Open TXITY", variant="outline", on_click=lambda: webbrowser.open(BASE_URL))
                 bs.Label("SERVER STATUS", font="label", accent="secondary")
@@ -629,10 +655,16 @@ def build_app() -> None:
                     accent="secondary",
                 )
                 with bs.Card(padding=18, gap=14, accent="primary"):
+                    bs.Label(
+                        textsignal=station_status,
+                        accent="secondary",
+                        font="caption",
+                        wrap_width=900,
+                    )
                     bs.Button(
                         "Refresh station list",
                         accent="primary",
-                        on_click=client.refresh_stations,
+                        on_click=refresh_station_list,
                     )
                     station_table = bs.DataTable(
                         columns=[
@@ -659,8 +691,14 @@ def build_app() -> None:
                     font="caption",
                 )
 
-            with nav.add_page("about", text="Discord", icon="info-circle", padding=24, gap=16):
-                bs.Label("Discord account", font="display-lg")
+            with nav.add_page("about", text="Discord sign-in", icon="info-circle", padding=24, gap=16):
+                bs.Label("Discord sign-in required", font="display-lg")
+                bs.Label(
+                    "Sign in to unlock the TXITY dashboard. Your saved session is checked automatically "
+                    "when TXITPY starts.",
+                    font="body-lg",
+                    accent="secondary",
+                )
                 with bs.Card(padding=22, gap=14, accent="primary"):
                     bs.Label(
                         textsignal=auth_account,
@@ -692,9 +730,9 @@ def build_app() -> None:
                         wrap_width=760,
                     )
                     bs.Label(
-                        "TXITY stores its normal website session in TXITPY's embedded browser profile. "
-                        "TXITPY keeps the active token in memory and supplies it to the status connection. "
-                        "Disconnect clears that browser profile.",
+                        "TXITPY remembers your login in its separate embedded browser profile and checks it "
+                        "automatically on later launches. The active token stays in memory and is not written "
+                        "to a settings file. Disconnect clears the saved browser session.",
                         wrap_width=760,
                     )
                     bs.Label(
@@ -762,6 +800,7 @@ def build_app() -> None:
             )
 
         def drain_events() -> None:
+            nonlocal discord_authenticated, auth_restore_started
             while True:
                 try:
                     event = client.events.get_nowait()
@@ -785,13 +824,33 @@ def build_app() -> None:
                             config.get("secureDiscordAuth") is True,
                         )
                         if config.get("secureDiscordAuth") is True:
-                            auth_browser_status.set("TXITY secure Discord sign-in is available.")
+                            if not auth_restore_started:
+                                auth_restore_started = True
+                                auth_account.set("Checking saved Discord login...")
+                                auth_browser_status.set("Checking the saved TXITY browser session.")
+                                auth_manager.restore_session()
                         else:
-                            auth_browser_status.set("TXITY secure Discord sign-in is not enabled.")
+                            auth_browser_status.set(
+                                "TXITY secure Discord sign-in is not enabled. The dashboard remains locked."
+                            )
                 elif kind == "users_listing":
                     rows = event.get("rows", [])
-                    station_table.set_rows(rows)
+                    try:
+                        station_table.set_rows(rows)
+                    except Exception as exc:
+                        details = safe_error_text(str(exc), max_chars=500)
+                        station_status.set(f"Station table could not display the returned data: {details}")
+                        write_diagnostic("display-station-rows", exc)
+                        print(f"[TXITPY] Station table update failed: {details}", file=sys.stderr, flush=True)
+                        continue
+
                     apply_users_metrics(event.get("metrics", {}))
+                    if rows:
+                        station_status.set(f"Loaded {len(rows)} stations from TXITY users.json.")
+                    else:
+                        station_status.set(
+                            "TXITY users.json loaded successfully, but its stations array is empty."
+                        )
                     summary.set(
                         f"TXITY currently reports {event.get('metrics', {}).get('transmitting', 'an unknown number')} "
                         "transmitting stations."
@@ -801,6 +860,14 @@ def build_app() -> None:
                         file=sys.stderr,
                         flush=True,
                     )
+                elif kind == "stations_error":
+                    details = safe_error_text(
+                        str(event.get("text", "Station refresh failed.")),
+                        max_chars=1_200,
+                    )
+                    station_status.set(details)
+                    summary.set(details)
+                    print(f"[TXITPY] {details}", file=sys.stderr, flush=True)
                 elif kind == "auth_token":
                     print(
                         "[TXITPY] Desktop app received the Discord session event.",
@@ -811,11 +878,15 @@ def build_app() -> None:
                     user = clean_discord_user(event.get("user"))
                     if is_auth_token(token):
                         client.set_discord_auth(token, user)
+                        discord_authenticated = True
                         display_name = (user or {}).get("globalName") or (user or {}).get("username") or "Discord account"
                         auth_account.set(f"Signed in as {display_name}")
                         auth_browser_status.set("Discord sign-in completed. Connecting to TXITY...")
+                        station_status.set("Loading station data from TXITY...")
+                        shell.navigate("overview")
+                        client.connect()
                         print(
-                            "[TXITPY] Discord session attached; reconnecting the status connection.",
+                            "[TXITPY] Discord session attached; connecting to the status feed.",
                             file=sys.stderr,
                             flush=True,
                         )
@@ -826,10 +897,18 @@ def build_app() -> None:
                             file=sys.stderr,
                             flush=True,
                         )
+                elif kind == "auth_restore_missing":
+                    auth_account.set("Discord sign-in required")
+                    auth_browser_status.set(
+                        "No saved Discord session was found. Sign in to continue."
+                    )
+                    shell.navigate("about")
                 elif kind == "auth_signed_out":
                     client.set_discord_auth(None, None)
+                    discord_authenticated = False
                     auth_account.set("Not signed in to Discord")
                     auth_browser_status.set("TXITY's Discord session was disconnected.")
+                    shell.navigate("about")
                 elif kind == "auth_browser":
                     auth_browser_status.set(str(event.get("text", "")))
                 elif kind == "auth_error":
@@ -854,8 +933,9 @@ def build_app() -> None:
                         )
 
         shell.schedule.every(250, drain_events)
-        shell.schedule.every(60_000, client.refresh_stations)
-        client.connect()
+        shell.schedule.every(60_000, refresh_station_list)
+        shell.navigate("about")
+        client.load_public_data()
 
     shell.run()
 
