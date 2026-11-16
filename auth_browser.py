@@ -1,8 +1,4 @@
-"""Embedded browser for TXITY's own Discord sign-in flow.
-
-The browser runs TXITY's official website and JavaScript. This helper does not
-perform OAuth itself and never writes the authenticated token to disk.
-"""
+"""Embedded TXITY browser for the site's official Discord login flow."""
 
 from __future__ import annotations
 
@@ -10,181 +6,165 @@ import argparse
 import json
 import sys
 import threading
-from urllib.parse import urlsplit
+import time
 from typing import Any
+from urllib.parse import urlsplit
+
+import webview
+
+from discord_auth import clean_discord_user, is_auth_token
 
 BASE_URL = "https://txity.radiodiscussion.org"
 ALLOWED_HOST = "txity.radiodiscussion.org"
 
-SCAN_SCRIPT = r"""
+AUTH_BRIDGE_SCRIPT = r"""
 (() => {
-    if (window.__txitypyAuthScanInstalled) return;
-    window.__txitypyAuthScanInstalled = true;
+    "use strict";
+    if (window.__txitypyAuthBridgeInstalled) return;
+    window.__txitypyAuthBridgeInstalled = true;
 
-    const tokenPattern = /auth.?token|permission.?token|discord.*access.?token|txity.*token/i;
-    const safeToken = value =>
-        typeof value === "string" &&
-        value.length >= 16 &&
-        value.length <= 8192 &&
-        !/[\s\u0000-\u001f]/.test(value);
+    const TOKEN_KEY = "txity.discordAuthToken.v1";
+    const USER_KEY = "txity.discordUser.v1";
+    let lastReported = null;
 
-    function scan() {
-        if (location.origin !== "https://txity.radiodiscussion.org") return;
-
-        const candidates = [];
-        const add = (key, value, source) => {
-            if (safeToken(value)) candidates.push({ key, value, source });
-        };
-
-        function walk(value, path, depth) {
-            if (!value || typeof value !== "object" || depth > 5) return;
-            for (const [key, nested] of Object.entries(value)) {
-                const name = path ? path + "." + key : key;
-                if (tokenPattern.test(key) && typeof nested === "string") {
-                    add(name, nested, "storage-json");
-                } else if (nested && typeof nested === "object") {
-                    walk(nested, name, depth + 1);
-                }
-            }
-        }
-
-        for (const storageName of ["localStorage", "sessionStorage"]) {
-            let storage;
-            try { storage = window[storageName]; } catch (_) { continue; }
-            if (!storage) continue;
-
-            for (let index = 0; index < storage.length; index++) {
-                const key = storage.key(index);
-                let value;
-                try { value = storage.getItem(key); } catch (_) { continue; }
-                if (tokenPattern.test(key)) add(key, value, storageName);
-                try { walk(JSON.parse(value), key, 0); } catch (_) {}
-                if (typeof value === "string" && value.split(".").length === 3 &&
-                    /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value)) {
-                    add(key, value, "jwt-storage");
-                }
-            }
-        }
-
+    function readUser() {
         try {
-            for (const item of performance.getEntriesByType("resource")) {
-                if (!item.name.includes("/ws/control")) continue;
-                const resource = new URL(item.name);
-                if (resource.hostname !== "txity.radiodiscussion.org") continue;
-                add("authToken", resource.searchParams.get("authToken"), "control-websocket");
-            }
-        } catch (_) {}
-
-        try {
-            for (const cookie of document.cookie.split(";")) {
-                const separator = cookie.indexOf("=");
-                if (separator < 0) continue;
-                const key = cookie.slice(0, separator).trim();
-                const value = cookie.slice(separator + 1).trim();
-                if (tokenPattern.test(key)) add(key, decodeURIComponent(value), "cookie");
-            }
-        } catch (_) {}
-
-        // Prefer the exact authToken name, then other explicit TXITY auth keys.
-        candidates.sort((left, right) => {
-            const rank = item =>
-                item.key.toLowerCase() === "authtoken" ? 0 :
-                /auth.?token/i.test(item.key) ? 1 :
-                /permission.?token/i.test(item.key) ? 2 : 3;
-            return rank(left) - rank(right);
-        });
-
-        const selected = candidates[0] || null;
-        const state = {
-            origin: location.origin,
-            signedIn: Boolean(selected),
-            token: selected ? selected.value : null,
-            source: selected ? selected.source : null,
-            key: selected ? selected.key : null
-        };
-
-        const api = window.pywebview && window.pywebview.api;
-        if (api && typeof api.report_auth_state === "function") {
-            api.report_auth_state(state).catch(() => {});
+            const raw = window.localStorage.getItem(USER_KEY);
+            const user = raw ? JSON.parse(raw) : null;
+            if (!user || typeof user !== "object" || Array.isArray(user)) return null;
+            if (typeof user.id !== "string" || typeof user.username !== "string") return null;
+            return {
+                id: user.id,
+                username: user.username,
+                globalName: typeof user.globalName === "string" ? user.globalName : null,
+                avatarUrl: typeof user.avatarUrl === "string" ? user.avatarUrl : null
+            };
+        } catch (_) {
+            return null;
         }
     }
 
-    scan();
-    window.setInterval(scan, 1800);
+    function reportState() {
+        if (location.origin !== "https://txity.radiodiscussion.org") return;
+
+        let token = "";
+        try {
+            token = window.localStorage.getItem(TOKEN_KEY) || "";
+        } catch (_) {
+            return;
+        }
+
+        const user = token ? readUser() : null;
+        const signature = token + "\n" + JSON.stringify(user);
+        const api = window.pywebview && window.pywebview.api;
+        if (!api || typeof api.report_auth_state !== "function") return;
+        if (signature === lastReported) return;
+
+        lastReported = signature;
+        api.report_auth_state({ origin: location.origin, token, user }).catch(() => {
+            lastReported = null;
+        });
+    }
+
+    reportState();
+    window.setInterval(reportState, 500);
 })();
 """
 
 
 class AuthBridge:
+    """Receive only TXITY's exact localStorage keys from its HTTPS origin."""
+
     def __init__(self) -> None:
         self.window: Any = None
-        self._last_token: str | None = None
+        self._last_token = ""
         self._lock = threading.Lock()
 
-    def report_auth_state(self, payload: Any) -> bool:
-        """Accept a token only while the embedded browser is on TXITY's origin."""
-        if not isinstance(payload, dict) or self.window is None:
+    def _on_txity_origin(self) -> bool:
+        if self.window is None:
             return False
-
         try:
             current = urlsplit(self.window.get_current_url() or "")
         except Exception:
             return False
+        return (
+            current.scheme == "https"
+            and current.hostname == ALLOWED_HOST
+            and current.port in (None, 443)
+        )
 
-        if current.scheme != "https" or current.hostname != ALLOWED_HOST:
+    def report_auth_state(self, payload: Any) -> bool:
+        if not isinstance(payload, dict) or not self._on_txity_origin():
             return False
         if payload.get("origin") != BASE_URL:
             return False
 
         token = payload.get("token")
-        signed_in = payload.get("signedIn") is True
-
-        if signed_in and isinstance(token, str):
-            if not 16 <= len(token) <= 8192:
+        if token:
+            if not is_auth_token(token):
                 return False
-            if any(character.isspace() or ord(character) < 32 for character in token):
-                return False
-
+            user = clean_discord_user(payload.get("user"))
             with self._lock:
                 changed = token != self._last_token
                 self._last_token = token
-
             if changed:
-                emit({"type": "auth_token", "token": token})
+                emit({"type": "auth_token", "token": token, "user": user})
             return True
 
         with self._lock:
-            had_token = self._last_token is not None
-            self._last_token = None
-
+            had_token = bool(self._last_token)
+            self._last_token = ""
         if had_token:
             emit({"type": "signed_out"})
         return True
+
+    def logout(self) -> bool:
+        """Invoke TXITY's own logout control instead of editing its storage."""
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            if self._on_txity_origin():
+                try:
+                    result = self.window.evaluate_js(
+                        "(() => {"
+                        "const button = document.getElementById('discordLogout');"
+                        "if (!button || button.hidden || button.disabled) return false;"
+                        "button.click(); return true;"
+                        "})()"
+                    )
+                    return result is True
+                except Exception:
+                    return False
+            time.sleep(0.25)
+        return False
 
 
 _OUTPUT_LOCK = threading.Lock()
 
 
 def emit(message: dict[str, Any]) -> None:
-    """Send one private IPC message to the parent process."""
     with _OUTPUT_LOCK:
         sys.stdout.write(json.dumps(message, separators=(",", ":")) + "\n")
         sys.stdout.flush()
+
+
+def read_commands(bridge: AuthBridge) -> None:
+    for line in sys.stdin:
+        try:
+            command = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(command, dict) and command.get("command") == "logout":
+            if not bridge.logout():
+                emit({
+                    "type": "browser_error",
+                    "text": "No active TXITY Discord session was available to sign out.",
+                })
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--storage-path", required=True)
     args = parser.parse_args()
-
-    try:
-        import webview
-    except ImportError:
-        emit({
-            "type": "browser_error",
-            "text": "pywebview is not installed. Install the project requirements.",
-        })
-        return 2
 
     bridge = AuthBridge()
     window = webview.create_window(
@@ -198,17 +178,21 @@ def main() -> int:
     bridge.window = window
 
     def on_loaded(*_args: Any) -> None:
+        if not bridge._on_txity_origin():
+            return
         try:
-            current = urlsplit(window.get_current_url() or "")
-            if current.scheme == "https" and current.hostname == ALLOWED_HOST:
-                window.evaluate_js(SCAN_SCRIPT)
+            window.evaluate_js(AUTH_BRIDGE_SCRIPT)
         except Exception:
-            # Navigation may briefly invalidate the document while Discord
-            # redirects back to TXITY. The next loaded event retries.
             return
 
     window.events.loaded += on_loaded
     window.events.closed += lambda *_args: emit({"type": "closed"})
+    threading.Thread(
+        target=read_commands,
+        args=(bridge,),
+        daemon=True,
+        name="txity-auth-commands",
+    ).start()
 
     try:
         webview.start(
@@ -216,10 +200,9 @@ def main() -> int:
             storage_path=args.storage_path,
             debug=False,
         )
-    except Exception as exc:
-        emit({"type": "browser_error", "text": f"Could not start the embedded browser: {exc}"})
+    except Exception:
+        emit({"type": "browser_error", "text": "Could not start the embedded TXITY browser."})
         return 1
-
     return 0
 
 
