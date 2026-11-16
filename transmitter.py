@@ -459,7 +459,7 @@ class TxityTransmitter:
         self._active = False
         self._ptt_sent = False
         self._ptt_requested_at: float | None = None
-        self._audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=AUDIO_QUEUE_FRAMES)
+        self._audio_queue: queue.Queue[Any] = queue.Queue(maxsize=AUDIO_QUEUE_FRAMES)
 
     @property
     def is_busy(self) -> bool:
@@ -564,7 +564,9 @@ class TxityTransmitter:
         audio_finished = threading.Event()
         playlist_reached_end = False
         playlist_underruns = 0
+        playlist_underrun_active = False
         playlist_next_frame_deadline: float | None = None
+        playlist_current_track: tuple[str, int, int] | None = None
         audio_timer_resolution = None
         ptt_sent = False
         audio_thread_error: list[str] = []
@@ -572,7 +574,6 @@ class TxityTransmitter:
         send_count = 0
         drop_count = 0
         last_metrics_at = time.monotonic()
-        playlist_last_frame_sent_at: float | None = None
         carry = bytearray()
         last_callback_warning = 0.0
 
@@ -581,6 +582,7 @@ class TxityTransmitter:
             *,
             wait_for_space: bool = False,
             flush: bool = False,
+            playlist_info: tuple[str, int, int] | None = None,
         ) -> None:
             nonlocal drop_count
             import numpy as np
@@ -594,10 +596,11 @@ class TxityTransmitter:
             while len(carry) >= FRAME_BYTES:
                 frame = bytes(carry[:FRAME_BYTES])
                 del carry[:FRAME_BYTES]
+                queued_frame = (frame, playlist_info) if playlist_info is not None else frame
                 if wait_for_space:
                     while not self._stop_event.is_set():
                         try:
-                            audio_queue.put(frame, timeout=0.1)
+                            audio_queue.put(queued_frame, timeout=0.1)
                             break
                         except queue.Full:
                             continue
@@ -606,14 +609,14 @@ class TxityTransmitter:
                     continue
 
                 try:
-                    audio_queue.put_nowait(frame)
+                    audio_queue.put_nowait(queued_frame)
                 except queue.Full:
                     try:
                         audio_queue.get_nowait()
                     except queue.Empty:
                         pass
                     try:
-                        audio_queue.put_nowait(frame)
+                        audio_queue.put_nowait(queued_frame)
                         drop_count += 1
                     except queue.Full:
                         drop_count += 1
@@ -683,12 +686,7 @@ class TxityTransmitter:
                                     raise RuntimeError(
                                         f"Audio file has an invalid format: {file_path}"
                                     )
-                                self.events.put({
-                                    "kind": "tx_playlist_track",
-                                    "path": file_path,
-                                    "index": index,
-                                    "count": len(order),
-                                })
+                                playlist_info = (file_path, index, len(order))
                                 resampler = StreamingLinearResampler(
                                     source_rate,
                                     SAMPLE_RATE_HZ,
@@ -705,6 +703,14 @@ class TxityTransmitter:
                                     enqueue_pcm_samples(
                                         resampler.process(mono),
                                         wait_for_space=True,
+                                        playlist_info=playlist_info,
+                                    )
+                                if not self._stop_event.is_set():
+                                    enqueue_pcm_samples(
+                                        [],
+                                        wait_for_space=True,
+                                        flush=True,
+                                        playlist_info=playlist_info,
                                     )
                             previous_file = file_path
 
@@ -885,7 +891,7 @@ class TxityTransmitter:
                     continue
 
                 try:
-                    frame = audio_queue.get(
+                    queued_frame = audio_queue.get(
                         timeout=0.05 if audio_source == "playlist" else 0.2
                     )
                 except queue.Empty:
@@ -894,11 +900,23 @@ class TxityTransmitter:
                             raise RuntimeError(audio_thread_error[0])
                         playlist_reached_end = True
                         break
-                    if audio_source == "playlist":
+                    if audio_source == "playlist" and not playlist_underrun_active:
                         playlist_underruns += 1
+                        playlist_underrun_active = True
                     continue
 
                 if audio_source == "playlist":
+                    frame, playlist_info = queued_frame
+                    playlist_underrun_active = False
+                    if playlist_info != playlist_current_track:
+                        playlist_current_track = playlist_info
+                        track_path, track_index, track_count = playlist_info
+                        self.events.put({
+                            "kind": "tx_playlist_track",
+                            "path": track_path,
+                            "index": track_index,
+                            "count": track_count,
+                        })
                     wait_seconds = playlist_frame_wait_seconds(
                         playlist_next_frame_deadline,
                         time.perf_counter(),
@@ -907,6 +925,8 @@ class TxityTransmitter:
                         break
                     if self._stop_event.is_set():
                         break
+                else:
+                    frame = queued_frame
 
                 audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
                 send_count += 1
