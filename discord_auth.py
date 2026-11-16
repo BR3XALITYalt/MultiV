@@ -230,6 +230,7 @@ class DiscordAuthManager:
         self._completed = False
         self._timeout: threading.Timer | None = None
         self._browser_process: subprocess.Popen[Any] | None = None
+        self._restore_only = False
         self.auth_start_url = AUTH_START_URL
         self.secure_auth_enabled = False
 
@@ -258,7 +259,11 @@ class DiscordAuthManager:
             self.auth_start_url = candidate if allowed else AUTH_START_URL
             self.secure_auth_enabled = secure_enabled is True and allowed
 
-    def start_login(self) -> None:
+    def restore_session(self) -> None:
+        """Check the existing WebView profile for a valid saved TXITY session."""
+        self.start_login(restore_only=True)
+
+    def start_login(self, restore_only: bool = False) -> None:
         with self._lock:
             enabled = self.secure_auth_enabled
             auth_start_url = self.auth_start_url
@@ -269,6 +274,8 @@ class DiscordAuthManager:
             })
             return
         self.close()
+        with self._lock:
+            self._restore_only = restore_only
 
         manager = self
         state = secrets.token_urlsafe(32)
@@ -361,7 +368,11 @@ class DiscordAuthManager:
                         message = safe_error_text(raw_message, max_chars=16_000)
                     else:
                         message = "The embedded sign-in window could not start."
-                    if not manager._fail(state, message):
+                    if payload.get("code") == "no-stored-session":
+                        accepted = manager._restore_missing(state)
+                    else:
+                        accepted = manager._fail(state, message)
+                    if not accepted:
                         self._json(400, {"ok": False, "error": "This sign-in request is no longer active."})
                         return
                     self._json(200, {"ok": True})
@@ -414,7 +425,11 @@ class DiscordAuthManager:
             f"http://127.0.0.1:{server.server_port}/callback?"
             + urlencode({"state": state})
         )
-        login_url = auth_start_url + "?" + urlencode({"return": callback_url})
+        login_url = (
+            f"{BASE_URL}/"
+            if restore_only
+            else auth_start_url + "?" + urlencode({"return": callback_url})
+        )
 
         complete_url = f"http://127.0.0.1:{server.server_port}/complete"
         helper_path = Path(__file__).with_name("discord_auth_browser.py")
@@ -426,7 +441,15 @@ class DiscordAuthManager:
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
         try:
             process = subprocess.Popen(
-                [sys.executable, "-u", str(helper_path), login_url, complete_url, state],
+                [
+                    sys.executable,
+                    "-u",
+                    str(helper_path),
+                    login_url,
+                    complete_url,
+                    state,
+                    "restore" if restore_only else "login",
+                ],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -462,7 +485,11 @@ class DiscordAuthManager:
             output_reader.start()
         self.events.put({
             "kind": "auth_browser",
-            "text": "TXITY sign-in opened in the embedded browser. Waiting for Discord authorization.",
+            "text": (
+                "Checking for a saved Discord session."
+                if restore_only
+                else "TXITY sign-in opened in the embedded browser. Waiting for Discord authorization."
+            ),
         })
         threading.Thread(
             target=self._watch_browser,
@@ -600,6 +627,24 @@ class DiscordAuthManager:
                 message += f"\n\nDiagnostic log: {diagnostic_log_path()}"
             self.events.put({"kind": "auth_error", "text": message})
 
+    def _restore_missing(self, state: str) -> bool:
+        """Finish a silent restore attempt when no usable session is stored."""
+        with self._lock:
+            if (
+                not self._restore_only
+                or not self._state
+                or self._completed
+                or not hmac.compare_digest(state, self._state)
+            ):
+                return False
+            self._completed = True
+            timeout = self._timeout
+            self._timeout = None
+        if timeout is not None:
+            timeout.cancel()
+        self.events.put({"kind": "auth_restore_missing"})
+        return True
+
     def _fail(self, state: str, message: str) -> bool:
         with self._lock:
             if not self._state or self._completed or not hmac.compare_digest(state, self._state):
@@ -690,6 +735,7 @@ class DiscordAuthManager:
             self._server = None
             self._timeout = None
             self._state = ""
+            self._restore_only = False
         if timeout is not None:
             timeout.cancel()
         if server is not None:
