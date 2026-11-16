@@ -7,12 +7,16 @@ import os
 import queue
 import random
 import re
+import subprocess
+import tempfile
 import threading
 import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
 from audio_playlist import build_playlist_order, collect_audio_files
+from drm_support import LocalDRMPlaylistServer, ensure_drm_encoder, write_drm_station_config
 
 
 BASE_URL = "https://txity.radiodiscussion.org"
@@ -104,10 +108,11 @@ def should_send_live_audio_silence(last_audio_at: float, now: float) -> bool:
 
 
 PTT_CONFIRMATION_GRACE_SECONDS = 4.0
-SUPPORTED_MODES = ("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "CW")
+SUPPORTED_MODES = ("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "DRM", "CW")
 DEFAULT_MODE_BANDWIDTH_HZ = {
     "AM": 12_000,
     "DSB": 12_000,
+    "DRM": 12_000,
     "USB": 10_000,
     "LSB": 10_000,
     "USB+C": 10_000,
@@ -157,7 +162,7 @@ def mode_bandwidth_hz(mode: Any, station: dict[str, Any] | None = None) -> int:
     station = station if isinstance(station, dict) else {}
     mode_name = str(mode or "AM").strip().upper()
     field_names = ["bandwidthHz", "occupiedBandwidthHz", "rfBandwidthHz"]
-    if mode_name in {"AM", "DSB"}:
+    if mode_name in {"AM", "DSB", "DRM"}:
         field_names.append("amBandwidthHz")
     elif mode_name in {"USB", "LSB", "USB+C", "LSB+C"}:
         field_names.append("ssbBandwidthHz")
@@ -281,6 +286,7 @@ def build_transmit_config(
     selected_mode = str(mode or "AM").strip().upper()
     if selected_mode not in SUPPORTED_MODES:
         raise ValueError(f"Unsupported transmission mode: {selected_mode}.")
+    server_mode = "DSB" if selected_mode == "DRM" else selected_mode
 
     try:
         power = float(station_dbm)
@@ -337,7 +343,7 @@ def build_transmit_config(
         raise ValueError("AM bandwidth must be between 3000 and 12000 Hz.")
 
     short_description = str(description or "").strip()[:180]
-    return {
+    configuration = {
         "type": "config",
         "rfHz": parse_rf_frequency(frequency),
         "stationName": name,
@@ -347,7 +353,7 @@ def build_transmit_config(
         "stationDetails": str(station_details or "").strip()[:1_200],
         "stationPageLayout": str(station_page_layout or "")[:40_000],
         "discordAuthToken": auth_token,
-        "mode": selected_mode,
+        "mode": server_mode,
         "sampleRate": SAMPLE_RATE_HZ,
         "stationDbm": power,
         "fadeMs": int(round(fade_duration_seconds * 1_000)) if fade_enabled else 0,
@@ -367,9 +373,21 @@ def build_transmit_config(
         "ssbBandwidthHz": ssb_width,
         "ssbLowCutHz": ssb_low_cut,
         "ssbHighCutHz": ssb_high_cut,
-        "amBandwidthHz": am_width,
-        "amPreEmphasis": bool(am_pre_emphasis),
+        "amBandwidthHz": 12_000 if selected_mode == "DRM" else am_width,
+        "amPreEmphasis": False if selected_mode == "DRM" else bool(am_pre_emphasis),
     }
+    if selected_mode == "DRM":
+        configuration["_txitpyMode"] = "DRM"
+        configuration.update({
+            "fadeMs": 0,
+            "agcEnabled": False,
+            "micGainDb": 0.0,
+            "bassDb": 0.0,
+            "trebleDb": 0.0,
+            "presenceDb": 0.0,
+            "drive": 0.0,
+        })
+    return configuration
 
 
 def list_audio_inputs() -> list[tuple[int, str]]:
@@ -531,6 +549,9 @@ class TxityTransmitter:
         selected_source = str(audio_source or "mic").casefold()
         if selected_source not in SUPPORTED_AUDIO_SOURCES:
             raise ValueError("Choose microphone input, desktop audio loopback, or an audio playlist.")
+        drm_mode = str(config.get("_txitpyMode") or "").upper() == "DRM"
+        if drm_mode and selected_source == "loopback":
+            raise ValueError("DRM mode currently supports microphone and playlist inputs, not desktop audio loopback.")
         selected_playlist = collect_audio_files(playlist_files or [])
         if selected_source == "playlist" and not selected_playlist:
             raise ValueError("Add at least one supported audio file to the playlist.")
@@ -541,7 +562,7 @@ class TxityTransmitter:
             self._stop_event.clear()
             queue_frames = (
                 PLAYLIST_AUDIO_QUEUE_FRAMES
-                if selected_source == "playlist"
+                if selected_source == "playlist" or drm_mode
                 else AUDIO_QUEUE_FRAMES
             )
             self._audio_queue = queue.Queue(maxsize=queue_frames)
@@ -596,12 +617,23 @@ class TxityTransmitter:
 
         system_awake_handle = begin_windows_system_awake()
         mode = str(config.get("mode", "AM")).upper()
+        drm_mode = str(config.get("_txitpyMode") or "").upper() == "DRM"
         needs_audio = mode != "CW"
         audio_socket = None
         input_stream = None
         loopback_stream = None
         loopback_manager = None
         playlist_thread: threading.Thread | None = None
+        drm_process: subprocess.Popen | None = None
+        drm_playlist_server: LocalDRMPlaylistServer | None = None
+        drm_temp_dir = None
+        drm_stop_path: Path | None = None
+        drm_reader_thread: threading.Thread | None = None
+        drm_stderr_thread: threading.Thread | None = None
+        drm_reader_finished = threading.Event()
+        drm_stderr_lines: list[str] = []
+        drm_playlist_stop_deadline: float | None = None
+        drm_playlist_stop_requested = False
         audio_finished = threading.Event()
         playlist_reached_end = False
         playlist_underruns = 0
