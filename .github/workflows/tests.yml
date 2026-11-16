@@ -97,3 +97,42 @@ jobs:
       - name: Build the DRM encoder
         working-directory: decdrm
         run: cargo build --release -p txitpy-drm-bridge
+
+      - name: Validate the one-service 4.5 kHz configuration
+        working-directory: decdrm
+        run: |
+          cat > drm-validation.toml <<'TOML'
+          [channel]
+          mode = "B"
+          occupancy = 0
+          msc_mode = "16-QAM"
+          sdc_mode = "4-QAM"
+          interleaving = "short"
+          protection_a = 0
+          protection_b = 0
+
+          [output]
+          sample_format = "float32"
+          format = "real"
+          if_hz = 1500.0
+          level_dbfs = -15.0
+          band_limit = true
+
+          [[service]]
+          label = "TXITPY DRM"
+          id = 0xB30001
+          language = "English"
+          programme_type = "Pop Music"
+
+          [service.audio]
+          codec = "he-aac"
+          core_rate = 12000
+          stereo = false
+          part = "B"
+          share = 1.0
+
+          [service.audio.input]
+          tone_hz = 1000.0
+          level_dbfs = -12.0
+          TOML
+          cargo run --release -p txitpy-drm-bridge -- --check drm-validation.toml
