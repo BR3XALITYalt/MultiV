@@ -33,10 +33,8 @@ def normalize_audio_sources(sources: Iterable[str | Path]) -> list[str]:
                     continue
                 if not path.is_file() and not path.is_dir():
                     continue
-            elif path.suffix and path.suffix.casefold() not in SUPPORTED_AUDIO_EXTENSIONS:
-                # Keep missing directory paths as well as supported file paths so
-                # temporarily disconnected folders can be restored automatically.
-                pass
+            # Keep missing source paths so temporarily disconnected folders
+            # and files can be restored without importing them again.
             resolved = str(path.resolve(strict=False))
         except (OSError, TypeError, ValueError, RuntimeError):
             continue
