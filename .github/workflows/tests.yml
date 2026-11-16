@@ -109,7 +109,7 @@ jobs:
           sdc_mode = "4-QAM"
           interleaving = "short"
           protection_a = 0
-          protection_b = 0
+          protection_b = 1
 
           [output]
           sample_format = "float32"
