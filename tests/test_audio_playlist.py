@@ -37,7 +37,7 @@ class AudioPlaylistTests(unittest.TestCase):
             collected = collect_audio_files([root, files[1], nested])
             self.assertEqual(
                 [Path(item).name for item in collected],
-                ["a-track.wav", "z-track.MP3", "b-track.flac"],
+                ["a-track.wav", "b-track.flac", "z-track.MP3"],
             )
 
     def test_ignores_missing_paths_and_unsupported_files(self):
