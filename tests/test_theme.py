@@ -1,6 +1,10 @@
 import unittest
 
-from material_theme import MATERIAL_3_EXPRESSIVE, apply_tk_theme
+from material_theme import (
+    MATERIAL_3_EXPRESSIVE,
+    apply_tk_theme,
+    rounded_rectangle_points,
+)
 
 
 REQUIRED_ROLES = {
@@ -38,6 +42,25 @@ def _contrast(first, second):
 
 
 class MaterialThemeTests(unittest.TestCase):
+    def test_rounded_rectangle_points_make_a_true_rounded_outline(self):
+        points = rounded_rectangle_points(100, 60, 16)
+        coordinates = list(zip(points[::2], points[1::2]))
+
+        self.assertEqual(len(coordinates), 4 * 15)
+        self.assertAlmostEqual(min(x for x, _y in coordinates), 0)
+        self.assertAlmostEqual(max(x for x, _y in coordinates), 100)
+        self.assertAlmostEqual(min(y for _x, y in coordinates), 0)
+        self.assertAlmostEqual(max(y for _x, y in coordinates), 60)
+        self.assertAlmostEqual(coordinates[0][0], 0)
+        self.assertAlmostEqual(coordinates[0][1], 16)
+        self.assertAlmostEqual(coordinates[15][0], 84)
+        self.assertAlmostEqual(coordinates[15][1], 0)
+
+    def test_rounded_rectangle_clamps_radius_to_available_dimensions(self):
+        points = rounded_rectangle_points(20, 10, 50)
+        self.assertTrue(all(0 <= value <= 20 for value in points[::2]))
+        self.assertTrue(all(0 <= value <= 10 for value in points[1::2]))
+
     def test_uses_teledrive_blue_expressive_palette(self):
         self.assertEqual(MATERIAL_3_EXPRESSIVE["light"]["primary"], "#1B6EF3")
         self.assertEqual(MATERIAL_3_EXPRESSIVE["light"]["tertiary"], "#00677E")
