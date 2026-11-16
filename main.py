@@ -1002,6 +1002,7 @@ def build_app() -> None:
     tx_mode_var = tk.StringVar(root, "AM")
     tx_mode_help_var = tk.StringVar(root, "AM uses a carrier with upper and lower sidebands.")
     tx_power_var = tk.StringVar(root, "50")
+    tx_power_readout_var = tk.StringVar(root, "50 dBm")
     tx_audio_source_var = tk.StringVar(root, "Microphone / line input")
     tx_audio_device_var = tk.StringVar(root, "System default")
     tx_audio_device_label_var = tk.StringVar(root, "Input device")
@@ -1050,10 +1051,54 @@ def build_app() -> None:
     content_frame: tk.Frame | None = None
     nav_frame: tk.Frame | None = None
     active_scroll_canvas: tk.Canvas | None = None
-    wheel_remainder = 0.0
+    scroll_animation_id: str | None = None
+    scroll_animation_canvas: tk.Canvas | None = None
+    scroll_target_offset = 0.0
+    SCROLL_PIXELS_PER_NOTCH = 102.0
+    SCROLL_ANIMATION_STEPS = 8
+    SCROLL_ANIMATION_INTERVAL_MS = 10
+
+    def animate_canvas_scroll(
+        canvas: tk.Canvas,
+        start_offset: float,
+        target_offset: float,
+        step: int = 0,
+    ) -> None:
+        nonlocal scroll_animation_id, scroll_animation_canvas
+        if canvas is not active_scroll_canvas or canvas is not scroll_animation_canvas:
+            scroll_animation_id = None
+            scroll_animation_canvas = None
+            return
+        try:
+            bounds = canvas.bbox("all")
+            if not bounds:
+                scroll_animation_id = None
+                scroll_animation_canvas = None
+                return
+            content_height = max(1, bounds[3] - bounds[1])
+            viewport_height = max(1, canvas.winfo_height())
+            max_offset = max(0, content_height - viewport_height)
+            progress = min(1.0, (step + 1) / SCROLL_ANIMATION_STEPS)
+            eased = 1.0 - (1.0 - progress) ** 3
+            offset = start_offset + (target_offset - start_offset) * eased
+            offset = max(0.0, min(float(max_offset), offset))
+            canvas.yview_moveto(offset / content_height)
+        except tk.TclError:
+            scroll_animation_id = None
+            scroll_animation_canvas = None
+            return
+
+        if step + 1 >= SCROLL_ANIMATION_STEPS:
+            scroll_animation_id = None
+            scroll_animation_canvas = None
+        else:
+            scroll_animation_id = root.after(
+                SCROLL_ANIMATION_INTERVAL_MS,
+                lambda: animate_canvas_scroll(canvas, start_offset, target_offset, step + 1),
+            )
 
     def scroll_active_canvas(event, direction: int | None = None):
-        nonlocal wheel_remainder
+        nonlocal scroll_animation_id, scroll_animation_canvas, scroll_target_offset
         canvas = active_scroll_canvas
         if canvas is None:
             return
@@ -1067,21 +1112,40 @@ def build_app() -> None:
             bottom = top + canvas.winfo_height()
             if not (left <= event.x_root < right and top <= event.y_root < bottom):
                 return
+            bounds = canvas.bbox("all")
+            if not bounds:
+                return
+            content_height = max(1, bounds[3] - bounds[1])
+            viewport_height = max(1, canvas.winfo_height())
+            max_offset = max(0.0, float(content_height - viewport_height))
+            current_offset = canvas.yview()[0] * content_height
         except tk.TclError:
             return
 
         if direction is not None:
-            canvas.yview_scroll(direction * 3, "units")
+            scroll_delta = direction * SCROLL_PIXELS_PER_NOTCH
+        else:
+            delta = getattr(event, "delta", 0)
+            if not delta:
+                return
+            scroll_delta = -(float(delta) / 120.0) * SCROLL_PIXELS_PER_NOTCH
+
+        if scroll_animation_id is not None:
+            try:
+                root.after_cancel(scroll_animation_id)
+            except tk.TclError:
+                pass
+            base_offset = scroll_target_offset if scroll_animation_canvas is canvas else current_offset
+        else:
+            base_offset = current_offset
+
+        target_offset = max(0.0, min(max_offset, base_offset + scroll_delta))
+        if abs(target_offset - current_offset) < 0.5:
             return "break"
 
-        delta = getattr(event, "delta", 0)
-        if not delta:
-            return
-        wheel_remainder += -delta / 120.0
-        units = int(wheel_remainder)
-        if units:
-            canvas.yview_scroll(units, "units")
-            wheel_remainder -= units
+        scroll_target_offset = target_offset
+        scroll_animation_canvas = canvas
+        animate_canvas_scroll(canvas, current_offset, target_offset)
         return "break"
 
     root.bind_all("<MouseWheel>", scroll_active_canvas, add="+")
@@ -1605,13 +1669,20 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(20, 0))
 
     def create_scrollable_page(parent: tk.Frame) -> tuple[tk.Frame, tk.Canvas]:
-        nonlocal active_scroll_canvas
+        nonlocal active_scroll_canvas, scroll_animation_id, scroll_animation_canvas
+        if scroll_animation_id is not None:
+            try:
+                root.after_cancel(scroll_animation_id)
+            except tk.TclError:
+                pass
+            scroll_animation_id = None
+            scroll_animation_canvas = None
         canvas = tk.Canvas(
             parent,
             background=palette["background"],
             highlightthickness=0,
             borderwidth=0,
-            yscrollincrement=28,
+            yscrollincrement=1,
         )
         page = tk.Frame(canvas, background=palette["background"])
         window_id = canvas.create_window((0, 0), window=page, anchor="nw")
@@ -2104,6 +2175,23 @@ def build_app() -> None:
             font=("Segoe UI", 9),
         )
         power_scale.pack(fill="x", expand=True, pady=(1, 0))
+        make_label(
+            power_frame,
+            variable=tx_power_readout_var,
+            font=("Segoe UI", 10, "bold"),
+            color=palette["primary"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="e", pady=(3, 0))
+
+        def update_power_readout(*_args) -> None:
+            try:
+                value = float(tx_power_var.get())
+                tx_power_readout_var.set(f"{value:.0f} dBm")
+            except (TypeError, ValueError):
+                tx_power_readout_var.set("Invalid power")
+
+        tx_power_var.trace_add("write", update_power_readout)
+        update_power_readout()
 
         sharing = tk.Checkbutton(
             signal_card,
@@ -2848,11 +2936,31 @@ def build_app() -> None:
             f"{rate / 1_000_000:.3f} MS/s"
             if isinstance(rate, (int, float)) else "Not reported"
         )
-        if not users_listing_received:
-            transmitters_var.set(str(data.get("transmittingCount", "Not reported")))
-            web_clients, sdrpp_clients = data.get("webClients"), data.get("sdrppClients")
-            if isinstance(web_clients, int) and isinstance(sdrpp_clients, int):
-                clients_var.set(f"{web_clients} web / {sdrpp_clients} SDR++")
+        # The WebSocket status feed is the live source. Keep the users.json
+        # snapshot as a fallback only for fields absent from this update.
+        live_transmitters = data.get("transmittingCount")
+        if isinstance(live_transmitters, int) and not isinstance(live_transmitters, bool):
+            transmitters_var.set(str(live_transmitters))
+        web_clients = data.get("webClients")
+        sdrpp_clients = data.get("sdrppClients")
+        if (
+            isinstance(web_clients, int) and not isinstance(web_clients, bool)
+            and isinstance(sdrpp_clients, int) and not isinstance(sdrpp_clients, bool)
+        ):
+            clients_var.set(f"{web_clients} web / {sdrpp_clients} SDR++")
+        elif isinstance(web_clients, int) and not isinstance(web_clients, bool):
+            clients_var.set(f"{web_clients} web")
+        elif isinstance(sdrpp_clients, int) and not isinstance(sdrpp_clients, bool):
+            clients_var.set(f"{sdrpp_clients} SDR++")
+
+        for key, variable in (
+            ("sessions", sessions_var),
+            ("webAudioClients", web_audio_var),
+            ("sdrppStreamingClients", sdrpp_streaming_var),
+        ):
+            value = data.get(key)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                variable.set(str(value))
         protection = "enabled" if data.get("protection") else "not reported"
         summary_var.set(
             f"Server protection: {protection}. "
