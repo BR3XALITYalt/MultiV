@@ -946,7 +946,7 @@ def build_app() -> None:
         key = (url, size)
         photo = image_cache.get(key)
         if photo is not None:
-            label.configure(image=photo, text="", width=0, height=0, bg=surface)
+            label.configure(image=photo, text="", width=size, height=size, bg=surface)
             label.image = photo
             return label
 
@@ -965,6 +965,7 @@ def build_app() -> None:
 
             source = Image.open(BytesIO(data))
             source.load()
+            source = source.convert("RGBA")
         except Exception as exc:
             print(f"[TXITPY] Station image could not be decoded: {safe_error_text(str(exc), 200)}", file=sys.stderr, flush=True)
             return
