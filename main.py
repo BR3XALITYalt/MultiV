@@ -1,7 +1,6 @@
-"""TXITPY desktop companion for the public TXITY station directory and status feed.
+"""TXITPY desktop client for TXITY's station directory, status feed, and virtual transmitter.
 
-This release is read-only. It does not send transmitter settings, PTT commands,
-or audio frames. Discord sign-in uses TXITY's official OAuth route and a one-use loopback callback.
+Discord sign-in uses TXITY's official OAuth route and a one-use loopback callback.
 """
 from __future__ import annotations
 
@@ -29,6 +28,7 @@ from discord_auth import (
     write_diagnostic,
     write_diagnostic_text,
 )
+from transmitter import TxityTransmitter, build_transmit_config, list_audio_inputs
 
 BASE_URL = "https://txity.radiodiscussion.org"
 CONTROL_URL = "wss://txity.radiodiscussion.org/ws/control"
@@ -55,6 +55,7 @@ class Station:
     avatar_url: str = ""
     image_urls: list[str] | None = None
     page_layout: dict[str, Any] | None = None
+    raw_page_layout: str = ""
     likes: int = 0
     rating_average: float | None = None
     rating_count: int = 0
@@ -83,6 +84,7 @@ class Station:
             "avatar_url": self.avatar_url,
             "image_urls": self.image_urls or [],
             "page_layout": self.page_layout,
+            "page_layout_json": self.raw_page_layout,
             "likes": self.likes,
             "rating_average": self.rating_average,
             "rating_count": self.rating_count,
@@ -482,7 +484,18 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
         else:
             profile_details = ""
 
-        page_layout = parse_station_page_layout(item.get("pageLayout"))
+        page_layout_value = item.get("pageLayout")
+        page_layout = parse_station_page_layout(page_layout_value)
+        if isinstance(page_layout_value, str):
+            raw_page_layout = page_layout_value[:40_000]
+        elif isinstance(page_layout_value, dict):
+            try:
+                encoded_layout = json.dumps(page_layout_value, separators=(",", ":"), ensure_ascii=False)
+                raw_page_layout = encoded_layout if len(encoded_layout) <= 40_000 else ""
+            except (TypeError, ValueError):
+                raw_page_layout = ""
+        else:
+            raw_page_layout = ""
 
         if not description and profile_details:
             description = profile_details
@@ -551,6 +564,7 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
             ),
             image_urls=image_urls,
             page_layout=page_layout,
+            raw_page_layout=raw_page_layout,
             likes=likes if isinstance(likes, int) and not isinstance(likes, bool) and likes >= 0 else 0,
             rating_average=average_value,
             rating_count=rating_count,
@@ -653,6 +667,7 @@ class TxityClient:
         self.discord_user: dict[str, str] | None = None
         self.ws: Any = None
         self.ws_thread: threading.Thread | None = None
+        self.control_send_lock = threading.Lock()
 
     def set_discord_auth(self, token: Any, user: Any = None) -> None:
         """Attach or disconnect a token received through TXITY's OAuth callback."""
@@ -680,6 +695,37 @@ class TxityClient:
                 active_socket.close()
             except Exception:
                 pass
+
+    def transmission_credentials(self) -> tuple[str, str, str]:
+        """Return the in-memory credentials needed for TXITY's audio socket."""
+        with self.auth_lock:
+            if not self.auth_token:
+                raise RuntimeError("Sign in with Discord before starting transmission.")
+            return self.session_id, self.session_secret, self.auth_token
+
+    def control_connected(self) -> bool:
+        with self.auth_lock:
+            active_socket = self.ws
+            if not self.auth_token or active_socket is None:
+                return False
+            socket = getattr(active_socket, "sock", None)
+            return bool(socket is not None and getattr(socket, "connected", False))
+
+    def send_control_message(self, message: dict[str, Any]) -> None:
+        """Send a TXITY config or PTT message over the authenticated control socket."""
+        with self.auth_lock:
+            active_socket = self.ws
+            authenticated = bool(self.auth_token)
+        if not authenticated:
+            raise RuntimeError("Sign in with Discord before starting transmission.")
+        if active_socket is None:
+            raise ConnectionError("TXITY control connection is not open.")
+
+        with self.control_send_lock:
+            socket = getattr(active_socket, "sock", None)
+            if socket is None or not getattr(socket, "connected", False):
+                raise ConnectionError("TXITY control connection is not ready.")
+            active_socket.send(json.dumps(message, separators=(",", ":")))
 
     def connect(self) -> None:
         if self.ws_thread and self.ws_thread.is_alive():
@@ -765,12 +811,14 @@ class TxityClient:
             })
             # The status request is read-only. No config, PTT, or audio messages
             # are sent by this desktop client.
-            ws.send(json.dumps({"type": "status"}))
+            with self.control_send_lock:
+                ws.send(json.dumps({"type": "status"}))
 
             def heartbeat() -> None:
                 while not self.stop_event.wait(1.0):
                     try:
-                        ws.send(json.dumps({"type": "status"}))
+                        with self.control_send_lock:
+                            ws.send(json.dumps({"type": "status"}))
                     except Exception:
                         return
 
@@ -881,6 +929,7 @@ def build_app() -> None:
 
     client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
+    transmitter = TxityTransmitter(client, client.events)
 
     theme_mode = _system_theme_mode()
 
@@ -908,6 +957,24 @@ def build_app() -> None:
     summary_var = tk.StringVar(root, "Sign in with Discord to load TXITY server information.")
     station_status_var = tk.StringVar(root, "Waiting for TXITY station data.")
     station_count_var = tk.StringVar(root, "0 stations")
+
+    tx_station_name_var = tk.StringVar(root, "")
+    tx_description_var = tk.StringVar(root, "")
+    tx_frequency_var = tk.StringVar(root, "7.250 MHz")
+    tx_mode_var = tk.StringVar(root, "AM")
+    tx_power_var = tk.StringVar(root, "50")
+    tx_audio_input_var = tk.StringVar(root, "System default")
+    tx_cw_text_var = tk.StringVar(root, "CQ CQ DE TXITY")
+    tx_cw_wpm_var = tk.StringVar(root, "18")
+    tx_allow_overlap_var = tk.BooleanVar(root, False)
+    tx_logo_url_var = tk.StringVar(root, "")
+    tx_details_var = tk.StringVar(root, "")
+    tx_page_layout_var = tk.StringVar(root, "")
+    tx_status_var = tk.StringVar(root, "Not transmitting")
+    tx_metrics_var = tk.StringVar(root, "Audio frames sent: 0")
+    tx_audio_device_ids: dict[str, int | None] = {"System default": None}
+    tx_transmit_button: tk.Button | None = None
+    tx_profile_initialized = False
 
     metric_vars = {
         "Center frequency": center_var,
@@ -1252,6 +1319,7 @@ def build_app() -> None:
 
     def disconnect_discord() -> None:
         nonlocal discord_authenticated, current_page
+        transmitter.stop(wait=0.5)
         client.set_discord_auth(None, None)
         client.disconnect()
         discord_authenticated = False
@@ -1266,9 +1334,14 @@ def build_app() -> None:
         build_shell()
 
     def on_shutdown() -> None:
+        transmitter.stop(wait=1.0)
         client.disconnect()
         auth_manager.close()
         root.destroy()
+
+    def disconnect_status_connection() -> None:
+        transmitter.stop(wait=0.5)
+        client.disconnect()
 
     def toggle_theme() -> None:
         nonlocal theme_mode
@@ -1528,7 +1601,7 @@ def build_app() -> None:
         actions = tk.Frame(page, bg=palette["background"])
         actions.pack(fill="x", pady=(0, 18))
         make_button(actions, "Connect", client.connect, kind="primary").pack(side="left", padx=(0, 8))
-        make_button(actions, "Disconnect", client.disconnect, kind="tonal").pack(side="left", padx=(0, 8))
+        make_button(actions, "Disconnect", disconnect_status_connection, kind="tonal").pack(side="left", padx=(0, 8))
         make_button(
             actions,
             "Open TXITY",
@@ -1668,6 +1741,237 @@ def build_app() -> None:
         station_cards_frame = tk.Frame(page, bg=palette["background"])
         station_cards_frame.pack(fill="x", expand=True)
         update_station_tree()
+
+    def update_transmit_button() -> None:
+        button = tx_transmit_button
+        if button is None:
+            return
+        try:
+            if button.winfo_exists():
+                button.configure(
+                    text="Stop Transmission" if transmitter.is_busy else "Start Transmission"
+                )
+        except tk.TclError:
+            pass
+
+    def toggle_transmission() -> None:
+        if transmitter.is_busy:
+            transmitter.stop()
+            tx_status_var.set("Stopping transmission...")
+            update_transmit_button()
+            return
+        if not discord_authenticated:
+            navigate("discord")
+            return
+
+        try:
+            config = build_transmit_config(
+                station_name=tx_station_name_var.get(),
+                description=tx_description_var.get(),
+                frequency=tx_frequency_var.get(),
+                mode=tx_mode_var.get(),
+                station_dbm=tx_power_var.get(),
+                allow_overlap=tx_allow_overlap_var.get(),
+                auth_token=client.auth_token,
+                cw_text=tx_cw_text_var.get(),
+                cw_wpm=tx_cw_wpm_var.get(),
+                station_logo_url=tx_logo_url_var.get(),
+                station_details=tx_details_var.get(),
+                station_page_layout=tx_page_layout_var.get(),
+            )
+            device = tx_audio_device_ids.get(tx_audio_input_var.get())
+            transmitter.start(config, input_device=device)
+            tx_status_var.set("Preparing transmission...")
+            update_transmit_button()
+        except Exception as exc:
+            details = safe_error_text(str(exc), 500)
+            tx_status_var.set(details)
+            print(f"[TXITPY] Transmission start rejected: {details}", file=sys.stderr, flush=True)
+
+    def show_transmit(parent: tk.Frame) -> None:
+        nonlocal tx_transmit_button
+
+        page, _canvas = create_scrollable_page(parent)
+        make_label(
+            page,
+            "Transmit",
+            font=("Segoe UI", 27, "bold"),
+            background=palette["background"],
+        ).pack(anchor="w", pady=(6, 2))
+        make_label(
+            page,
+            "Configure a station and stream microphone audio to TXITY.",
+            font=("Segoe UI", 10, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["background"],
+        ).pack(anchor="w", pady=(0, 16))
+
+        station_card = make_card(page, padding=16)
+        station_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            station_card,
+            "Station configuration",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 12))
+
+        fields = tk.Frame(station_card, bg=palette["surfaceContainerLow"])
+        fields.pack(fill="x")
+        fields.grid_columnconfigure(0, weight=1, uniform="tx-fields")
+        fields.grid_columnconfigure(1, weight=1, uniform="tx-fields")
+
+        def add_tx_entry(label: str, variable: tk.StringVar, row: int, column: int) -> None:
+            wrapper = tk.Frame(fields, bg=palette["surfaceContainerLow"])
+            wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
+            make_label(
+                wrapper,
+                label,
+                font=("Segoe UI", 9, "bold"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w", pady=(0, 4))
+            entry = tk.Entry(
+                wrapper,
+                textvariable=variable,
+                font=("Segoe UI", 10),
+                bg=palette["surfaceContainerLowest"],
+                fg=palette["onSurface"],
+                insertbackground=palette["onSurface"],
+                selectbackground=palette["primaryContainer"],
+                selectforeground=palette["onPrimaryContainer"],
+                relief="flat",
+                borderwidth=1,
+                highlightthickness=1,
+                highlightbackground=palette["outlineVariant"],
+                highlightcolor=palette["primary"],
+            )
+            entry.pack(fill="x", ipady=6)
+
+        add_tx_entry("Station name (required)", tx_station_name_var, 0, 0)
+        add_tx_entry("Short description", tx_description_var, 0, 1)
+        add_tx_entry("Transmit frequency", tx_frequency_var, 1, 0)
+        add_tx_entry("Station power (dBm)", tx_power_var, 1, 1)
+        add_tx_entry("CW message", tx_cw_text_var, 2, 0)
+        add_tx_entry("CW speed (5-60 WPM)", tx_cw_wpm_var, 2, 1)
+
+        mode_frame = tk.Frame(fields, bg=palette["surfaceContainerLow"])
+        mode_frame.grid(row=3, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            mode_frame,
+            "Signal mode",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        mode_picker = ttk.Combobox(
+            mode_frame,
+            textvariable=tx_mode_var,
+            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "CW"),
+            state="readonly",
+        )
+        mode_picker.pack(fill="x", ipady=3)
+
+        input_frame = tk.Frame(fields, bg=palette["surfaceContainerLow"])
+        input_frame.grid(row=3, column=1, sticky="ew", padx=6, pady=6)
+        make_label(
+            input_frame,
+            "Microphone / line input",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+
+        tx_audio_device_ids.clear()
+        tx_audio_device_ids["System default"] = None
+        device_values = ["System default"]
+        try:
+            for device_id, device_name in list_audio_inputs():
+                display = f"{device_id}: {device_name}"
+                tx_audio_device_ids[display] = device_id
+                device_values.append(display)
+        except Exception as exc:
+            tx_status_var.set(
+                f"Audio devices unavailable: {safe_error_text(str(exc), 250)}. CW mode remains available."
+            )
+        if tx_audio_input_var.get() not in tx_audio_device_ids:
+            tx_audio_input_var.set("System default")
+        input_picker = ttk.Combobox(
+            input_frame,
+            textvariable=tx_audio_input_var,
+            values=device_values,
+            state="readonly",
+        )
+        input_picker.pack(fill="x", ipady=3)
+
+        profile_frame = tk.Frame(station_card, bg=palette["surfaceContainerLow"])
+        profile_frame.pack(fill="x", pady=(10, 2))
+        overlap = tk.Checkbutton(
+            profile_frame,
+            text="Allow frequency sharing with other stations that also enable sharing",
+            variable=tx_allow_overlap_var,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerHighest"],
+            highlightthickness=0,
+            bd=0,
+            anchor="w",
+        )
+        overlap.pack(anchor="w")
+
+        audio_card = make_card(page, padding=16)
+        audio_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            audio_card,
+            "Audio pipeline",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w")
+        make_label(
+            audio_card,
+            "Microphone modes stream mono Float32 PCM at 48 kHz in 512-sample (2,048-byte) frames. "
+            "CW mode uses the TXITY control message and does not open a microphone or audio socket.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(7, 0))
+
+        status_card = make_card(page, padding=16)
+        status_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            status_card,
+            variable=tx_status_var,
+            font=("Segoe UI", 11, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w")
+        make_label(
+            status_card,
+            variable=tx_metrics_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(6, 0))
+
+        tx_transmit_button = make_button(
+            page,
+            "Stop Transmission" if transmitter.is_busy else "Start Transmission",
+            toggle_transmission,
+            kind="primary",
+            padx=24,
+            pady=12,
+        )
+        tx_transmit_button.pack(anchor="w", pady=(0, 12))
+
+        make_label(
+            page,
+            "TXITPY sends audio only to TXITY's virtual service. It does not control physical radio hardware.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["background"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(0, 8))
 
     def show_station_detail(parent: tk.Frame) -> None:
         row = next(
@@ -2015,7 +2319,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(18, 0))
 
     def build_shell() -> None:
-        nonlocal shell_frame, content_frame, nav_frame, station_cards_frame
+        nonlocal shell_frame, content_frame, nav_frame, station_cards_frame, tx_transmit_button
 
         nonlocal active_scroll_canvas
         active_scroll_canvas = None
@@ -2024,6 +2328,7 @@ def build_app() -> None:
 
         station_cards_frame = None
         nav_frame = None
+        tx_transmit_button = None
         shell_frame = tk.Frame(root, bg=palette["background"])
         shell_frame.pack(fill="both", expand=True)
 
@@ -2053,6 +2358,7 @@ def build_app() -> None:
             navigation.pack(side="left", fill="y")
 
             destinations = (
+                ("Transmit", "transmit"),
                 ("Overview", "overview"),
                 ("Stations", "stations"),
                 ("Discord", "discord"),
@@ -2125,7 +2431,9 @@ def build_app() -> None:
             )
             content_frame.pack(fill="both", expand=True)
 
-            if current_page == "stations":
+            if current_page == "transmit":
+                show_transmit(content_frame)
+            elif current_page == "stations":
                 show_stations(content_frame)
             elif current_page == "station_detail":
                 show_station_detail(content_frame)
@@ -2217,6 +2525,35 @@ def build_app() -> None:
                 apply_status(event.get("data", {}))
                 updated_var.set("Live status received")
 
+            elif kind == "tx_state":
+                state = str(event.get("state") or "")
+                tx_status_var.set(str(event.get("text") or state))
+                update_transmit_button()
+                print(f"[TXITPY] Transmission state: {state}.", file=sys.stderr, flush=True)
+
+            elif kind == "tx_error":
+                details = safe_error_text(str(event.get("text") or "Transmission failed."), 800)
+                tx_status_var.set(f"Transmission error: {details}")
+                print(f"[TXITPY] Transmission error: {details}", file=sys.stderr, flush=True)
+                update_transmit_button()
+
+            elif kind == "tx_log":
+                details = safe_error_text(str(event.get("text") or ""), 500)
+                if details:
+                    print(f"[TXITPY] {details}", file=sys.stderr, flush=True)
+
+            elif kind == "tx_audio_warning":
+                details = safe_error_text(str(event.get("text") or ""), 300)
+                if details:
+                    print(f"[TXITPY] Audio input warning: {details}", file=sys.stderr, flush=True)
+
+            elif kind == "tx_metrics":
+                tx_metrics_var.set(
+                    f"Audio frames sent: {event.get('frames_sent', 0)}"
+                    f" · dropped: {event.get('frames_dropped', 0)}"
+                    f" · queued: {event.get('queue_depth', 0)}"
+                )
+
             elif kind == "config":
                 config = event.get("data", {})
                 if isinstance(config, dict):
@@ -2240,6 +2577,26 @@ def build_app() -> None:
 
             elif kind == "users_listing":
                 station_rows = event.get("rows", [])
+                if not tx_profile_initialized and client.discord_user:
+                    own_id = str(client.discord_user.get("id") or "")
+                    own_station = next(
+                        (row for row in station_rows if str(row.get("discord_id") or "") == own_id),
+                        None,
+                    )
+                    if own_station:
+                        tx_station_name_var.set(str(own_station.get("station") or "")[:48])
+                        tx_description_var.set(str(own_station.get("description") or "")[:180])
+                        tx_logo_url_var.set(str(own_station.get("logo_url") or "")[:512])
+                        tx_details_var.set(str(own_station.get("details_text") or "")[:1_200])
+                        tx_page_layout_var.set(str(own_station.get("page_layout_json") or "")[:40_000])
+                    elif not tx_station_name_var.get().strip():
+                        display = (
+                            client.discord_user.get("globalName")
+                            or client.discord_user.get("username")
+                            or ""
+                        )
+                        tx_station_name_var.set(str(display)[:48])
+                    tx_profile_initialized = True
                 image_cache.clear()
                 image_loading.clear()
                 image_labels.clear()
@@ -2323,6 +2680,7 @@ def build_app() -> None:
                 print(f"[TXITPY] {details}", file=sys.stderr, flush=True)
 
             elif kind == "auth_token":
+                tx_profile_initialized = False
                 token = event.get("token")
                 user = clean_discord_user(event.get("user"))
                 if is_auth_token(token):
@@ -2353,6 +2711,8 @@ def build_app() -> None:
                 build_shell()
 
             elif kind == "auth_signed_out":
+                transmitter.stop(wait=0.5)
+                tx_profile_initialized = False
                 client.set_discord_auth(None, None)
                 discord_authenticated = False
                 account_var.set("Not signed in to Discord")
