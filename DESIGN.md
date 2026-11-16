@@ -20,7 +20,7 @@ Reading this as: a desktop operations client for TXITY users, using native Tkint
 - **Surfaces:** use rectangular Material-style panels to group real station records and related controls. Keep most content on the page surface; a panel should indicate a useful grouping, not fill empty space.
 - **Navigation:** keep the four existing destinations in a horizontal top bar because they are the app's actual pages and remain available while signed in.
 - **Station list:** keep image and metadata together in each station record so users can scan identity, frequency, mode, and operator without opening every profile.
-- **Transmit page:** group controls by the settings they affect. Keep the transmission action and its current status together so the operator can check the result of a start or stop.
+- **Transmit page:** group controls by the settings they affect. Keep the transmission action and its current status together so the operator can check the result of a start or stop. The audio source section offers microphone, desktop loopback, and playlist modes; playlist actions stay beside the track list and its shuffle and loop checkboxes.
 - **Spacing:** use compact spacing inside related fields and larger gaps between sections. This keeps the settings page dense without merging unrelated controls.
 - **Assets:** display station images only when TXITY or Discord supplies an approved URL. Use the station name as text when no image is available; do not invent station logos or profile images.
 
