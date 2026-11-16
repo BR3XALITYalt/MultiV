@@ -471,7 +471,10 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
             profile_details = raw_details.strip()
         elif isinstance(raw_details, dict):
             profile_details = ""
-            for field_name in ("text", "description", "shortDescription", "summary", "content", "body", "about"):
+            for field_name in (
+                "text", "description", "shortDescription", "summary",
+                "content", "body", "about",
+            ):
                 candidate = raw_details.get(field_name)
                 if isinstance(candidate, str) and candidate.strip():
                     profile_details = candidate.strip()
@@ -479,9 +482,19 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
         else:
             profile_details = ""
 
+        page_layout = parse_station_page_layout(item.get("pageLayout"))
+
         if not description and profile_details:
             description = profile_details
             description_source = "details"
+
+        if not description and page_layout:
+            for block in page_layout.get("blocks", []):
+                candidate = block.get("text")
+                if block.get("type") == "text" and isinstance(candidate, str) and candidate.strip():
+                    description = candidate.strip()
+                    description_source = "pageLayout"
+                    break
 
         frequency = item.get("frequency")
         if not isinstance(frequency, str) or not frequency.strip():
@@ -537,7 +550,7 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
                 item.get("discordId") or item.get("userId"),
             ),
             image_urls=image_urls,
-            page_layout=parse_station_page_layout(item.get("pageLayout")),
+            page_layout=page_layout,
             likes=likes if isinstance(likes, int) and not isinstance(likes, bool) and likes >= 0 else 0,
             rating_average=average_value,
             rating_count=rating_count,
@@ -549,7 +562,7 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
 
 
 def fetch_station_image(url: str) -> bytes:
-    """Fetch a bounded image from an approved TXITY or Discord media host."""
+    """Fetch and validate a bounded image from an approved media host."""
     safe_url = normalize_media_url(url)
     if not safe_url:
         raise ValueError("Station image URL is not from an approved host.")
@@ -563,14 +576,45 @@ def fetch_station_image(url: str) -> bytes:
         },
     )
     with urlopen(request, timeout=HTTP_TIMEOUT) as response:
-        if not normalize_media_url(response.geturl()):
+        final_url = normalize_media_url(response.geturl())
+        if not final_url:
             raise ValueError("Station image redirected to an unsupported host.")
-        content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
-        if not content_type.startswith("image/"):
-            raise ValueError("Station media URL did not return an image.")
+
+        status = getattr(response, "status", None) or response.getcode()
+        content_type = response.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
         data = response.read(MAX_STATION_IMAGE_BYTES + 1)
         if len(data) > MAX_STATION_IMAGE_BYTES:
-            raise ValueError("Station image is larger than the 5 MB limit.")
+            raise ValueError(
+                f"HTTP {status}: image response exceeds the 5 MB limit "
+                f"(Content-Type: {content_type or 'missing'})."
+            )
+
+        if content_type.startswith("image/"):
+            return data
+
+        # Some upload servers send a generic MIME type for real images.
+        # Verify the bytes instead of rejecting a valid image based only on its header.
+        try:
+            from io import BytesIO
+            from PIL import Image
+
+            with Image.open(BytesIO(data)) as image:
+                image_format = image.format or "unknown"
+                image.verify()
+        except Exception as exc:
+            raise ValueError(
+                f"HTTP {status}: response was not a decodable image "
+                f"(Content-Type: {content_type or 'missing'}; "
+                f"URL: {describe_media_url(final_url)})."
+            ) from exc
+
+        print(
+            f"[TXITPY] Image MIME mismatch accepted: "
+            f"Content-Type={content_type or 'missing'}, detected={image_format} "
+            f"({describe_media_url(final_url)}).",
+            file=sys.stderr,
+            flush=True,
+        )
         return data
 
 
