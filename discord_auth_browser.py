@@ -10,15 +10,19 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 import threading
-from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from discord_auth import user_from_txity_token
+from discord_auth import (
+    diagnostic_log_path,
+    format_exception_details,
+    safe_error_text,
+    user_from_txity_token,
+    write_diagnostic,
+)
 
 TXITY_ORIGIN = "https://txity.radiodiscussion.org"
 
@@ -64,41 +68,6 @@ WATCHER_SCRIPT = r"""
 
 
 
-def diagnostic_log_path() -> Path:
-    """Return the per-user location for sign-in diagnostics."""
-    root = Path(os.environ.get("LOCALAPPDATA") or Path.home())
-    return root / "TXITPY" / "logs" / "discord-auth.log"
-
-
-def safe_error_text(error: BaseException) -> str:
-    """Remove URLs, token-like strings, and control characters from errors."""
-    message = str(error).replace("\r", " ").replace("\n", " ")
-    message = re.sub(r"https?://\S+", "[URL redacted]", message)
-    message = re.sub(
-        r"(?i)\b(token|authToken|code|state|secret)=([^&\s]+)",
-        r"\1=[redacted]",
-        message,
-    )
-    message = re.sub(r"\b[A-Za-z0-9_-]{48,}\b", "[value redacted]", message)
-    message = "".join(char for char in message if char.isprintable())
-    return message[:500] or "No additional error details were provided."
-
-
-def write_diagnostic(stage: str, error: BaseException) -> Path | None:
-    """Write a local sign-in diagnostic without recording login credentials."""
-    path = diagnostic_log_path()
-    detail = safe_error_text(error)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as stream:
-            stream.write(
-                f"{datetime.now(timezone.utc).isoformat()} "
-                f"[{stage}] {type(error).__name__}: {detail}\n"
-            )
-        return path
-    except OSError:
-        return None
-
 def token_from_storage(origin: str, token: str) -> str | None:
     """Accept a token only when read from TXITY's exact origin and still valid."""
     if origin != TXITY_ORIGIN or user_from_txity_token(token) is None:
@@ -117,9 +86,40 @@ class AuthBridge:
         self._finished = False
         self.window = None
 
+    def _send_failure(self, message: str) -> None:
+        """Send a sanitized browser failure to the parent desktop process."""
+        payload = json.dumps({
+            "state": self.state,
+            "message": safe_error_text(message, max_chars=14_000),
+        }).encode("utf-8")
+        request = Request(
+            self.failure_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=5):
+                pass
+        except Exception as exc:
+            write_diagnostic("send-failure-to-parent", exc)
+
     def complete(self, origin: str, token: str) -> dict[str, bool]:
         """Forward a valid token read from TXITY's own origin."""
         if token_from_storage(origin, token) is None:
+            error = ValueError(
+                "The embedded page did not provide a valid, unexpired TXITY session "
+                "from the expected HTTPS origin."
+            )
+            details = format_exception_details(error)
+            log_path = write_diagnostic("session-validation", error)
+            message = (
+                "Discord sign-in could not validate the returned session.\n\n"
+                f"{details}"
+            )
+            if log_path is not None:
+                message += f"\n\nDiagnostic log: {log_path}"
+            self._send_failure(message)
             return {"ok": False}
 
         with self._lock:
@@ -142,56 +142,45 @@ class AuthBridge:
             with urlopen(request, timeout=8) as response:
                 result = json.loads(response.read().decode("utf-8"))
             if not isinstance(result, dict) or result.get("ok") is not True:
-                return {"ok": False}
-        except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+                raise RuntimeError("The local sign-in callback returned an invalid response.")
+        except Exception as exc:
+            details = format_exception_details(exc)
+            log_path = write_diagnostic("complete-local-callback", exc)
+            message = (
+                "TXITPY could not transfer the Discord session to the desktop application.\n\n"
+                f"{details}"
+            )
+            if log_path is not None:
+                message += f"\n\nDiagnostic log: {log_path}"
+            self._send_failure(message)
             return {"ok": False}
 
         window = self.window
         if window is not None:
             try:
                 window.destroy()
-            except Exception:
-                pass
+            except Exception as exc:
+                write_diagnostic("close-sign-in-window", exc)
         return {"ok": True}
 
     def report_startup_failure(self, stage: str, error: BaseException) -> None:
-        """Report the actual browser startup failure without exposing credentials."""
-        detail = safe_error_text(error)
+        """Report the browser startup traceback without exposing credentials."""
+        details = format_exception_details(error)
         log_path = write_diagnostic(stage, error)
-        if stage == "import":
-            message = (
-                "TXITPY could not load the embedded browser package. "
-                "Run: python -m pip install -r requirements.txt. "
-                f"Details: {type(error).__name__}: {detail}"
-            )
-        else:
-            message = (
-                "TXITPY could not start its embedded browser. "
-                f"Details: {type(error).__name__}: {detail}"
-            )
-            lowered = detail.lower()
-            if any(word in lowered for word in ("webview2", "edgechromium", "runtime not found")):
-                message += (
-                    " Install the Microsoft Edge WebView2 Runtime from "
-                    "https://developer.microsoft.com/microsoft-edge/webview2/."
-                )
-        if log_path is not None:
-            message += f" Diagnostic log: {log_path}"
-        payload = json.dumps({
-            "state": self.state,
-            "message": message[:1800],
-        }).encode("utf-8")
-        request = Request(
-            self.failure_url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        message = (
+            f"Embedded browser failure during stage: {stage}.\n"
+            f"Exception: {type(error).__name__}: {safe_error_text(error)}\n\n"
+            f"Full traceback:\n{details}"
         )
-        try:
-            with urlopen(request, timeout=5):
-                pass
-        except (HTTPError, URLError, TimeoutError, OSError):
-            pass
+        lowered = details.lower()
+        if any(word in lowered for word in ("webview2", "edgechromium", "runtime not found")):
+            message += (
+                "\n\nInstall the Microsoft Edge WebView2 Runtime from "
+                "https://developer.microsoft.com/microsoft-edge/webview2/."
+            )
+        if log_path is not None:
+            message += f"\n\nDiagnostic log: {log_path}"
+        self._send_failure(message)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -205,7 +194,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         import webview
     except Exception as exc:
-        bridge.report_startup_failure("import", exc)
+        bridge.report_startup_failure("import-webview", exc)
+        return 1
+
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    profile_root = Path(local_app_data) if local_app_data else Path.home()
+    profile_path = profile_root / "TXITPY" / "BrowserProfile"
+    try:
+        profile_path.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        bridge.report_startup_failure("create-browser-profile", exc)
         return 1
 
     try:
@@ -227,17 +225,16 @@ def main(argv: list[str] | None = None) -> int:
     def on_loaded(loaded_window) -> None:
         try:
             loaded_window.run_js(WATCHER_SCRIPT)
-        except Exception:
-            # A page may navigate while the script is being installed.
-            # The next loaded event retries the same-origin storage watcher.
-            pass
+        except Exception as exc:
+            # Navigation can race script injection, so keep the window open
+            # and record the underlying browser error for diagnosis.
+            write_diagnostic("inject-auth-watcher", exc)
 
-    window.events.loaded += on_loaded
-
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    profile_root = Path(local_app_data) if local_app_data else Path.home()
-    profile_path = profile_root / "TXITPY" / "BrowserProfile"
-    profile_path.mkdir(parents=True, exist_ok=True)
+    try:
+        window.events.loaded += on_loaded
+    except Exception as exc:
+        bridge.report_startup_failure("register-window-events", exc)
+        return 1
 
     try:
         webview.start(
@@ -246,11 +243,10 @@ def main(argv: list[str] | None = None) -> int:
             debug=False,
         )
     except Exception as exc:
-        bridge.report_startup_failure("start", exc)
+        bridge.report_startup_failure("start-webview", exc)
         return 1
 
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
