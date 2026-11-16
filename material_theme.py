@@ -1,43 +1,6 @@
-"""TeleDrive-inspired Material 3 Expressive palette and native ttk styling."""
+"""TeleDrive-inspired Material 3 palette and native rectangular Tk widgets."""
 
 from __future__ import annotations
-
-import math
-
-
-def render_rounded_rectangle(
-    width: int,
-    height: int,
-    radius: int,
-    fill: str,
-    *,
-    outline: str | None = None,
-    outline_width: int = 1,
-    scale: int = 4,
-):
-    """Render an antialiased rounded rectangle as a transparent RGBA image."""
-    if width < 1 or height < 1:
-        raise ValueError("Rounded rectangle dimensions must be positive.")
-    if scale < 2:
-        raise ValueError("Antialiasing scale must be at least 2.")
-
-    from PIL import Image, ImageDraw
-
-    scaled_width = width * scale
-    scaled_height = height * scale
-    scaled_radius = max(0, min(radius * scale, scaled_width // 2, scaled_height // 2))
-    image = Image.new("RGBA", (scaled_width, scaled_height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    bounds = (0, 0, scaled_width - 1, scaled_height - 1)
-    draw.rounded_rectangle(
-        bounds,
-        radius=scaled_radius,
-        fill=fill,
-        outline=outline,
-        width=max(1, outline_width * scale) if outline else 1,
-    )
-    return image.resize((width, height), Image.Resampling.LANCZOS)
-
 
 
 MATERIAL_3_EXPRESSIVE = {
@@ -221,12 +184,11 @@ def apply_tk_theme(root, mode: str = "light") -> dict[str, str]:
 
 
 
-def rounded_widget_classes(tk):
-    """Create rounded Tk widgets while keeping tkinter imports out of module loading."""
-    from tkinter import font as tkfont
+def native_widget_classes(tk):
+    """Create native rectangular surfaces and buttons without custom drawing."""
 
-    class RoundedSurface(tk.Frame):
-        """A frame with an antialiased rounded surface painted behind its children."""
+    class SurfaceFrame(tk.Frame):
+        """A rectangular surface with a thin outline and predictable padding."""
 
         def __init__(
             self,
@@ -238,69 +200,27 @@ def rounded_widget_classes(tk):
             padding: int = 18,
             padding_x: int | None = None,
             padding_y: int | None = None,
-            radius: int = 24,
             width: int | None = None,
         ) -> None:
             self._surface_background = background
             self._outside_background = outside or parent.cget("bg")
             self._outline_color = outline or background
-            self._corner_radius = radius
 
-            # A child rectangle is entirely inside the corner arc once its
-            # nearest corner clears the circle's diagonal by a small margin.
-            corner_clearance = math.ceil(radius * (1 - math.sqrt(0.5))) + 2
-            inset_x = max(padding if padding_x is None else padding_x, corner_clearance)
-            inset_y = max(padding if padding_y is None else padding_y, corner_clearance)
             super().__init__(
                 parent,
-                bg=self._outside_background,
+                bg=background,
                 bd=0,
-                highlightthickness=0,
-                padx=inset_x,
-                pady=inset_y,
+                relief="flat",
+                highlightthickness=1 if outline else 0,
+                highlightbackground=self._outline_color,
+                highlightcolor=self._outline_color,
+                padx=padding if padding_x is None else padding_x,
+                pady=padding if padding_y is None else padding_y,
                 width=width if width is not None else 0,
             )
-            self._surface_canvas = tk.Canvas(
-                self,
-                bg=self._outside_background,
-                bd=0,
-                highlightthickness=0,
-                takefocus=0,
-            )
-            self._surface_canvas.place(x=0, y=0, relwidth=1, relheight=1)
-            self.tk.call("lower", self._surface_canvas._w)
-            self._surface_photo = None
-            self.bind("<Configure>", self._redraw_surface, add="+")
 
-        def _redraw_surface(self, event=None) -> None:
-            width = self.winfo_width()
-            height = self.winfo_height()
-            if width <= 2 or height <= 2:
-                return
-
-            from PIL import ImageTk
-
-            image = render_rounded_rectangle(
-                width,
-                height,
-                self._corner_radius,
-                self._surface_background,
-                outline=self._outline_color,
-                outline_width=1,
-                scale=4,
-            )
-            self._surface_photo = ImageTk.PhotoImage(image, master=self)
-            self._surface_canvas.delete("surface")
-            self._surface_canvas.create_image(
-                0,
-                0,
-                image=self._surface_photo,
-                anchor="nw",
-                tags="surface",
-            )
-
-    class RoundedButton(tk.Canvas):
-        """A keyboard-accessible button with an antialiased rounded background."""
+    class FlatButton(tk.Button):
+        """A native rectangular button with clear hover and keyboard focus states."""
 
         def __init__(
             self,
@@ -318,118 +238,57 @@ def rounded_widget_classes(tk):
             font=("Segoe UI", 10),
             padding_x: int = 16,
             padding_y: int = 9,
-            radius: int = 18,
             anchor: str = "center",
             min_width: int = 0,
         ) -> None:
-            self._text = text
-            self._command = command
-            self._background = background
-            self._foreground = foreground
+            self._normal_background = background
+            self._normal_foreground = foreground
             self._hover_background = hover_background
             self._hover_foreground = hover_foreground or foreground
-            self._outside = outside or parent.cget("bg")
-            self._outline = outline or background
             self._focus_color = focus_color or foreground
-            self._corner_radius = radius
-            self._padding_x = padding_x
-            self._padding_y = padding_y
-            self._anchor = anchor
-            self._hovered = False
-            self._focused = False
-            self._font = tkfont.Font(root=parent, font=font)
-            self._requested_width = max(
-                min_width,
-                self._font.measure(text) + padding_x * 2,
-            )
-            self._requested_height = max(
-                38,
-                self._font.metrics("linespace") + padding_y * 2,
-            )
-            self._button_photo = None
-            super().__init__(
-                parent,
-                width=self._requested_width,
-                height=self._requested_height,
-                bg=self._outside,
-                bd=0,
-                highlightthickness=0,
-                cursor="hand2",
-                takefocus=True,
-            )
-            self.bind("<Configure>", self._redraw, add="+")
+
+            options = {
+                "text": text,
+                "command": command,
+                "font": font,
+                "bg": background,
+                "fg": foreground,
+                "activebackground": hover_background,
+                "activeforeground": self._hover_foreground,
+                "disabledforeground": foreground,
+                "relief": "flat",
+                "overrelief": "flat",
+                "bd": 0,
+                "borderwidth": 0,
+                "highlightthickness": 1,
+                "highlightbackground": outside or parent.cget("bg"),
+                "highlightcolor": self._focus_color,
+                "padx": padding_x,
+                "pady": padding_y,
+                "anchor": anchor,
+                "cursor": "hand2",
+                "takefocus": True,
+            }
+            if min_width > 0:
+                options["width"] = min_width
+            super().__init__(parent, **options)
             self.bind("<Enter>", self._on_enter, add="+")
             self.bind("<Leave>", self._on_leave, add="+")
-            self.bind("<Button-1>", self._on_click, add="+")
-            self.bind("<space>", self._on_key, add="+")
-            self.bind("<Return>", self._on_key, add="+")
-            self.bind("<FocusIn>", self._on_focus, add="+")
-            self.bind("<FocusOut>", self._on_blur, add="+")
-            self._redraw()
-
-        def _redraw(self, event=None) -> None:
-            width = self.winfo_width()
-            height = self.winfo_height()
-            if width <= 2:
-                width = self._requested_width
-            if height <= 2:
-                height = self._requested_height
-
-            fill = self._hover_background if self._hovered else self._background
-            foreground = self._hover_foreground if self._hovered else self._foreground
-            outline = self._focus_color if self._focused else self._outline
-
-            from PIL import ImageTk
-
-            image = render_rounded_rectangle(
-                width,
-                height,
-                self._corner_radius,
-                fill,
-                outline=outline,
-                outline_width=2 if self._focused else 1,
-                scale=4,
-            )
-            self._button_photo = ImageTk.PhotoImage(image, master=self)
-            self.delete("all")
-            self.create_image(0, 0, image=self._button_photo, anchor="nw")
-            x = self._padding_x if self._anchor == "w" else width / 2
-            self.create_text(
-                x,
-                height / 2,
-                text=self._text,
-                fill=foreground,
-                font=self._font,
-                anchor=self._anchor,
-            )
 
         def _on_enter(self, _event=None) -> None:
-            self._hovered = True
-            self._redraw()
+            self.configure(
+                bg=self._hover_background,
+                fg=self._hover_foreground,
+                activebackground=self._hover_background,
+                activeforeground=self._hover_foreground,
+            )
 
         def _on_leave(self, _event=None) -> None:
-            self._hovered = False
-            self._redraw()
+            self.configure(
+                bg=self._normal_background,
+                fg=self._normal_foreground,
+                activebackground=self._hover_background,
+                activeforeground=self._hover_foreground,
+            )
 
-        def _on_focus(self, _event=None) -> None:
-            self._focused = True
-            self._redraw()
-
-        def _on_blur(self, _event=None) -> None:
-            self._focused = False
-            self._redraw()
-
-        def _on_click(self, _event=None) -> str:
-            self.focus_set()
-            self._invoke()
-            return "break"
-
-        def _on_key(self, _event=None) -> str:
-            self._invoke()
-            return "break"
-
-        def _invoke(self) -> None:
-            if callable(self._command):
-                self._command()
-
-    return RoundedSurface, RoundedButton
+    return SurfaceFrame, FlatButton
