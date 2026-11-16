@@ -625,18 +625,18 @@ class TxityTransmitter:
                         for index, file_path in enumerate(order, start=1):
                             if self._stop_event.is_set():
                                 break
-                            self.events.put({
-                                "kind": "tx_playlist_track",
-                                "path": file_path,
-                                "index": index,
-                                "count": len(order),
-                            })
                             with soundfile.SoundFile(file_path) as source:
                                 source_rate = int(source.samplerate)
                                 if source_rate <= 0 or source.channels <= 0:
                                     raise RuntimeError(
                                         f"Audio file has an invalid format: {file_path}"
                                     )
+                                self.events.put({
+                                    "kind": "tx_playlist_track",
+                                    "path": file_path,
+                                    "index": index,
+                                    "count": len(order),
+                                })
                                 resampler = StreamingLinearResampler(
                                     source_rate,
                                     SAMPLE_RATE_HZ,
@@ -667,7 +667,16 @@ class TxityTransmitter:
                         )
                         completed = True
                 except Exception as exc:
-                    audio_thread_error[:] = [_safe_error(exc)]
+                    details = _safe_error(exc)
+                    audio_thread_error[:] = [details]
+                    self.events.put({
+                        "kind": "tx_playlist_error",
+                        "text": details,
+                    })
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": f"Playlist decoder error: {details}",
+                    })
                 finally:
                     audio_finished.set()
                     if completed:
@@ -799,6 +808,8 @@ class TxityTransmitter:
                     frame = audio_queue.get(timeout=0.2)
                 except queue.Empty:
                     if audio_source == "playlist" and audio_finished.is_set():
+                        if audio_thread_error:
+                            raise RuntimeError(audio_thread_error[0])
                         playlist_reached_end = True
                         break
                     continue
