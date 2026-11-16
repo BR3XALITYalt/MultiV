@@ -703,9 +703,9 @@ def _system_theme_mode() -> str:
 def build_app() -> None:
     import tkinter as tk
     from tkinter import ttk
-    from material_theme import apply_tk_theme, rounded_widget_classes
+    from material_theme import apply_tk_theme, native_widget_classes
 
-    RoundedSurface, RoundedButton = rounded_widget_classes(tk)
+    SurfaceFrame, FlatButton = native_widget_classes(tk)
 
     client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
@@ -828,7 +828,7 @@ def build_app() -> None:
             foreground = palette["onSurface"]
             hover_background = palette["surfaceContainerHigh"]
             hover_foreground = palette["onSurface"]
-        return RoundedButton(
+        return FlatButton(
             parent,
             text,
             command,
@@ -842,7 +842,6 @@ def build_app() -> None:
             font=("Segoe UI", 10, "bold" if kind == "primary" else "normal"),
             padding_x=padx,
             padding_y=pady,
-            radius=19,
         )
 
     def make_card(
@@ -852,13 +851,12 @@ def build_app() -> None:
         padding: int = 16,
     ) -> tk.Frame:
         surface_color = background or palette["surfaceContainerLow"]
-        return RoundedSurface(
+        return SurfaceFrame(
             parent,
             background=surface_color,
             outside=parent.cget("bg"),
             outline=palette["outlineVariant"],
             padding=padding,
-            radius=26,
         )
 
     def request_station_image(url: str) -> None:
@@ -939,16 +937,6 @@ def build_app() -> None:
                     continue
                 image = source.copy()
                 image.thumbnail((size, size), Image.Resampling.LANCZOS)
-                image = image.convert("RGBA")
-                mask = Image.new("L", image.size, 0)
-                from PIL import ImageDraw
-                mask_radius = max(4, min(image.size) // 8)
-                ImageDraw.Draw(mask).rounded_rectangle(
-                    (0, 0, image.width - 1, image.height - 1),
-                    radius=mask_radius,
-                    fill=255,
-                )
-                image.putalpha(mask)
                 photo = ImageTk.PhotoImage(image)
                 image_cache[(url, size)] = photo
                 label.configure(image=photo, text="", width=0, height=0, bg=label.cget("bg"))
@@ -1360,7 +1348,7 @@ def build_app() -> None:
         controls = tk.Frame(page, bg=palette["background"])
         controls.pack(fill="x", pady=(0, 10))
 
-        search_shell = RoundedSurface(
+        search_shell = SurfaceFrame(
             controls,
             background=palette["surfaceContainerLowest"],
             outside=palette["background"],
@@ -1368,7 +1356,6 @@ def build_app() -> None:
             padding=5,
             padding_x=22,
             padding_y=5,
-            radius=20,
         )
         search_shell.pack(side="left", fill="x", expand=True)
         search = tk.Entry(
@@ -1771,7 +1758,7 @@ def build_app() -> None:
         shell_frame = tk.Frame(root, bg=palette["background"])
         shell_frame.pack(fill="both", expand=True)
 
-        topbar = RoundedSurface(
+        topbar = SurfaceFrame(
             shell_frame,
             background=palette["surfaceContainerLow"],
             outside=palette["background"],
@@ -1779,7 +1766,6 @@ def build_app() -> None:
             padding=10,
             padding_x=28,
             padding_y=8,
-            radius=26,
         )
         topbar.configure(height=64)
         topbar.pack(fill="x", padx=18, pady=(12, 10))
@@ -1807,7 +1793,7 @@ def build_app() -> None:
                     current_page == destination
                     or (destination == "stations" and current_page == "station_detail")
                 )
-                nav_button = RoundedButton(
+                nav_button = FlatButton(
                     navigation,
                     label,
                     lambda target=destination: navigate(target),
@@ -1833,7 +1819,6 @@ def build_app() -> None:
                     font=("Segoe UI", 10, "bold" if selected else "normal"),
                     padding_x=14,
                     padding_y=9,
-                    radius=15,
                 )
                 nav_button.pack(side="left", padx=2, pady=2)
 
