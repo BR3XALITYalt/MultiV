@@ -2100,6 +2100,22 @@ def build_app() -> None:
                 station_logo_url=tx_logo_url_var.get(),
                 station_details=tx_details_var.get(),
                 station_page_layout=tx_page_layout_var.get(),
+                fade_enabled=tx_fade_enabled_var.get(),
+                fade_seconds=tx_fade_seconds_var.get(),
+                fade_min_dbm=tx_fade_min_dbm_var.get(),
+                fade_shape=tx_fade_shape_var.get(),
+                agc_enabled=tx_agc_enabled_var.get(),
+                agc_target=tx_agc_target_var.get(),
+                mic_gain_db=tx_mic_gain_var.get(),
+                bass_db=tx_bass_var.get(),
+                treble_db=tx_treble_var.get(),
+                presence_db=tx_presence_var.get(),
+                drive=tx_drive_var.get(),
+                ssb_bandwidth_hz=tx_ssb_bandwidth_var.get(),
+                ssb_low_cut_hz=tx_ssb_low_cut_var.get(),
+                ssb_high_cut_hz=tx_ssb_high_cut_var.get(),
+                am_bandwidth_hz=tx_am_bandwidth_var.get(),
+                am_pre_emphasis=tx_am_pre_emphasis_var.get(),
             )
             audio_source = (
                 "loopback"
