@@ -1,4 +1,5 @@
 import ast
+import os
 import sys
 import tempfile
 import tomllib
@@ -15,6 +16,7 @@ from drm_support import (
     VISUAL_STUDIO_BUILD_TOOLS_URL,
     VISUAL_STUDIO_WORKLOAD,
     _visual_studio_build_tools_command,
+    _visual_studio_cmake_generator_for_version,
     LocalDRMPlaylistServer,
     _patch_decdrm_output_validation,
     _run_command,
@@ -39,6 +41,35 @@ class DRMConfigurationTests(unittest.TestCase):
             ["Compiling station encoder", "Finished release build"],
         )
         self.assertIn("Finished release build", output)
+
+    def test_run_command_passes_the_requested_build_environment(self):
+        environment = os.environ.copy()
+        environment["TXITPY_TEST_CMAKE_GENERATOR"] = "Visual Studio 17 2022"
+        output = _run_command(
+            [
+                sys.executable,
+                "-c",
+                "import os; print(os.environ['TXITPY_TEST_CMAKE_GENERATOR'])",
+            ],
+            env=environment,
+        )
+        self.assertEqual(output, "Visual Studio 17 2022")
+
+    def test_cmake_generator_matches_the_installed_visual_studio_version(self):
+        self.assertEqual(
+            _visual_studio_cmake_generator_for_version("17.11.5.0"),
+            "Visual Studio 17 2022",
+        )
+        self.assertEqual(
+            _visual_studio_cmake_generator_for_version("18.0.0.0"),
+            "Visual Studio 18 2026",
+        )
+        self.assertEqual(
+            _visual_studio_cmake_generator_for_version("16.11.47.0"),
+            "Visual Studio 16 2019",
+        )
+        self.assertIsNone(_visual_studio_cmake_generator_for_version("19.0.0.0"))
+        self.assertIsNone(_visual_studio_cmake_generator_for_version("unknown"))
 
     def test_windows_build_tools_installer_uses_cpp_desktop_workload(self):
         self.assertEqual(
