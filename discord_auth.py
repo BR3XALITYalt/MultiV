@@ -472,18 +472,68 @@ class DiscordAuthManager:
         ).start()
 
     def _capture_browser_output(self, stream: Any) -> None:
-        """Capture browser backend output after removing URLs and credentials."""
+        """Keep browser warnings and errors without flooding the console."""
+        path = diagnostic_log_path()
+        pending: list[str] = []
+        context_remaining = 0
+
+        def flush_problem_block(log_stream: Any) -> None:
+            if not pending:
+                return
+            block = "\n".join(pending)
+            timestamp = datetime.now(timezone.utc).isoformat()
+            log_stream.write(f"{timestamp} [browser-output]\n{block}\n\n")
+            log_stream.flush()
+            print(
+                f"\n[TXITPY embedded browser]\n{block}\n",
+                file=sys.stderr,
+                flush=True,
+            )
+            pending.clear()
+
         try:
-            for line in stream:
-                detail = safe_error_text(line.rstrip("\r\n"), max_chars=3_000)
-                if detail:
-                    print(
-                        f"[TXITPY embedded browser] {detail}",
-                        file=sys.stderr,
-                        flush=True,
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as log_stream:
+                for line in stream:
+                    detail = safe_error_text(line.rstrip("\r\n"), max_chars=3_000)
+                    if not detail:
+                        continue
+
+                    lowered = detail.lower()
+                    is_problem = any(
+                        marker in lowered
+                        for marker in (
+                            "error",
+                            "exception",
+                            "traceback",
+                            "failed",
+                            "failure",
+                            "fatal",
+                            "warning",
+                            "could not",
+                            "unable to",
+                            "not found",
+                        )
                     )
-                    write_diagnostic_text("browser-output", detail)
+
+                    if is_problem:
+                        flush_problem_block(log_stream)
+                        pending.append(detail)
+                        context_remaining = 20
+                    elif context_remaining > 0:
+                        pending.append(detail)
+                        context_remaining -= 1
+                        if context_remaining == 0:
+                            flush_problem_block(log_stream)
+
+                flush_problem_block(log_stream)
         except Exception as exc:
+            details = format_exception_details(exc)
+            print(
+                f"\n[TXITPY browser diagnostic reader error]\n{details}\n",
+                file=sys.stderr,
+                flush=True,
+            )
             write_diagnostic("capture-browser-output", exc)
         finally:
             try:
