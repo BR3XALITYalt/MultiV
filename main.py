@@ -1005,6 +1005,9 @@ def build_app() -> None:
     root.minsize(900, 650)
     root.configure(background=palette["background"])
 
+    tray_icon: Any = None
+    tray_setup_ready = threading.Event()
+
     saved_tx_settings = load_tx_settings()
 
     def saved_text(key: str, default: str) -> str:
@@ -1625,11 +1628,84 @@ def build_app() -> None:
 
     def on_shutdown() -> None:
         playlist_watch_stop.set()
+        if tray_icon is not None:
+            try:
+                tray_icon.stop()
+            except Exception as exc:
+                print(
+                    f"[TXITPY] System tray could not be closed cleanly: {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
         transmitter.stop(wait=1.0)
         client.disconnect()
         save_tx_settings_now()
         auth_manager.close()
         root.destroy()
+
+    def restore_from_tray() -> None:
+        def show_window() -> None:
+            if tray_icon is not None:
+                try:
+                    tray_icon.visible = False
+                except Exception as exc:
+                    print(
+                        f"[TXITPY] System tray icon could not be hidden: {exc}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+            try:
+                root.deiconify()
+                root.state("normal")
+                root.lift()
+                root.focus_force()
+            except tk.TclError:
+                pass
+
+        try:
+            root.after(0, show_window)
+        except tk.TclError:
+            pass
+
+    def quit_from_tray() -> None:
+        try:
+            root.after(0, on_shutdown)
+        except tk.TclError:
+            pass
+
+    def initialize_tray_icon(icon: Any) -> None:
+        icon.visible = False
+        tray_setup_ready.set()
+
+    def minimize_to_tray(attempt: int = 0) -> None:
+        if os.name != "nt" or tray_icon is None:
+            return
+        try:
+            if root.state() != "iconic":
+                return
+            if not tray_setup_ready.is_set():
+                if attempt < 40:
+                    root.after(50, lambda: minimize_to_tray(attempt + 1))
+                return
+            tray_icon.visible = True
+            root.withdraw()
+        except Exception as exc:
+            print(
+                f"[TXITPY] System tray could not be shown: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            try:
+                root.deiconify()
+            except tk.TclError:
+                pass
+
+    def handle_window_unmap(event: Any) -> None:
+        if event.widget is root:
+            try:
+                root.after_idle(minimize_to_tray)
+            except tk.TclError:
+                pass
 
     def toggle_theme() -> None:
         nonlocal theme_mode
@@ -3976,6 +4052,25 @@ def build_app() -> None:
         if discord_authenticated:
             client.refresh_stations()
         root.after(60_000, periodic_station_refresh)
+
+    if os.name == "nt":
+        try:
+            from system_tray import create_tray_icon
+
+            tray_icon = create_tray_icon(
+                on_restore=restore_from_tray,
+                on_quit=quit_from_tray,
+            )
+            tray_icon.run_detached(setup=initialize_tray_icon)
+        except Exception as exc:
+            tray_icon = None
+            print(
+                f"[TXITPY] System tray support is unavailable: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    root.bind("<Unmap>", handle_window_unmap, add="+")
 
     build_shell()
     root.protocol("WM_DELETE_WINDOW", on_shutdown)
