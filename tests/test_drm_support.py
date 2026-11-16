@@ -179,7 +179,7 @@ class DRMConfigurationTests(unittest.TestCase):
     def test_drm_playlist_formats_are_explicit(self):
         self.assertEqual(DRM_PLAYLIST_EXTENSIONS, {".ogg", ".mp3", ".flac"})
 
-    def test_writes_one_mono_he_aac_service_in_4_5khz_channel(self):
+    def test_writes_one_mono_xhe_aac_service_in_4_5khz_channel(self):
         with tempfile.TemporaryDirectory() as folder:
             path = write_drm_station_config(
                 Path(folder) / "station.toml",
