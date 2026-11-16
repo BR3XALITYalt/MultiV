@@ -4,18 +4,18 @@ A Python desktop companion for the TXITY simulated radio-broadcast service, buil
 
 ## Current scope
 
-This first release provides a public viewer:
+This release provides a read-only desktop viewer with the official TXITY Discord sign-in flow:
 
-- Live public server status when the status WebSocket is available.
-- A searchable station directory parsed from TXITY's public page.
-- Quick links to the official TXITY site and this repository.
+- Live server status and a searchable public station directory.
+- An embedded browser that loads TXITY itself and lets TXITY handle Discord OAuth, redirects, token validation, and sign-out.
+- The authenticated status WebSocket receives the session token through TXITY's `authToken` query parameter.
 
-It does not send transmitter configuration, push-to-talk commands, or audio frames. It does not reuse browser session keys or login tokens. TXITY requires its official Discord sign-in for transmitter control and station editing; those authenticated features are not part of this viewer release.
+The browser keeps the website's normal session in its own browser profile. TXITPY keeps the token in memory and does not write it to an application settings file or log it. The desktop client remains read-only: it sends status requests only, never transmitter configuration, push-to-talk commands, or audio frames.
 
 ## Requirements
 
 - Python 3.12 or newer
-- Tk/Tcl available on the system
+- A supported WebView runtime for pywebview (Microsoft Edge WebView2 on Windows)
 
 Install the dependencies:
 
@@ -37,4 +37,4 @@ python -m unittest discover -s tests -v
 
 ## Notes
 
-The app fetches public data from `https://txity.radiodiscussion.org`. If the service changes its page markup or status protocol, station extraction or live status may stop working. The station directory still works independently of the status socket.
+The app fetches public data from `https://txity.radiodiscussion.org`. If the service changes its page markup or status protocol, station extraction or live status may stop working. Discord sign-in depends on TXITY's current localStorage keys and official page flow; those are deliberately read by exact key and only while the embedded browser is on the TXITY HTTPS origin.
