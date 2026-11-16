@@ -2494,7 +2494,8 @@ def build_app() -> None:
                         "DRM needs Microsoft's Visual Studio C++ Build Tools.\n\n"
                         "TXITPY can download the official installer and add the "
                         "'Desktop development with C++' workload, including the MSVC compiler "
-                        "and Windows SDK. The installer may request administrator approval.\n\n"
+                        "and Windows SDK. The installer may request administrator approval. "
+                        "TXITPY will then continue installing any missing DRM dependencies.\n\n"
                         "Install the C++ build tools and continue setting up DRM?"
                     )
                     if messagebox.askyesno(
