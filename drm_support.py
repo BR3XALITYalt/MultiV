@@ -811,9 +811,9 @@ def write_drm_station_config(
     if selected_iso_language and not re.fullmatch(r"[a-z]{3}", selected_iso_language):
         raise ValueError("ISO language must be a three-letter code, such as eng.")
 
-    selected_iso_country = str(iso_country or "").strip().upper()
-    if selected_iso_country and not re.fullmatch(r"[A-Z]{2}", selected_iso_country):
-        raise ValueError("Country code must be a two-letter ISO 3166 code, such as US.")
+    selected_iso_country = str(iso_country or "").strip().lower()
+    if selected_iso_country and not re.fullmatch(r"[a-z]{2}", selected_iso_country):
+        raise ValueError("Country code must be a two-letter ISO 3166 code, such as us.")
 
     lines = [
         "[channel]",
