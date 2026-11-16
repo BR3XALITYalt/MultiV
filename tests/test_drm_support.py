@@ -84,7 +84,7 @@ class DRMConfigurationTests(unittest.TestCase):
             build_directory.mkdir(parents=True)
             cache = build_directory / "CMakeCache.txt"
             cache.write_text(
-                "CMAKE_GENERATOR:INTERNAL=Visual Studio 18 2026\\n",
+                "CMAKE_GENERATOR:INTERNAL=Visual Studio 18 2026\n",
                 encoding="utf-8",
             )
             retained_file = build_directory.parent / "important.txt"
@@ -111,7 +111,7 @@ class DRMConfigurationTests(unittest.TestCase):
             build_directory.mkdir(parents=True)
             cache = build_directory / "CMakeCache.txt"
             cache.write_text(
-                "CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022\\n",
+                "CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022\n",
                 encoding="utf-8",
             )
 
