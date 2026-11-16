@@ -20,6 +20,15 @@ SAMPLE_RATE_HZ = 48_000
 BATCH_SAMPLES = 512
 FRAME_BYTES = BATCH_SAMPLES * 4
 AUDIO_QUEUE_FRAMES = 32
+AUDIO_FRAME_INTERVAL_SECONDS = BATCH_SAMPLES / SAMPLE_RATE_HZ
+
+
+def playlist_frame_wait_seconds(last_frame_sent_at: float | None, now: float) -> float:
+    """Return the delay needed to send playlist frames at the configured sample rate."""
+    if last_frame_sent_at is None:
+        return 0.0
+    elapsed = max(0.0, now - last_frame_sent_at)
+    return max(0.0, AUDIO_FRAME_INTERVAL_SECONDS - elapsed)
 PTT_CONFIRMATION_GRACE_SECONDS = 4.0
 SUPPORTED_MODES = ("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "CW")
 DEFAULT_MODE_BANDWIDTH_HZ = {
@@ -520,6 +529,7 @@ class TxityTransmitter:
         send_count = 0
         drop_count = 0
         last_metrics_at = time.monotonic()
+        playlist_last_frame_sent_at: float | None = None
         carry = bytearray()
         last_callback_warning = 0.0
 
@@ -814,9 +824,21 @@ class TxityTransmitter:
                         break
                     continue
 
+                if audio_source == "playlist":
+                    wait_seconds = playlist_frame_wait_seconds(
+                        playlist_last_frame_sent_at,
+                        time.monotonic(),
+                    )
+                    if wait_seconds > 0 and self._stop_event.wait(wait_seconds):
+                        break
+                    if self._stop_event.is_set():
+                        break
+
                 audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
                 send_count += 1
                 now = time.monotonic()
+                if audio_source == "playlist":
+                    playlist_last_frame_sent_at = now
                 if now - last_metrics_at >= 1.0:
                     self.events.put({
                         "kind": "tx_metrics",
