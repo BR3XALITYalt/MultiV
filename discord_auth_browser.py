@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
-import threading
+from datetime import datetime, timezone
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -59,6 +61,42 @@ WATCHER_SCRIPT = r"""
 })();
 """
 
+
+
+def diagnostic_log_path() -> Path:
+    """Return the per-user location for sign-in diagnostics."""
+    root = Path(os.environ.get("LOCALAPPDATA") or Path.home())
+    return root / "TXITPY" / "logs" / "discord-auth.log"
+
+
+def safe_error_text(error: BaseException) -> str:
+    """Remove URLs, token-like strings, and control characters from errors."""
+    message = str(error).replace("\\r", " ").replace("\\n", " ")
+    message = re.sub(r"https?://[^\\s\\\"'<>]+", "[URL redacted]", message)
+    message = re.sub(
+        r"(?i)\\b(token|authToken|code|state|secret)=([^&\\s]+)",
+        r"\\1=[redacted]",
+        message,
+    )
+    message = re.sub(r"\\b[A-Za-z0-9_-]{48,}\\b", "[value redacted]", message)
+    message = "".join(char for char in message if char.isprintable())
+    return message[:500] or "No additional error details were provided."
+
+
+def write_diagnostic(stage: str, error: BaseException) -> Path | None:
+    """Write a local sign-in diagnostic without recording login credentials."""
+    path = diagnostic_log_path()
+    detail = safe_error_text(error)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(
+                f"{datetime.now(timezone.utc).isoformat()} "
+                f"[{stage}] {type(error).__name__}: {detail}\\n"
+            )
+        return path
+    except OSError:
+        return None
 
 def token_from_storage(origin: str, token: str) -> str | None:
     """Accept a token only when read from TXITY's exact origin and still valid."""
@@ -115,14 +153,32 @@ class AuthBridge:
                 pass
         return {"ok": True}
 
-    def report_startup_failure(self) -> None:
-        """Tell TXITPY that the embedded browser could not be started."""
+    def report_startup_failure(self, stage: str, error: BaseException) -> None:
+        """Report the actual browser startup failure without exposing credentials."""
+        detail = safe_error_text(error)
+        log_path = write_diagnostic(stage, error)
+        if stage == "import":
+            message = (
+                "TXITPY could not load the embedded browser package. "
+                "Run: python -m pip install -r requirements.txt. "
+                f"Details: {type(error).__name__}: {detail}"
+            )
+        else:
+            message = (
+                "TXITPY could not start its embedded browser. "
+                f"Details: {type(error).__name__}: {detail}"
+            )
+            lowered = detail.lower()
+            if any(word in lowered for word in ("webview2", "edgechromium", "runtime not found")):
+                message += (
+                    " Install the Microsoft Edge WebView2 Runtime from "
+                    "https://developer.microsoft.com/microsoft-edge/webview2/."
+                )
+        if log_path is not None:
+            message += f" Diagnostic log: {log_path}"
         payload = json.dumps({
             "state": self.state,
-            "message": (
-                "The embedded sign-in window could not start. Install the "
-                "Microsoft Edge WebView2 Runtime, then restart TXITPY."
-            ),
+            "message": message[:1800],
         }).encode("utf-8")
         request = Request(
             self.failure_url,
@@ -147,8 +203,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         import webview
-    except Exception:
-        bridge.report_startup_failure()
+    except Exception as exc:
+        bridge.report_startup_failure("import", exc)
         return 1
 
     window = webview.create_window(
@@ -182,8 +238,8 @@ def main(argv: list[str] | None = None) -> int:
             storage_path=str(profile_path),
             debug=False,
         )
-    except Exception:
-        bridge.report_startup_failure()
+    except Exception as exc:
+        bridge.report_startup_failure("start", exc)
         return 1
 
     return 0
