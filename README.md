@@ -11,7 +11,7 @@ TXITPY is the desktop app. TXITY refers to the website and simulated service tha
 - Live configuration and push-to-talk control through TXITY's authenticated control WebSocket.
 - Microphone or Windows desktop-audio input sent as mono Float32 PCM at 48 kHz in 512-sample frames.
 - Windows WASAPI loopback capture. Stereo playback is downmixed to mono and resampled to 48 kHz.
-- Audio playlists with multi-file and recursive folder import, MP3/WAV/FLAC/OGG/AIFF playback, shuffle, and loop controls. Imported folders refresh automatically when tracks are added, removed, renamed, or edited; changes during playback apply to the next start.
+- Audio playlists with multi-file and recursive folder import, MP3/WAV/FLAC/OGG/AIFF playback, shuffle, and loop controls. The full playlist is decoded before transmission into a temporary disk-backed PCM cache, then a prefilled playback queue feeds the stream without decoding during playback. Imported folders refresh automatically when tracks are added, removed, renamed, or edited; changes during playback apply to the next start.
 - CW control mode without an audio stream.
 - Signal fading, AGC, microphone gain, tone controls, SSB bandwidth and cuts, and AM bandwidth and pre-emphasis.
 - Local autosave for station identity and transmit preferences.
@@ -68,4 +68,4 @@ The Stations page shows refresh results and fetch errors. If TXITY changes its J
 
 TXITY returns the signed Discord session to its homepage. The embedded browser waits for TXITY's frontend to store the session in same-origin browser storage. TXITPY reads the token only on `https://txity.radiodiscussion.org` and sends it through a temporary loopback callback. The callback listens on loopback, uses a single-use random state value, expires after five minutes, and closes after use.
 
-Playlist audio uses SoundFile to decode supported local audio files before TXITPY converts them to the 48 kHz mono stream. TXITPY watches imported folders in the background and refreshes the saved track list when file paths or file metadata change. Track progress follows audio sent to the service, not the decoder's read-ahead position.
+Playlist audio is fully decoded to 48 kHz mono Float32 PCM before PTT begins. TXITPY stores that prepared audio in a temporary disk-backed cache, fills a larger playback queue, and reuses the cache for shuffle and loop playback. This keeps file decoding out of the live playback path without loading an entire playlist into RAM. The temporary cache is closed when transmission ends. TXITPY watches imported folders in the background and refreshes the saved track list when file paths or file metadata change. Track progress follows audio sent to the service, not the decoder's read-ahead position.
