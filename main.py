@@ -216,6 +216,11 @@ def describe_media_url(value: str) -> str:
 
 def normalize_media_url(value: Any) -> str:
     """Allow station media only from TXITY or Discord's image CDN."""
+    if isinstance(value, dict):
+        value = next((
+            value.get(key) for key in ("url", "src", "imageUrl", "image_url", "href")
+            if isinstance(value.get(key), str) and value.get(key).strip()
+        ), "")
     if not isinstance(value, str) or not value.strip():
         return ""
     raw = value.strip()
@@ -228,8 +233,32 @@ def normalize_media_url(value: Any) -> str:
         "cdn.discordapp.com",
         "media.discordapp.net",
     }:
+        print(
+            f"[TXITPY] Media URL rejected: {describe_media_url(url)} "
+            f"(unsupported scheme or host: {parsed.scheme}://{parsed.hostname or 'unknown'}).",
+            file=sys.stderr,
+            flush=True,
+        )
         return ""
     return url
+
+
+def discord_avatar_url(avatar_value: Any, user_id: Any = None) -> str:
+    """Resolve either a Discord avatar URL or a raw avatar hash."""
+    normalized = normalize_media_url(avatar_value)
+    if normalized:
+        return normalized
+    if not isinstance(avatar_value, str) or not isinstance(user_id, (str, int)):
+        return ""
+    avatar_hash = avatar_value.strip()
+    user_id_text = str(user_id).strip()
+    if (
+        not re.fullmatch(r"[A-Za-z0-9_]{8,128}", avatar_hash)
+        or not re.fullmatch(r"\d{5,24}", user_id_text)
+    ):
+        return ""
+    extension = "gif" if avatar_hash.startswith("a_") else "png"
+    return f"https://cdn.discordapp.com/avatars/{user_id_text}/{avatar_hash}.{extension}?size=128"
 
 
 def parse_station_page_layout(value: Any) -> dict[str, Any] | None:
@@ -321,6 +350,8 @@ def _clean_station_comments(value: Any) -> list[dict[str, str]]:
         if not isinstance(user, dict):
             user = item.get("author")
         if not isinstance(user, dict):
+            user = item.get("discordUser")
+        if not isinstance(user, dict):
             user = {}
 
         author = (
@@ -346,7 +377,11 @@ def _clean_station_comments(value: Any) -> list[dict[str, str]]:
             if avatar_value:
                 break
 
-        avatar_url = normalize_media_url(avatar_value)
+        avatar_user_id = (
+            first_text(item, "discordId", "userId", "authorId", limit=24)
+            or first_text(user, "discordId", "userId", "id", limit=24)
+        )
+        avatar_url = discord_avatar_url(avatar_value, avatar_user_id)
         comments.append({
             "author": author,
             "text": text_value,
@@ -472,7 +507,10 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
             logo_url=logo_url,
             profile_details=profile_details.strip()[:4_000],
             discord_id=str(item.get("discordId", ""))[:40] if item.get("discordId") is not None else "",
-            avatar_url=normalize_media_url(item.get("discordAvatarUrl")),
+            avatar_url=discord_avatar_url(
+                item.get("discordAvatarUrl") or item.get("avatarUrl") or item.get("avatar"),
+                item.get("discordId") or item.get("userId"),
+            ),
             image_urls=image_urls,
             page_layout=parse_station_page_layout(item.get("pageLayout")),
             likes=likes if isinstance(likes, int) and not isinstance(likes, bool) and likes >= 0 else 0,
@@ -1601,7 +1639,11 @@ def build_app() -> None:
             background=palette["background"],
             wraplength=900,
         ).pack(anchor="w", pady=(2, 1))
-        short_description = str(row.get("description") or "No short description has been added.")
+        short_description = str(
+            row.get("description")
+            or row.get("details_text")
+            or "No short description has been added."
+        )
         make_label(
             page,
             short_description,
