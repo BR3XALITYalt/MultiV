@@ -13,7 +13,11 @@ from discord_auth import (
     safe_error_text,
     user_from_txity_token,
 )
-from discord_auth_browser import AuthBridge, token_from_storage
+from discord_auth_browser import (
+    AuthBridge,
+    token_from_storage,
+    write_diagnostic_text,
+)
 
 
 def fake_txity_token(payload):
@@ -131,6 +135,9 @@ class DiscordAuthValidationTests(unittest.TestCase):
     def test_safe_error_text_preserves_line_breaks(self):
         details = safe_error_text("first line\nsecond line")
         self.assertIn("first line\nsecond line", details)
+
+    def test_browser_imports_diagnostic_text_writer(self):
+        self.assertTrue(callable(write_diagnostic_text))
 
     def test_native_window_reference_is_private_from_js_api(self):
         bridge = AuthBridge("http://127.0.0.1:12345/complete", "test-state")
