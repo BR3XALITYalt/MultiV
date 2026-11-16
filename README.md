@@ -29,7 +29,7 @@ TXITPY supports MP3, WAV, FLAC, OGG, and AIFF playlists. Use **Shuffle playlist*
 
 ### DRM30
 
-The **DRM** mode builds a single mono HE-AAC programme in a 4.5 kHz DRM30 channel. It accepts a microphone or OGG, MP3, and FLAC playlists. WAV and AIFF playlist entries are skipped, and desktop-audio loopback is not supported in DRM mode.
+The **DRM** mode builds a single mono HE-AAC programme in a 4.5 kHz DRM30 channel using 64-QAM MSC modulation. 64-QAM provides enough multiplex capacity for the HE-AAC stream in this narrow channel, but it needs better signal conditions than 16-QAM. It accepts a microphone or OGG, MP3, and FLAC playlists. WAV and AIFF playlist entries are skipped, and desktop-audio loopback is not supported in DRM mode.
 
 When you select DRM, TXITPY checks whether the DRM encoder and its dependencies are available. If setup is needed, it asks before downloading the official Rust installer on Windows, installing the stable Rust toolchain (1.88 or newer), fetching DecDRM 0.7.1 and its codec dependencies, and building the encoder. The Rust installer checksum is verified before it runs. On other platforms, TXITPY opens the official Rust installation page when the toolchain is missing. TXITPY selects DRM after the build succeeds; cancelling or a failed setup returns to the previous mode.
 
