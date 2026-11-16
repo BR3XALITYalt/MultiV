@@ -994,6 +994,14 @@ class TxityTransmitter:
                 drm_temp_dir = tempfile.TemporaryDirectory(prefix="txitpy-drm-")
                 drm_temp_path = Path(drm_temp_dir.name)
                 drm_stop_path = drm_temp_path / "stop"
+                drm_metadata = {
+                    "service_label": config.get("_txitpyDrmServiceLabel") or None,
+                    "service_id": config.get("_txitpyDrmServiceId", "0xB30001"),
+                    "language": config.get("_txitpyDrmLanguage", "English"),
+                    "programme_type": config.get("_txitpyDrmProgrammeType", "No programme type"),
+                    "iso_language": config.get("_txitpyDrmIsoLanguage", ""),
+                    "iso_country": config.get("_txitpyDrmIsoCountry", ""),
+                }
 
                 if audio_source == "playlist":
                     supported = [
@@ -1016,14 +1024,6 @@ class TxityTransmitter:
                             "count": count,
                         }),
                     )
-                    drm_metadata = {
-                        "service_label": config.get("_txitpyDrmServiceLabel") or None,
-                        "service_id": config.get("_txitpyDrmServiceId", "0xB30001"),
-                        "language": config.get("_txitpyDrmLanguage", "English"),
-                        "programme_type": config.get("_txitpyDrmProgrammeType", "No programme type"),
-                        "iso_language": config.get("_txitpyDrmIsoLanguage", ""),
-                        "iso_country": config.get("_txitpyDrmIsoCountry", ""),
-                    }
                     drm_config_path = write_drm_station_config(
                         drm_temp_path / "station.toml",
                         station_name=config.get("stationName", "TXITPY"),
