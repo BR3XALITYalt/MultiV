@@ -430,8 +430,8 @@ def build_app() -> None:
                     wrap_width=760,
                 )
                 bs.Label(
-                    "The desktop client remains read-only. It sends status requests only, never "
-                    "transmitter configuration, push-to-talk commands, or audio frames.",
+                    "The desktop client remains read-only for radio operation. It sends status requests and TXITY's "
+                    "logout notification, never transmitter configuration, push-to-talk commands, or audio frames.",
                     wrap_width=760,
                 )
                 bs.Button(
