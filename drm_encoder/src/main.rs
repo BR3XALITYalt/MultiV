@@ -17,8 +17,18 @@ fn main() {
 
 fn run() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);
-    let config_path = args.next().map(PathBuf::from).ok_or("missing station configuration path")?;
-    let stop_path = args.next().map(PathBuf::from).ok_or("missing stop-file path")?;
+    let first_arg = args.next().ok_or("missing station configuration path")?;
+    let check_only = first_arg == std::ffi::OsStr::new("--check");
+    let config_path = if check_only {
+        args.next().map(PathBuf::from).ok_or("missing station configuration path after --check")?
+    } else {
+        PathBuf::from(first_arg)
+    };
+    let stop_path = if check_only {
+        None
+    } else {
+        Some(args.next().map(PathBuf::from).ok_or("missing stop-file path")?)
+    };
     if args.next().is_some() {
         return Err("unexpected command-line argument".into());
     }
@@ -31,6 +41,18 @@ fn run() -> Result<(), Box<dyn Error>> {
     // Mode B / SO0 carriers plus the 150 Hz filter margin stay below TXITY's 6 kHz edge.
     config.output.if_hz = Some(1_500.0);
 
+    if check_only {
+        let plan = config.validate()?;
+        println!(
+            "Valid DRM station: {} service(s), {} stream(s), {}.",
+            config.services.len(),
+            plan.streams.len(),
+            plan.layout
+        );
+        return Ok(());
+    }
+
+    let stop_path = stop_path.ok_or("missing stop-file path")?;
     let stop = StopHandle::default();
     let watcher_stop = stop.clone();
     let watcher = thread::Builder::new()
