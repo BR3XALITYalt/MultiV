@@ -7,6 +7,9 @@ from transmitter import (
     SAMPLE_RATE_HZ,
     BATCH_SAMPLES,
     AUDIO_FRAME_INTERVAL_SECONDS,
+    PLAYLIST_AUDIO_QUEUE_FRAMES,
+    PLAYLIST_PREROLL_FRAMES,
+    next_playlist_frame_deadline,
     playlist_frame_wait_seconds,
     build_audio_socket_url,
     build_transmit_config,
@@ -25,12 +28,41 @@ class TransmitterProtocolTests(unittest.TestCase):
 
     def test_playlist_frames_are_paced_at_48khz(self):
         self.assertAlmostEqual(AUDIO_FRAME_INTERVAL_SECONDS, 512 / 48_000)
-        self.assertEqual(playlist_frame_wait_seconds(None, 10.0), 0.0)
+        first_deadline = next_playlist_frame_deadline(None, 10.0)
         self.assertAlmostEqual(
-            playlist_frame_wait_seconds(10.0, 10.003),
-            (512 / 48_000) - 0.003,
+            playlist_frame_wait_seconds(first_deadline, 10.0),
+            AUDIO_FRAME_INTERVAL_SECONDS,
         )
-        self.assertEqual(playlist_frame_wait_seconds(10.0, 10.02), 0.0)
+        self.assertAlmostEqual(
+            playlist_frame_wait_seconds(first_deadline, 10.003),
+            AUDIO_FRAME_INTERVAL_SECONDS - 0.003,
+        )
+        self.assertEqual(playlist_frame_wait_seconds(first_deadline, 10.02), 0.0)
+
+    def test_playlist_deadlines_do_not_accumulate_small_scheduler_delays(self):
+        first_deadline = next_playlist_frame_deadline(None, 10.0)
+        second_deadline = next_playlist_frame_deadline(
+            first_deadline,
+            first_deadline + 0.001,
+        )
+        self.assertAlmostEqual(
+            second_deadline,
+            first_deadline + AUDIO_FRAME_INTERVAL_SECONDS,
+        )
+
+    def test_playlist_deadline_resets_after_a_long_stall(self):
+        first_deadline = next_playlist_frame_deadline(None, 10.0)
+        late_now = first_deadline + AUDIO_FRAME_INTERVAL_SECONDS + 0.05
+        next_deadline = next_playlist_frame_deadline(first_deadline, late_now)
+        self.assertAlmostEqual(
+            next_deadline,
+            late_now + AUDIO_FRAME_INTERVAL_SECONDS,
+        )
+
+    def test_playlist_buffer_has_room_for_preroll(self):
+        self.assertGreater(PLAYLIST_AUDIO_QUEUE_FRAMES, PLAYLIST_PREROLL_FRAMES)
+        self.assertEqual(PLAYLIST_AUDIO_QUEUE_FRAMES, 256)
+        self.assertEqual(PLAYLIST_PREROLL_FRAMES, 96)
 
     def test_parse_frequency_units(self):
         self.assertEqual(parse_rf_frequency("7.250 MHz"), 7_250_000)
