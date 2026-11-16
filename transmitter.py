@@ -130,7 +130,7 @@ DEFAULT_MODE_BANDWIDTH_HZ = {
     "LSB+C": 10_000,
     "CW": 500,
 }
-SUPPORTED_AUDIO_SOURCES = ("mic", "loopback", "playlist")
+SUPPORTED_AUDIO_SOURCES = ("mic", "loopback", "playlist", "tone")
 
 
 def parse_rf_frequency(value: Any) -> int:
@@ -605,10 +605,12 @@ class TxityTransmitter:
     ) -> None:
         selected_source = str(audio_source or "mic").casefold()
         if selected_source not in SUPPORTED_AUDIO_SOURCES:
-            raise ValueError("Choose microphone input, desktop audio loopback, or an audio playlist.")
+            raise ValueError("Choose microphone input, desktop audio loopback, an audio playlist, or the DRM test tone.")
         drm_mode = str(config.get("_txitpyMode") or "").upper() == "DRM"
         if drm_mode and selected_source == "loopback":
-            raise ValueError("DRM mode currently supports microphone and playlist inputs, not desktop audio loopback.")
+            raise ValueError("DRM mode currently supports microphone, playlist, and test-tone inputs, not desktop audio loopback.")
+        if selected_source == "tone" and not drm_mode:
+            raise ValueError("The 1 kHz test tone is available only in DRM mode.")
         selected_playlist = collect_audio_files(playlist_files or [])
         if selected_source == "playlist" and not selected_playlist:
             raise ValueError("Add at least one supported audio file to the playlist.")
@@ -1043,6 +1045,18 @@ class TxityTransmitter:
                         drm_temp_path / "station.toml",
                         station_name=config.get("stationName", "TXITPY"),
                         playlist_url=drm_playlist_server.url,
+                        **drm_metadata,
+                    )
+                elif audio_source == "tone":
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": "Using DecDRM's built-in 1 kHz test tone at -12.041 dBFS.",
+                    })
+                    drm_config_path = write_drm_station_config(
+                        drm_temp_path / "station.toml",
+                        station_name=config.get("stationName", "TXITPY"),
+                        tone_hz=1_000.0,
+                        tone_level_dbfs=-12.041,
                         **drm_metadata,
                     )
                 else:
