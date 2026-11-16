@@ -2727,10 +2727,11 @@ def build_app() -> None:
 
                     source_path = Path(source)
                     if source_path.is_dir():
-                        tx_playlist_excluded_files = {
+                        exclusions_to_clear = [
                             excluded for excluded in tx_playlist_excluded_files
-                            if not Path(excluded).is_relative_to(source_path)
-                        }
+                            if Path(excluded).is_relative_to(source_path)
+                        ]
+                        tx_playlist_excluded_files.difference_update(exclusions_to_clear)
                     else:
                         tx_playlist_excluded_files.discard(identity)
 
@@ -3592,6 +3593,43 @@ def build_app() -> None:
                 tx_negative_status_reason = None
                 tx_negative_status_count = 0
 
+    def watch_playlist_sources() -> None:
+        """Refresh imported folders and files when their contents change on disk."""
+        while not playlist_watch_stop.wait(4.0):
+            with playlist_watch_lock:
+                sources = list(tx_playlist_sources)
+                excluded = set(tx_playlist_excluded_files)
+                revision = playlist_watch_revision
+            if not sources:
+                continue
+
+            try:
+                files, signature = build_playlist_snapshot(sources, excluded)
+            except Exception as exc:
+                details = safe_error_text(str(exc), 300)
+                print(
+                    f"[TXITPY] Playlist folder scan failed: {details}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                continue
+
+            if playlist_watch_stop.is_set():
+                break
+
+            with playlist_watch_lock:
+                if revision != playlist_watch_revision:
+                    continue
+                if signature == playlist_watch_signature:
+                    continue
+                playlist_watch_signature = signature
+
+            client.events.put({
+                "kind": "playlist_refresh",
+                "files": files,
+                "revision": revision,
+            })
+
     def drain_events() -> None:
         nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows, current_page, tx_profile_initialized
         nonlocal users_listing_received
@@ -3665,6 +3703,43 @@ def build_app() -> None:
                     f" · queued: {event.get('queue_depth', 0)}"
                     f" · playlist buffer underruns: {event.get('playlist_underruns', 0)}"
                 )
+
+            elif kind == "playlist_refresh":
+                revision = event.get("revision")
+                with playlist_watch_lock:
+                    current_revision = playlist_watch_revision
+                if revision != current_revision:
+                    continue
+
+                refreshed_files = event.get("files")
+                if not isinstance(refreshed_files, list):
+                    continue
+                previous_files = {path.casefold() for path in tx_playlist_files}
+                tx_playlist_files[:] = [
+                    str(path) for path in refreshed_files if isinstance(path, str)
+                ]
+                current_files = {path.casefold() for path in tx_playlist_files}
+                added = len(current_files - previous_files)
+                removed = len(previous_files - current_files)
+
+                if playlist_ui_refresh_callback is not None:
+                    try:
+                        playlist_ui_refresh_callback()
+                    except tk.TclError:
+                        pass
+                schedule_tx_settings_save()
+
+                if transmitter.is_busy:
+                    tx_playlist_status_var.set(
+                        f"Playlist changed on disk ({added} added, {removed} removed). "
+                        "Changes apply the next time you start playback."
+                    )
+                elif added or removed:
+                    tx_playlist_status_var.set(
+                        f"Playlist refreshed from disk: {added} added, {removed} removed."
+                    )
+                else:
+                    tx_playlist_status_var.set("Playlist files changed on disk. List refreshed.")
 
             elif kind == "tx_playlist_track":
                 track_path = str(event.get("path") or "")
@@ -3882,6 +3957,12 @@ def build_app() -> None:
     root.protocol("WM_DELETE_WINDOW", on_shutdown)
     root.after(250, drain_events)
     root.after(60_000, periodic_station_refresh)
+    playlist_watch_thread = threading.Thread(
+        target=watch_playlist_sources,
+        daemon=True,
+        name="txitpy-playlist-watch",
+    )
+    playlist_watch_thread.start()
     client.load_public_data()
     root.mainloop()
 
