@@ -181,3 +181,219 @@ def apply_tk_theme(root, mode: str = "light") -> dict[str, str]:
         arrowcolor=scheme["onSurfaceVariant"],
     )
     return dict(scheme)
+
+
+
+def rounded_widget_classes(tk):
+    """Create rounded Tk widgets while keeping tkinter imports out of module loading."""
+    from tkinter import font as tkfont
+
+    def rounded_points(width: float, height: float, radius: float) -> list[float]:
+        radius = max(1.0, min(radius, width / 2, height / 2))
+        corners = (
+            (radius, radius, 180, 270),
+            (width - radius, radius, 270, 360),
+            (width - radius, height - radius, 0, 90),
+            (radius, height - radius, 90, 180),
+        )
+        points: list[float] = []
+        for center_x, center_y, start, end in corners:
+            for step in range(7):
+                angle = (start + (end - start) * step / 6) * 3.141592653589793 / 180
+                points.extend((
+                    center_x + radius * __import__("math").cos(angle),
+                    center_y + radius * __import__("math").sin(angle),
+                ))
+        return points
+
+    class RoundedSurface(tk.Frame):
+        """A frame with a rounded surface painted behind its child widgets."""
+
+        def __init__(
+            self,
+            parent,
+            *,
+            background: str,
+            outside: str | None = None,
+            outline: str | None = None,
+            padding: int = 18,
+            radius: int = 18,
+        ) -> None:
+            self._surface_background = background
+            self._outside_background = outside or parent.cget("bg")
+            self._outline_color = outline or background
+            self._corner_radius = radius
+            inset = max(padding, int(radius * 0.6))
+            super().__init__(
+                parent,
+                bg=self._outside_background,
+                bd=0,
+                highlightthickness=0,
+                padx=inset,
+                pady=inset,
+            )
+            self._surface_canvas = tk.Canvas(
+                self,
+                bg=self._outside_background,
+                bd=0,
+                highlightthickness=0,
+                takefocus=0,
+            )
+            self._surface_canvas.place(x=0, y=0, relwidth=1, relheight=1)
+            self._surface_canvas.lower()
+            self.bind("<Configure>", self._redraw_surface, add="+")
+
+        def _redraw_surface(self, event=None) -> None:
+            width = max(2, self.winfo_width())
+            height = max(2, self.winfo_height())
+            self._surface_canvas.delete("surface")
+            coordinates = rounded_points(
+                width - 2,
+                height - 2,
+                min(self._corner_radius, (min(width, height) - 2) / 2),
+            )
+            coordinates = [
+                value + 1 if index % 2 == 0 else value + 1
+                for index, value in enumerate(coordinates)
+            ]
+            self._surface_canvas.create_polygon(
+                *coordinates,
+                fill=self._surface_background,
+                outline=self._outline_color,
+                width=1,
+                smooth=True,
+                splinesteps=18,
+                tags="surface",
+            )
+
+    class RoundedButton(tk.Canvas):
+        """A keyboard-accessible button with a rounded background."""
+
+        def __init__(
+            self,
+            parent,
+            text: str,
+            command,
+            *,
+            background: str,
+            foreground: str,
+            hover_background: str,
+            hover_foreground: str | None = None,
+            outside: str | None = None,
+            outline: str | None = None,
+            focus_color: str | None = None,
+            font=("Segoe UI", 10),
+            padding_x: int = 16,
+            padding_y: int = 9,
+            radius: int = 14,
+            anchor: str = "center",
+            min_width: int = 0,
+        ) -> None:
+            self._text = text
+            self._command = command
+            self._background = background
+            self._foreground = foreground
+            self._hover_background = hover_background
+            self._hover_foreground = hover_foreground or foreground
+            self._outside = outside or parent.cget("bg")
+            self._outline = outline or background
+            self._focus_color = focus_color or foreground
+            self._corner_radius = radius
+            self._padding_x = padding_x
+            self._anchor = anchor
+            self._hovered = False
+            self._focused = False
+            self._font = tkfont.Font(root=parent, font=font)
+            self._requested_width = max(
+                min_width,
+                self._font.measure(text) + padding_x * 2,
+            )
+            self._requested_height = max(
+                34,
+                self._font.metrics("linespace") + padding_y * 2,
+            )
+            super().__init__(
+                parent,
+                width=self._requested_width,
+                height=self._requested_height,
+                bg=self._outside,
+                bd=0,
+                highlightthickness=0,
+                cursor="hand2",
+                takefocus=True,
+            )
+            self.bind("<Configure>", self._redraw, add="+")
+            self.bind("<Enter>", self._on_enter, add="+")
+            self.bind("<Leave>", self._on_leave, add="+")
+            self.bind("<Button-1>", self._on_click, add="+")
+            self.bind("<space>", self._on_key, add="+")
+            self.bind("<Return>", self._on_key, add="+")
+            self.bind("<FocusIn>", self._on_focus, add="+")
+            self.bind("<FocusOut>", self._on_blur, add="+")
+            self._redraw()
+
+        def _redraw(self, event=None) -> None:
+            width = max(2, self.winfo_width())
+            height = max(2, self.winfo_height())
+            if width <= 2:
+                width = self._requested_width
+            if height <= 2:
+                height = self._requested_height
+            fill = self._hover_background if self._hovered else self._background
+            foreground = self._hover_foreground if self._hovered else self._foreground
+            outline = self._focus_color if self._focused else self._outline
+            self.delete("all")
+            coordinates = rounded_points(
+                width - 2,
+                height - 2,
+                min(self._corner_radius, (min(width, height) - 2) / 2),
+            )
+            coordinates = [value + 1 for value in coordinates]
+            self.create_polygon(
+                *coordinates,
+                fill=fill,
+                outline=outline,
+                width=2 if self._focused else 1,
+                smooth=True,
+                splinesteps=18,
+            )
+            x = self._padding_x if self._anchor == "w" else width / 2
+            self.create_text(
+                x,
+                height / 2,
+                text=self._text,
+                fill=foreground,
+                font=self._font,
+                anchor=self._anchor,
+            )
+
+        def _on_enter(self, _event=None) -> None:
+            self._hovered = True
+            self._redraw()
+
+        def _on_leave(self, _event=None) -> None:
+            self._hovered = False
+            self._redraw()
+
+        def _on_focus(self, _event=None) -> None:
+            self._focused = True
+            self._redraw()
+
+        def _on_blur(self, _event=None) -> None:
+            self._focused = False
+            self._redraw()
+
+        def _on_click(self, _event=None) -> str:
+            self.focus_set()
+            self._invoke()
+            return "break"
+
+        def _on_key(self, _event=None) -> str:
+            self._invoke()
+            return "break"
+
+        def _invoke(self) -> None:
+            if callable(self._command):
+                self._command()
+
+    return RoundedSurface, RoundedButton
