@@ -28,7 +28,8 @@ fn run() -> Result<(), Box<dyn Error>> {
     config.output.device = None;
     config.output.sample_format = SampleFormat::Float32;
     config.output.format = SignalFormat::Real;
-    config.output.if_hz = Some(3_000.0);
+    // Mode B / SO0 carriers plus the 150 Hz filter margin stay below TXITY's 6 kHz edge.
+    config.output.if_hz = Some(1_500.0);
 
     let mut station = Station::new(config)?;
     if station.output_channels() != 1 {
