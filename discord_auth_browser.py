@@ -13,11 +13,9 @@ import os
 import sys
 import threading
 from pathlib import Path
-from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from discord_auth import (
-    diagnostic_log_path,
     format_exception_details,
     safe_error_text,
     user_from_txity_token,
@@ -172,6 +170,11 @@ class AuthBridge:
             f"Exception: {type(error).__name__}: {safe_error_text(error)}\n\n"
             f"Full traceback:\n{details}"
         )
+        if stage == "import-webview":
+            message += (
+                "\n\nInstall the TXITPY Python dependencies with: "
+                "python -m pip install -r requirements.txt"
+            )
         lowered = details.lower()
         if any(word in lowered for word in ("webview2", "edgechromium", "runtime not found")):
             message += (
