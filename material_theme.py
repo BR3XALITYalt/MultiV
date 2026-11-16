@@ -1,9 +1,4 @@
-"""TeleDrive-inspired Material 3 Expressive color scheme for TXITPY.
-
-The palette follows TeleDrive's blue light/dark color schemes. Bootstack has
-its own Tk widgets, so the Material roles are mapped onto Bootstack's semantic
-accent and layered surface tokens instead of replacing its widget toolkit.
-"""
+"""TeleDrive-inspired Material 3 Expressive palette and native ttk styling."""
 
 from __future__ import annotations
 
@@ -86,48 +81,103 @@ MATERIAL_3_EXPRESSIVE = {
 }
 
 
-def install_theme() -> None:
-    """Register the light and dark TXITY Material-inspired theme variants."""
-    from bootstack.style import Theme
+def apply_tk_theme(root, mode: str = "light") -> dict[str, str]:
+    """Apply the selected Material palette to Tk and return its color roles."""
+    if mode not in {"light", "dark"}:
+        raise ValueError("Theme mode must be 'light' or 'dark'.")
 
-    light = MATERIAL_3_EXPRESSIVE["light"]
-    dark = MATERIAL_3_EXPRESSIVE["dark"]
+    scheme = MATERIAL_3_EXPRESSIVE[mode]
+    if root is None:
+        return dict(scheme)
 
-    Theme.from_existing(
-        "bootstrap",
-        name=MATERIAL_3_EXPRESSIVE["name"],
-        display_name=MATERIAL_3_EXPRESSIVE["display_name"],
-        primary=light["primary"],
-        secondary=light["secondary"],
-        info=light["tertiary"],
-        success="#2E7D32",
-        warning="#8D5E00",
-        danger=light["error"],
-        neutral=light["outline"],
-        light={
-            "background": light["background"],
-            "foreground": light["onSurface"],
-        },
-        dark={
-            "background": dark["background"],
-            "foreground": dark["onSurface"],
-        },
-        surfaces={
-            "light": {
-                "content": light["surface"],
-                "card": light["surfaceContainerLow"],
-                "chrome": light["background"],
-                "raised": light["surfaceContainer"],
-                "overlay": light["surfaceContainerHigh"],
-                "input": light["surfaceContainerLowest"],
-            },
-            "dark": {
-                "content": dark["surface"],
-                "card": dark["surfaceContainerLow"],
-                "chrome": dark["background"],
-                "raised": dark["surfaceContainer"],
-                "overlay": dark["surfaceContainerHigh"],
-                "input": dark["surfaceContainerLowest"],
-            },
-        },
-    ).install()
+    from tkinter import ttk
+
+    root.configure(background=scheme["background"])
+    style = ttk.Style(root)
+    style.theme_use("clam")
+
+    style.configure(
+        ".",
+        font=("Segoe UI", 10),
+        background=scheme["background"],
+        foreground=scheme["onSurface"],
+    )
+    style.configure("TFrame", background=scheme["background"])
+    style.configure(
+        "TLabel",
+        background=scheme["background"],
+        foreground=scheme["onSurface"],
+    )
+    style.configure(
+        "TEntry",
+        fieldbackground=scheme["surfaceContainerLowest"],
+        foreground=scheme["onSurface"],
+        insertcolor=scheme["onSurface"],
+        bordercolor=scheme["outline"],
+        lightcolor=scheme["outline"],
+        darkcolor=scheme["outline"],
+        padding=(12, 8),
+    )
+    style.map(
+        "TEntry",
+        fieldbackground=[("disabled", scheme["surfaceContainer"]), ("!disabled", scheme["surfaceContainerLowest"])],
+        foreground=[("disabled", scheme["onSurfaceVariant"]), ("!disabled", scheme["onSurface"])],
+    )
+    style.configure(
+        "Material.TEntry",
+        fieldbackground=scheme["surfaceContainerLowest"],
+        foreground=scheme["onSurface"],
+        insertcolor=scheme["onSurface"],
+        bordercolor=scheme["outline"],
+        lightcolor=scheme["outline"],
+        darkcolor=scheme["outline"],
+        padding=(12, 8),
+    )
+    style.map(
+        "Material.TEntry",
+        fieldbackground=[("focus", scheme["surfaceContainerLowest"])],
+        bordercolor=[("focus", scheme["primary"])],
+    )
+    style.configure(
+        "Material.Treeview",
+        background=scheme["surfaceContainerLowest"],
+        fieldbackground=scheme["surfaceContainerLowest"],
+        foreground=scheme["onSurface"],
+        rowheight=34,
+        borderwidth=0,
+        relief="flat",
+        font=("Segoe UI", 9),
+    )
+    style.map(
+        "Material.Treeview",
+        background=[("selected", scheme["primaryContainer"])],
+        foreground=[("selected", scheme["onPrimaryContainer"])],
+    )
+    style.configure(
+        "Material.Treeview.Heading",
+        background=scheme["surfaceContainerHigh"],
+        foreground=scheme["onSurfaceVariant"],
+        font=("Segoe UI", 9, "bold"),
+        padding=(10, 9),
+        borderwidth=0,
+        relief="flat",
+    )
+    style.map(
+        "Material.Treeview.Heading",
+        background=[("active", scheme["surfaceContainerHighest"])],
+    )
+    style.configure(
+        "Vertical.TScrollbar",
+        background=scheme["surfaceContainerHigh"],
+        troughcolor=scheme["surfaceContainerLow"],
+        bordercolor=scheme["surfaceContainerLow"],
+        arrowcolor=scheme["onSurfaceVariant"],
+    )
+    style.configure(
+        "Horizontal.TScrollbar",
+        background=scheme["surfaceContainerHigh"],
+        troughcolor=scheme["surfaceContainerLow"],
+        bordercolor=scheme["surfaceContainerLow"],
+        arrowcolor=scheme["onSurfaceVariant"],
+    )
+    return dict(scheme)
