@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -71,14 +72,14 @@ def diagnostic_log_path() -> Path:
 
 def safe_error_text(error: BaseException) -> str:
     """Remove URLs, token-like strings, and control characters from errors."""
-    message = str(error).replace("\\r", " ").replace("\\n", " ")
-    message = re.sub(r"https?://[^\\s\\\"'<>]+", "[URL redacted]", message)
+    message = str(error).replace("\r", " ").replace("\n", " ")
+    message = re.sub(r"https?://\S+", "[URL redacted]", message)
     message = re.sub(
-        r"(?i)\\b(token|authToken|code|state|secret)=([^&\\s]+)",
-        r"\\1=[redacted]",
+        r"(?i)\b(token|authToken|code|state|secret)=([^&\s]+)",
+        r"\1=[redacted]",
         message,
     )
-    message = re.sub(r"\\b[A-Za-z0-9_-]{48,}\\b", "[value redacted]", message)
+    message = re.sub(r"\b[A-Za-z0-9_-]{48,}\b", "[value redacted]", message)
     message = "".join(char for char in message if char.isprintable())
     return message[:500] or "No additional error details were provided."
 
@@ -92,7 +93,7 @@ def write_diagnostic(stage: str, error: BaseException) -> Path | None:
         with path.open("a", encoding="utf-8") as stream:
             stream.write(
                 f"{datetime.now(timezone.utc).isoformat()} "
-                f"[{stage}] {type(error).__name__}: {detail}\\n"
+                f"[{stage}] {type(error).__name__}: {detail}\n"
             )
         return path
     except OSError:
@@ -207,14 +208,20 @@ def main(argv: list[str] | None = None) -> int:
         bridge.report_startup_failure("import", exc)
         return 1
 
-    window = webview.create_window(
-        "Sign in to TXITY",
-        url=login_url,
-        width=920,
-        height=760,
-        min_size=(640, 560),
-        background_color="#000000",
-    )
+    try:
+        window = webview.create_window(
+            "Sign in to TXITY",
+            url=login_url,
+            js_api=bridge,
+            width=920,
+            height=760,
+            min_size=(640, 560),
+            background_color="#000000",
+        )
+    except Exception as exc:
+        bridge.report_startup_failure("create-window", exc)
+        return 1
+
     bridge.window = window
 
     def on_loaded(loaded_window) -> None:
