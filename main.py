@@ -31,8 +31,10 @@ from discord_auth import (
 from transmitter import (
     TxityTransmitter,
     build_transmit_config,
+    find_frequency_overlaps,
     list_audio_inputs,
     list_loopback_devices,
+    parse_rf_frequency,
 )
 
 BASE_URL = "https://txity.radiodiscussion.org"
@@ -49,6 +51,8 @@ class Station:
     description: str = ""
     description_source: str = ""
     frequency: str = ""
+    frequency_hz: int | None = None
+    allow_overlap_visitors: bool | None = None
     rating: str = ""
     mode: str = ""
     details: str = ""
@@ -67,12 +71,14 @@ class Station:
     comments: list[dict[str, str]] | None = None
     comment_count: int = 0
 
-    def as_row(self) -> dict[str, str]:
+    def as_row(self) -> dict[str, Any]:
         return {
             "id": self.station_id,
             "station": self.name,
             "operator": self.operator,
             "frequency": self.frequency,
+            "frequency_hz": self.frequency_hz,
+            "allow_overlap_visitors": self.allow_overlap_visitors,
             "mode": self.mode,
             "on_air": self.on_air,
             "rating": self.rating,
@@ -514,9 +520,28 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
                     description_source = "pageLayout"
                     break
 
-        frequency = item.get("frequency")
-        if not isinstance(frequency, str) or not frequency.strip():
-            frequency = format_frequency(item.get("frequencyHz"))
+        raw_frequency = item.get("frequency")
+        if not isinstance(raw_frequency, (str, int, float)) or not str(raw_frequency).strip():
+            raw_frequency = item.get("frequencyHz", item.get("rfHz"))
+        frequency_hz = None
+        for candidate in (item.get("frequencyHz"), item.get("rfHz"), item.get("frequency_hz")):
+            if isinstance(candidate, (int, float)) and not isinstance(candidate, bool):
+                if candidate > 0:
+                    frequency_hz = int(round(candidate))
+                    break
+        if frequency_hz is None:
+            try:
+                frequency_hz = parse_rf_frequency(raw_frequency)
+            except (TypeError, ValueError):
+                frequency_hz = None
+        if isinstance(raw_frequency, str) and raw_frequency.strip():
+            frequency = raw_frequency.strip()
+        elif frequency_hz is not None:
+            frequency = format_frequency(frequency_hz)
+        else:
+            frequency = "Not reported"
+        overlap_setting = item.get("allowOverlapVisitors")
+        allow_overlap_visitors = overlap_setting if isinstance(overlap_setting, bool) else None
 
         mode = item.get("mode")
         if not isinstance(mode, str):
@@ -553,6 +578,8 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
             description=description.strip()[:1_000],
             description_source=description_source,
             frequency=frequency.strip()[:40],
+            frequency_hz=frequency_hz,
+            allow_overlap_visitors=allow_overlap_visitors,
             rating=rating,
             mode=mode.strip()[:24],
             operator=operator.strip()[:100],
@@ -971,6 +998,7 @@ def build_app() -> None:
     tx_station_name_var = tk.StringVar(root, "")
     tx_description_var = tk.StringVar(root, "")
     tx_frequency_var = tk.StringVar(root, "7.250 MHz")
+    tx_frequency_check_var = tk.StringVar(root, "Waiting for TXITY station data.")
     tx_mode_var = tk.StringVar(root, "AM")
     tx_mode_help_var = tk.StringVar(root, "AM uses a carrier with upper and lower sidebands.")
     tx_power_var = tk.StringVar(root, "50")
@@ -1007,6 +1035,10 @@ def build_app() -> None:
     auth_enabled = False
     users_listing_received = False
     station_rows: list[dict[str, Any]] = []
+    server_band_min_hz: int | None = None
+    server_band_max_hz: int | None = None
+    tx_negative_status_reason: str | None = None
+    tx_negative_status_count = 0
     station_search_var = tk.StringVar(root, "")
     station_cards_frame: tk.Frame | None = None
     selected_station_id = ""
@@ -1757,6 +1789,64 @@ def build_app() -> None:
         station_cards_frame.pack(fill="x", expand=True)
         update_station_tree()
 
+    def update_frequency_check() -> None:
+        try:
+            selected_hz = parse_rf_frequency(tx_frequency_var.get())
+        except ValueError:
+            tx_frequency_check_var.set("Enter a valid frequency to check the TXITY station list.")
+            return
+
+        messages: list[str] = []
+        if server_band_min_hz is not None and server_band_max_hz is not None:
+            if not server_band_min_hz <= selected_hz <= server_band_max_hz:
+                messages.append(
+                    "Outside the server's reported virtual frequency range "
+                    f"({format_frequency(server_band_min_hz)} to {format_frequency(server_band_max_hz)})."
+                )
+
+        own_user_id = str((client.discord_user or {}).get("id") or "")
+        other_stations = [
+            row for row in station_rows
+            if not own_user_id or str(row.get("discord_id") or "") != own_user_id
+        ]
+        overlaps = find_frequency_overlaps(
+            tx_frequency_var.get(),
+            tx_mode_var.get(),
+            other_stations,
+        )
+
+        if overlaps:
+            names = []
+            for item in overlaps[:4]:
+                offset_khz = item["offset_hz"] / 1_000
+                names.append(
+                    f'{item["station_name"]} at {format_frequency(item["frequency_hz"])} '
+                    f'({item["mode"]}, {offset_khz:.1f} kHz offset)'
+                )
+            extra = f" and {len(overlaps) - 4} more" if len(overlaps) > 4 else ""
+            if not tx_allow_overlap_var.get():
+                sharing_note = "Frequency sharing is off, so TXITY may reject this overlap."
+            elif any(item["allow_overlap_visitors"] is False for item in overlaps):
+                sharing_note = "At least one overlapping station reports sharing disabled."
+            elif all(item["allow_overlap_visitors"] is True for item in overlaps):
+                sharing_note = "The listed stations report sharing enabled."
+            else:
+                sharing_note = "Remote sharing settings are not fully public; TXITY makes the final decision."
+            messages.append(
+                "Estimated overlap with " + "; ".join(names) + extra + ". " + sharing_note
+            )
+        elif station_rows:
+            messages.append("No estimated channel overlap with the other listed TXITY stations.")
+        else:
+            messages.append("Station overlap check will run when TXITY's live station list loads.")
+
+        messages.append("This is a client-side estimate; TXITY's server decides whether a shared frequency is accepted.")
+        tx_frequency_check_var.set(" ".join(messages))
+
+    tx_frequency_var.trace_add("write", lambda *_args: update_frequency_check())
+    tx_mode_var.trace_add("write", lambda *_args: update_frequency_check())
+    tx_allow_overlap_var.trace_add("write", lambda *_args: update_frequency_check())
+
     def update_transmit_button() -> None:
         button = tx_transmit_button
         if button is None:
@@ -1919,6 +2009,15 @@ def build_app() -> None:
         add_tx_entry(station_fields, "Station name (required)", tx_station_name_var, column=0, row=0)
         add_tx_entry(station_fields, "Short description", tx_description_var, column=1, row=0)
         add_tx_entry(station_fields, "Transmit frequency", tx_frequency_var, column=0, row=1)
+        make_label(
+            station_card,
+            variable=tx_frequency_check_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=860,
+        ).pack(anchor="w", padx=6, pady=(8, 0))
+        update_frequency_check()
 
         signal_card = make_card(page, padding=16)
         signal_card.pack(fill="x", pady=(0, 12))
@@ -1974,6 +2073,7 @@ def build_app() -> None:
                 "CW": "CW — carrier only. The microphone and desktop audio sources are not used.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
+            update_frequency_check()
         mode_picker.bind("<<ComboboxSelected>>", update_mode_help)
         update_mode_help()
 
@@ -2009,6 +2109,7 @@ def build_app() -> None:
             signal_card,
             text="Allow shared frequency overlap with stations that also enable sharing",
             variable=tx_allow_overlap_var,
+            command=update_frequency_check,
             bg=palette["surfaceContainerLow"],
             fg=palette["onSurface"],
             activebackground=palette["surfaceContainerLow"],
@@ -2730,10 +2831,18 @@ def build_app() -> None:
         )
 
     def apply_status(data: dict[str, Any]) -> None:
+        nonlocal server_band_min_hz, server_band_max_hz
+        nonlocal tx_negative_status_reason, tx_negative_status_count
         center_var.set(format_frequency(data.get("centerHz")))
         low, high = data.get("bandMinHz"), data.get("bandMaxHz")
         if isinstance(low, (int, float)) and isinstance(high, (int, float)):
+            server_band_min_hz = int(low)
+            server_band_max_hz = int(high)
             band_var.set(f"{format_frequency(low)} - {format_frequency(high)}")
+        else:
+            server_band_min_hz = None
+            server_band_max_hz = None
+        update_frequency_check()
         rate = data.get("sampleRate")
         sample_rate_var.set(
             f"{rate / 1_000_000:.3f} MS/s"
@@ -2751,22 +2860,45 @@ def build_app() -> None:
         )
 
         if transmitter.is_busy and data.get("ptt") is True:
+            tx_negative_status_reason = None
+            tx_negative_status_count = 0
             tx_status_var.set("TXITY confirms that the station is transmitting.")
         elif transmitter.is_busy and data.get("ptt") is False:
             queue_position = data.get("queuePosition")
             if isinstance(queue_position, int) and queue_position >= 0:
+                tx_negative_status_reason = None
+                tx_negative_status_count = 0
                 tx_status_var.set(f"Waiting in the TXITY transmitter queue (position {queue_position + 1}).")
-            elif data.get("txStartUsable") is False or data.get("txBlockReason") is not None:
+            elif data.get("txStartUsable") is False or data.get("txBlockReason") not in (None, False, ""):
                 reason = data.get("txStartReason", data.get("txBlockReason"))
                 reasons = {
                     2: "transmitter capacity is currently full",
                     3: "frequency sharing must be enabled by both stations",
                     4: "the total transmitter limit has been reached",
                     5: "a station name is required",
+                    "2": "transmitter capacity is currently full",
+                    "3": "frequency sharing must be enabled by both stations",
+                    "4": "the total transmitter limit has been reached",
+                    "5": "a station name is required",
                 }
                 reason_text = reasons.get(reason, "TXITY did not accept the transmission request")
-                tx_status_var.set(f"Transmission blocked: {reason_text}.")
-                transmitter.stop()
+                reason_key = str(reason if reason is not None else "txStartUsable=false")
+                if not transmitter.server_rejection_ready:
+                    tx_status_var.set("Waiting for TXITY to confirm the transmission request...")
+                else:
+                    if reason_key == tx_negative_status_reason:
+                        tx_negative_status_count += 1
+                    else:
+                        tx_negative_status_reason = reason_key
+                        tx_negative_status_count = 1
+                    if tx_negative_status_count >= 2:
+                        message = f"Transmission blocked by TXITY: {reason_text}."
+                        tx_status_var.set(message)
+                        print(f"[TXITPY] {message}", file=sys.stderr, flush=True)
+                        transmitter.stop()
+            else:
+                tx_negative_status_reason = None
+                tx_negative_status_count = 0
 
     def drain_events() -> None:
         nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows, current_page, tx_profile_initialized
@@ -2851,6 +2983,7 @@ def build_app() -> None:
 
             elif kind == "users_listing":
                 station_rows = event.get("rows", [])
+                update_frequency_check()
                 if not tx_profile_initialized and client.discord_user:
                     own_id = str(client.discord_user.get("id") or "")
                     own_station = next(
