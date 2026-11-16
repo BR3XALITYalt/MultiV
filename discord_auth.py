@@ -472,7 +472,7 @@ class DiscordAuthManager:
         ).start()
 
     def _capture_browser_output(self, stream: Any) -> None:
-        """Keep browser warnings and errors without flooding the console."""
+        """Print explicit startup checkpoints immediately and retain error context."""
         path = diagnostic_log_path()
         pending: list[str] = []
         context_remaining = 0
@@ -491,6 +491,12 @@ class DiscordAuthManager:
             )
             pending.clear()
 
+        def write_checkpoint(log_stream: Any, detail: str) -> None:
+            timestamp = datetime.now(timezone.utc).isoformat()
+            log_stream.write(f"{timestamp} [browser-checkpoint] {detail}\n")
+            log_stream.flush()
+            print(detail, file=sys.stderr, flush=True)
+
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as log_stream:
@@ -499,8 +505,13 @@ class DiscordAuthManager:
                     if not detail:
                         continue
 
+                    if detail.startswith("[TXITPY]"):
+                        flush_problem_block(log_stream)
+                        write_checkpoint(log_stream, detail)
+                        continue
+
                     lowered = detail.lower()
-                    is_problem = detail.startswith("[TXITPY]") or any(
+                    is_problem = any(
                         marker in lowered
                         for marker in (
                             "error",
@@ -520,6 +531,13 @@ class DiscordAuthManager:
                         flush_problem_block(log_stream)
                         pending.append(detail)
                         context_remaining = 20
+                        # Surface the first error line immediately. Additional
+                        # traceback context is grouped into the same log block.
+                        print(
+                            f"[TXITPY embedded browser] {detail}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
                     elif context_remaining > 0:
                         pending.append(detail)
                         context_remaining -= 1
