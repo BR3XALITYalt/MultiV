@@ -2546,7 +2546,11 @@ def build_app() -> None:
         source_picker = ttk.Combobox(
             source_frame,
             textvariable=tx_audio_source_var,
-            values=("Microphone / line input", "Desktop audio (output loopback)"),
+            values=(
+                "Microphone / line input",
+                "Desktop audio (output loopback)",
+                "Audio playlist",
+            ),
             state="readonly",
             height=4,
         )
@@ -2817,13 +2821,6 @@ def build_app() -> None:
             if tx_audio_device_var.get() not in tx_audio_device_ids:
                 tx_audio_device_var.set(values[0])
 
-        source_picker.configure(
-            values=(
-                "Microphone / line input",
-                "Desktop audio (output loopback)",
-                "Audio playlist",
-            )
-        )
         source_picker.bind("<<ComboboxSelected>>", lambda _event: update_audio_source_controls())
         refresh_button = make_button(
             audio_card,
@@ -2843,7 +2840,8 @@ def build_app() -> None:
             else:
                 playlist_frame.grid_remove()
                 device_frame.grid()
-                refresh_button.pack(anchor="w", padx=6, pady=(8, 2))
+                if refresh_button.winfo_manager() != "pack":
+                    refresh_button.pack(anchor="w", padx=6, pady=(8, 2))
                 refresh_audio_devices()
 
         update_audio_source_controls()
@@ -2851,7 +2849,7 @@ def build_app() -> None:
         make_label(
             audio_card,
             "Choose a microphone, desktop output, or playlist. Playlist files are decoded to mono 48 kHz audio. "
-            "Desktop output uses Windows WASAPI loopback.",
+            "Shuffle and loop work independently. CW mode uses its configured message instead of an audio source.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
