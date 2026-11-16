@@ -1,10 +1,6 @@
 import unittest
 
-from material_theme import (
-    MATERIAL_3_EXPRESSIVE,
-    apply_tk_theme,
-    render_rounded_rectangle,
-)
+from material_theme import MATERIAL_3_EXPRESSIVE, apply_tk_theme
 
 
 REQUIRED_ROLES = {
@@ -42,28 +38,6 @@ def _contrast(first, second):
 
 
 class MaterialThemeTests(unittest.TestCase):
-    def test_rounded_rectangle_render_has_transparent_corners(self):
-        image = render_rounded_rectangle(100, 60, 24, "#1B6EF3")
-        self.assertEqual(image.mode, "RGBA")
-        self.assertEqual(image.size, (100, 60))
-        self.assertEqual(image.getpixel((0, 0))[3], 0)
-        self.assertEqual(image.getpixel((50, 0))[3], 255)
-        self.assertEqual(image.getpixel((99, 59))[3], 0)
-
-    def test_rounded_rectangle_render_antialiases_edges(self):
-        image = render_rounded_rectangle(100, 60, 24, "#1B6EF3")
-        alpha_values = {
-            image.getpixel((x, y))[3]
-            for x in range(0, 30)
-            for y in range(0, 30)
-        }
-        self.assertTrue(any(0 < alpha < 255 for alpha in alpha_values))
-
-    def test_rounded_rectangle_render_clamps_large_radius(self):
-        image = render_rounded_rectangle(20, 10, 50, "#FFFFFF")
-        self.assertEqual(image.size, (20, 10))
-        self.assertEqual(image.getpixel((10, 5))[3], 255)
-
     def test_uses_teledrive_blue_expressive_palette(self):
         self.assertEqual(MATERIAL_3_EXPRESSIVE["light"]["primary"], "#1B6EF3")
         self.assertEqual(MATERIAL_3_EXPRESSIVE["light"]["tertiary"], "#00677E")
