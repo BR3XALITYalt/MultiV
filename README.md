@@ -59,7 +59,7 @@ Open **Stations** to view the station directory. Select a station card to see it
 
 ## Sign-in and saved settings
 
-TXITPY keeps your TXITY sign-in session in its app-specific browser profile. Disconnect Discord in TXITPY to end the saved session. The preferences file does not contain Discord session tokens.
+TXITPY remembers your TXITY sign-in between launches. Disconnect Discord in TXITPY to clear the saved session. The preferences file does not contain Discord session tokens.
 
 TXITPY stores station and transmission preferences at:
 
