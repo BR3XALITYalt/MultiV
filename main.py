@@ -37,6 +37,7 @@ from discord_auth import (
 from drm_support import (
     DRM_LANGUAGES,
     DRM_PROGRAMME_TYPES,
+    DRM_AUDIO_CODECS,
     drm_setup_status,
     prepare_drm_encoder,
 )
@@ -1071,6 +1072,8 @@ def build_app() -> None:
     tx_drm_programme_type_var = tk.StringVar(root, saved_text("drm_programme_type", "No programme type"))
     tx_drm_iso_language_var = tk.StringVar(root, saved_text("drm_iso_language", ""))
     tx_drm_iso_country_var = tk.StringVar(root, saved_text("drm_iso_country", ""))
+    tx_drm_audio_codec_var = tk.StringVar(root, saved_text("drm_audio_codec", "xHE-AAC"))
+    tx_drm_interleaving_var = tk.StringVar(root, saved_text("drm_interleaving", "Long (2 s)"))
     drm_setup_state: dict[str, Any] = {
         "running": False,
         "previous_mode": (
@@ -1161,6 +1164,8 @@ def build_app() -> None:
             "drm_programme_type": tx_drm_programme_type_var.get(),
             "drm_iso_language": tx_drm_iso_language_var.get(),
             "drm_iso_country": tx_drm_iso_country_var.get(),
+            "drm_audio_codec": tx_drm_audio_codec_var.get(),
+            "drm_interleaving": tx_drm_interleaving_var.get(),
             "station_dbm": tx_power_var.get(),
             "audio_source": tx_audio_source_var.get(),
             "audio_device": tx_audio_device_var.get(),
@@ -1254,6 +1259,7 @@ def build_app() -> None:
         tx_station_name_var, tx_description_var, tx_frequency_var, tx_mode_var,
         tx_drm_service_label_var, tx_drm_service_id_var, tx_drm_language_var,
         tx_drm_programme_type_var, tx_drm_iso_language_var, tx_drm_iso_country_var,
+        tx_drm_audio_codec_var, tx_drm_interleaving_var,
         tx_power_var, tx_audio_source_var, tx_audio_device_var,
         tx_playlist_shuffle_var, tx_playlist_loop_var, tx_cw_text_var,
         tx_cw_wpm_var, tx_cw_loop_var, tx_allow_overlap_var, tx_logo_url_var,
@@ -2209,6 +2215,8 @@ def build_app() -> None:
                 drm_programme_type=tx_drm_programme_type_var.get(),
                 drm_iso_language=tx_drm_iso_language_var.get(),
                 drm_iso_country=tx_drm_iso_country_var.get(),
+                drm_audio_codec=tx_drm_audio_codec_var.get(),
+                drm_interleaving=tx_drm_interleaving_var.get().split(" ", 1)[0].casefold(),
             )
             if config["mode"] == "CW":
                 audio_source = "mic"
