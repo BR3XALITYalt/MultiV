@@ -147,6 +147,26 @@ class DiscordAuthValidationTests(unittest.TestCase):
         self.assertNotIn("window", vars(bridge))
         self.assertIn("_window", vars(bridge))
 
+    def test_restore_missing_requires_matching_restore_request(self):
+        manager = DiscordAuthManager(Queue())
+        manager._state = "restore-state"
+        manager._restore_only = True
+
+        self.assertFalse(manager._restore_missing("wrong-state"))
+        self.assertTrue(manager._restore_missing("restore-state"))
+        self.assertEqual(
+            manager.events.get_nowait(),
+            {"kind": "auth_restore_missing"},
+        )
+        self.assertFalse(manager._restore_missing("restore-state"))
+
+    def test_restore_missing_is_not_used_for_regular_login(self):
+        manager = DiscordAuthManager(Queue())
+        manager._state = "login-state"
+
+        self.assertFalse(manager._restore_missing("login-state"))
+        self.assertTrue(manager.events.empty())
+
     def test_auth_route_defaults_to_txity_route(self):
         manager = DiscordAuthManager(Queue())
         manager.configure(None, True)
