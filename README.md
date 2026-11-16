@@ -23,7 +23,7 @@ Open **Transmit** and enter your station name, frequency, and mode. Choose an au
 - **Desktop audio:** Select a Windows playback device.
 - **Playlist:** Add audio files or folders.
 
-Select **Start Transmission** to begin and **Stop Transmission** to finish. On Windows, TXITPY keeps the PC awake while a transmission runs. If a microphone or desktop-audio input pauses, TXITPY keeps the connection open until audio returns.
+Select **Start Transmission** to begin and **Stop Transmission** to finish. If TXITY's control or audio connection drops during a transmission, TXITPY retries automatically with increasing delays and restores the station configuration and PTT state after reconnecting. It keeps retrying until you select **Stop Transmission**. On Windows, TXITPY keeps the PC awake while a transmission runs. If a microphone or desktop-audio input pauses, TXITPY keeps the connection open until audio returns.
 
 TXITPY supports MP3, WAV, FLAC, OGG, and AIFF playlists. Use **Shuffle playlist** or **Loop playlist** as needed. TXITPY reads audio ahead during playback to reduce gaps. Imported folders refresh when files change; playlist changes take effect the next time you start playback.
 
