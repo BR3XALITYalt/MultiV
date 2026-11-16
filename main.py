@@ -45,13 +45,17 @@ class Station:
     rating: str = ""
     mode: str = ""
     details: str = ""
+    operator: str = ""
+    on_air: str = ""
 
     def as_row(self) -> dict[str, str]:
         return {
             "id": self.station_id,
             "station": self.name,
+            "operator": self.operator,
             "frequency": self.frequency,
             "mode": self.mode,
+            "on_air": self.on_air,
             "rating": self.rating,
             "description": self.description,
         }
@@ -155,6 +159,106 @@ def fetch_text(url: str) -> str:
         return response.read().decode(encoding, errors="replace")
 
 
+def format_duration(value: Any) -> str:
+    """Format an on-air duration supplied by TXITY in seconds."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+        return "Not reported"
+    total_seconds = int(value)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {seconds}s"
+    return f"{seconds}s"
+
+
+def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
+    """Parse the public TXITY users.json response without retaining comment data."""
+    if not isinstance(payload, dict):
+        raise ValueError("TXITY users.json did not return a JSON object.")
+
+    raw_stations = payload.get("stations")
+    if not isinstance(raw_stations, list):
+        raise ValueError("TXITY users.json did not contain a stations array.")
+
+    metric_names = (
+        "webClients",
+        "webAudioClients",
+        "sdrppClients",
+        "sdrppStreamingClients",
+        "sessions",
+        "transmitting",
+    )
+    metrics: dict[str, Any] = {
+        name: payload.get(name)
+        for name in metric_names
+        if isinstance(payload.get(name), int)
+        and not isinstance(payload.get(name), bool)
+        and payload.get(name) >= 0
+    }
+    updated_at = payload.get("updatedAtLocal")
+    if isinstance(updated_at, str) and updated_at.strip():
+        metrics["updatedAtLocal"] = updated_at.strip()[:64]
+
+    stations: list[Station] = []
+    for index, item in enumerate(raw_stations):
+        if not isinstance(item, dict):
+            continue
+
+        station_id = item.get("sessionId")
+        if not isinstance(station_id, str) or not station_id.strip():
+            station_id = f"station-{index}"
+
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            name = "Unknown station"
+
+        description = item.get("shortDescription")
+        if not isinstance(description, str) or not description.strip():
+            description = item.get("description")
+        if not isinstance(description, str):
+            description = ""
+
+        frequency = item.get("frequency")
+        if not isinstance(frequency, str) or not frequency.strip():
+            frequency = format_frequency(item.get("frequencyHz"))
+
+        mode = item.get("mode")
+        if not isinstance(mode, str):
+            mode = ""
+
+        average = item.get("ratingAverage")
+        count = item.get("ratingCount")
+        if (
+            isinstance(average, (int, float))
+            and not isinstance(average, bool)
+            and isinstance(count, int)
+            and not isinstance(count, bool)
+            and count > 0
+        ):
+            rating = f"★ {average:.2f} ({count})"
+        else:
+            rating = "Not rated"
+
+        operator = item.get("discordUsername")
+        if not isinstance(operator, str):
+            operator = ""
+
+        stations.append(Station(
+            station_id=station_id.strip(),
+            name=name.strip(),
+            description=description.strip(),
+            frequency=frequency.strip(),
+            rating=rating,
+            mode=mode.strip(),
+            operator=operator.strip(),
+            on_air=format_duration(item.get("onAirSeconds")),
+        ))
+
+    return metrics, stations
+
+
 def describe_status_socket_error(error: BaseException) -> str:
     """Describe a WebSocket failure without exposing credentials in its URL."""
     details = re.sub(
@@ -245,14 +349,15 @@ class TxityClient:
 
         def worker() -> None:
             try:
-                html = fetch_text(f"{BASE_URL}/")
-                stations = parse_stations(html)
+                payload = json.loads(fetch_text(f"{BASE_URL}/users.json"))
+                metrics, stations = parse_users_listing(payload)
                 self.events.put({
-                    "kind": "stations",
+                    "kind": "users_listing",
+                    "metrics": metrics,
                     "rows": [station.as_row() for station in stations],
                 })
-            except (HTTPError, URLError, TimeoutError, OSError) as exc:
-                self.events.put({"kind": "error", "text": f"Station refresh failed: {exc}"})
+            except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as exc:
+                self.events.put({"kind": "error", "text": f"Station refresh failed: {safe_error_text(str(exc))}"})
             finally:
                 self.refresh_lock.release()
 
@@ -402,7 +507,11 @@ def build_app() -> None:
     sample_rate = bs.Signal("Not reported")
     transmitters = bs.Signal("Not reported")
     clients = bs.Signal("Not reported")
+    sessions = bs.Signal("Not reported")
+    web_audio_clients = bs.Signal("Not reported")
+    sdrpp_streaming_clients = bs.Signal("Not reported")
     updated = bs.Signal("Waiting for server data")
+    users_listing_received = False
     summary = bs.Signal("Connect to load public station and server information.")
 
     def disconnect_discord() -> None:
@@ -499,6 +608,15 @@ def build_app() -> None:
                     with bs.Card(padding=18, gap=8, accent="primary"):
                         bs.Label("Connected clients", font="label", accent="secondary")
                         bs.Label(textsignal=clients, font="display-lg")
+                    with bs.Card(padding=18, gap=8, accent="primary"):
+                        bs.Label("Total sessions", font="label", accent="secondary")
+                        bs.Label(textsignal=sessions, font="display-lg")
+                    with bs.Card(padding=18, gap=8, accent="primary"):
+                        bs.Label("Web audio clients", font="label", accent="secondary")
+                        bs.Label(textsignal=web_audio_clients, font="display-lg")
+                    with bs.Card(padding=18, gap=8, accent="primary"):
+                        bs.Label("SDR++ streaming", font="label", accent="secondary")
+                        bs.Label(textsignal=sdrpp_streaming_clients, font="display-lg")
                 with bs.Card(padding=18, gap=10, accent="primary"):
                     bs.Label(textsignal=summary, font="body-lg", wrap_width=760)
                     bs.Label(textsignal=updated, accent="secondary", font="caption")
@@ -518,9 +636,11 @@ def build_app() -> None:
                     )
                     station_table = bs.DataTable(
                         columns=[
-                            {"key": "station", "text": "Station", "width": 190},
+                            {"key": "station", "text": "Station", "width": 170},
+                            {"key": "operator", "text": "Operator", "width": 130},
                             {"key": "frequency", "text": "Frequency", "width": 115},
                             {"key": "mode", "text": "Mode", "width": 90},
+                            {"key": "on_air", "text": "On air", "width": 85},
                             {"key": "rating", "text": "Rating", "width": 110},
                             {"key": "description", "text": "Description"},
                         ],
@@ -593,6 +713,33 @@ def build_app() -> None:
                         on_click=lambda: webbrowser.open("https://github.com/BR3XALITYalt/TXITPY"),
                     )
 
+        def apply_users_metrics(metrics: dict[str, Any]) -> None:
+            nonlocal users_listing_received
+            users_listing_received = True
+
+            def metric_text(name: str) -> str:
+                value = metrics.get(name)
+                return str(value) if isinstance(value, int) else "Not reported"
+
+            web_count = metric_text("webClients")
+            sdrpp_count = metric_text("sdrppClients")
+            if web_count != "Not reported" and sdrpp_count != "Not reported":
+                clients.set(f"{web_count} web / {sdrpp_count} SDR++")
+            else:
+                clients.set("Not reported")
+
+            transmitters.set(metric_text("transmitting"))
+            sessions.set(metric_text("sessions"))
+            web_audio_clients.set(metric_text("webAudioClients"))
+            sdrpp_streaming_clients.set(metric_text("sdrppStreamingClients"))
+
+            timestamp = metrics.get("updatedAtLocal")
+            updated.set(
+                f"TXITY users listing updated at {timestamp}"
+                if isinstance(timestamp, str) and timestamp
+                else "TXITY users listing refreshed"
+            )
+
         def apply_status(data: dict[str, Any]) -> None:
             center.set(format_frequency(data.get("centerHz")))
             low, high = data.get("bandMinHz"), data.get("bandMaxHz")
@@ -603,10 +750,11 @@ def build_app() -> None:
                 f"{rate / 1_000_000:.3f} MS/s"
                 if isinstance(rate, (int, float)) else "Not reported"
             )
-            transmitters.set(str(data.get("transmittingCount", "Not reported")))
-            web_clients, sdrpp_clients = data.get("webClients"), data.get("sdrppClients")
-            if isinstance(web_clients, int) and isinstance(sdrpp_clients, int):
-                clients.set(f"{web_clients} web / {sdrpp_clients} SDR++")
+            if not users_listing_received:
+                transmitters.set(str(data.get("transmittingCount", "Not reported")))
+                web_clients, sdrpp_clients = data.get("webClients"), data.get("sdrppClients")
+                if isinstance(web_clients, int) and isinstance(sdrpp_clients, int):
+                    clients.set(f"{web_clients} web / {sdrpp_clients} SDR++")
             protection = "enabled" if data.get("protection") else "not reported"
             summary.set(
                 f"Server protection: {protection}. "
@@ -640,10 +788,19 @@ def build_app() -> None:
                             auth_browser_status.set("TXITY secure Discord sign-in is available.")
                         else:
                             auth_browser_status.set("TXITY secure Discord sign-in is not enabled.")
-                elif kind == "stations":
+                elif kind == "users_listing":
                     rows = event.get("rows", [])
                     station_table.set_rows(rows)
-                    updated.set(f"Station list refreshed: {len(rows)} entries")
+                    apply_users_metrics(event.get("metrics", {}))
+                    summary.set(
+                        f"TXITY currently reports {event.get('metrics', {}).get('transmitting', 'an unknown number')} "
+                        "transmitting stations."
+                    )
+                    print(
+                        f"[TXITPY] Loaded {len(rows)} stations from users.json.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                 elif kind == "auth_token":
                     print(
                         "[TXITPY] Desktop app received the Discord session event.",
