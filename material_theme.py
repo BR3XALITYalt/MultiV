@@ -281,10 +281,11 @@ def rounded_widget_classes(tk):
             self._outline_color = outline or background
             self._corner_radius = radius
 
-            # Child widgets have square backgrounds. Keep them inside the
-            # rounded corner tangent so those backgrounds cannot cover the arcs.
-            inset_x = max(padding if padding_x is None else padding_x, radius + 2)
-            inset_y = max(padding if padding_y is None else padding_y, radius + 2)
+            # A child rectangle is entirely inside the corner arc once its
+            # nearest corner clears the circle's diagonal by a small margin.
+            corner_clearance = math.ceil(radius * (1 - math.sqrt(0.5))) + 2
+            inset_x = max(padding if padding_x is None else padding_x, corner_clearance)
+            inset_y = max(padding if padding_y is None else padding_y, corner_clearance)
             super().__init__(
                 parent,
                 bg=self._outside_background,
