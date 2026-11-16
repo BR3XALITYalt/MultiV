@@ -3552,6 +3552,7 @@ def build_app() -> None:
                     f"Audio frames sent: {event.get('frames_sent', 0)}"
                     f" · dropped: {event.get('frames_dropped', 0)}"
                     f" · queued: {event.get('queue_depth', 0)}"
+                    f" · playlist buffer underruns: {event.get('playlist_underruns', 0)}"
                 )
 
             elif kind == "tx_playlist_track":
