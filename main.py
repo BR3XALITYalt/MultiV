@@ -42,6 +42,7 @@ class Station:
     station_id: str
     name: str = "Unknown station"
     description: str = ""
+    description_source: str = ""
     frequency: str = ""
     rating: str = ""
     mode: str = ""
@@ -70,6 +71,7 @@ class Station:
             "on_air": self.on_air,
             "rating": self.rating,
             "description": self.description,
+            "description_source": self.description_source,
         }
 
     def as_record(self) -> dict[str, Any]:
@@ -201,13 +203,24 @@ def format_duration(value: Any) -> str:
     return f"{seconds}s"
 
 
+def describe_media_url(value: str) -> str:
+    """Return a console-safe media URL without query strings or fragments."""
+    try:
+        parsed = urlparse(value)
+        if not parsed.scheme or not parsed.netloc:
+            return value[:180]
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"[:240]
+    except ValueError:
+        return "[invalid media URL]"
+
+
 def normalize_media_url(value: Any) -> str:
     """Allow station media only from TXITY or Discord's image CDN."""
     if not isinstance(value, str) or not value.strip():
         return ""
     raw = value.strip()
     if raw.startswith("//"):
-        return ""
+        raw = f"https:{raw}"
     url = urljoin(f"{BASE_URL}/", raw)
     parsed = urlparse(url)
     if parsed.scheme != "https" or parsed.hostname not in {
@@ -290,28 +303,58 @@ def _clean_station_comments(value: Any) -> list[dict[str, str]]:
     if not isinstance(value, list):
         return []
     comments: list[dict[str, str]] = []
+
+    def first_text(source: Any, *names: str, limit: int = 600) -> str:
+        if not isinstance(source, dict):
+            return ""
+        for name in names:
+            candidate = source.get(name)
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()[:limit]
+        return ""
+
     for item in value[:30]:
         if not isinstance(item, dict):
             continue
 
-        def pick(*names: str, limit: int = 600) -> str:
-            for name in names:
-                candidate = item.get(name)
-                if isinstance(candidate, str) and candidate.strip():
-                    return candidate.strip()[:limit]
-            return ""
+        user = item.get("user")
+        if not isinstance(user, dict):
+            user = item.get("author")
+        if not isinstance(user, dict):
+            user = {}
 
-        author = pick("discordUsername", "username", "author", "name", limit=80) or "TXITY user"
-        text_value = pick("text", "content", "body")
+        author = (
+            first_text(item, "discordUsername", "username", "authorName", "name", limit=80)
+            or first_text(user, "globalName", "global_name", "username", "name", limit=80)
+            or "TXITY user"
+        )
+        text_value = first_text(item, "text", "content", "body", "message")
         if not text_value:
             continue
+
+        avatar_value = ""
+        for source in (item, user):
+            avatar_value = first_text(
+                source,
+                "discordAvatarUrl",
+                "avatarUrl",
+                "avatar_url",
+                "authorAvatarUrl",
+                "avatar",
+                limit=512,
+            )
+            if avatar_value:
+                break
+
+        avatar_url = normalize_media_url(avatar_value)
         comments.append({
             "author": author,
             "text": text_value,
-            "timestamp": pick("createdAtLocal", "createdAt", "timestamp", "date", limit=80),
-            "avatar_url": normalize_media_url(
-                item.get("discordAvatarUrl", item.get("avatarUrl", ""))
+            "timestamp": (
+                first_text(item, "createdAtLocal", "createdAt", "timestamp", "date", limit=80)
+                or first_text(user, "createdAtLocal", "createdAt", limit=80)
             ),
+            "avatar_url": avatar_url,
         })
     return comments
 
@@ -357,11 +400,31 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
         if not isinstance(name, str) or not name.strip():
             name = "Unknown station"
 
-        description = item.get("shortDescription")
-        if not isinstance(description, str) or not description.strip():
-            description = item.get("description")
-        if not isinstance(description, str):
-            description = ""
+        description = ""
+        description_source = ""
+        for field_name in ("shortDescription", "short_description", "description", "summary"):
+            candidate = item.get(field_name)
+            if isinstance(candidate, str) and candidate.strip():
+                description = candidate.strip()
+                description_source = field_name
+                break
+
+        raw_details = item.get("details")
+        if isinstance(raw_details, str):
+            profile_details = raw_details.strip()
+        elif isinstance(raw_details, dict):
+            profile_details = ""
+            for field_name in ("text", "description", "content", "body", "about"):
+                candidate = raw_details.get(field_name)
+                if isinstance(candidate, str) and candidate.strip():
+                    profile_details = candidate.strip()
+                    break
+        else:
+            profile_details = ""
+
+        if not description and profile_details:
+            description = profile_details
+            description_source = "details"
 
         frequency = item.get("frequency")
         if not isinstance(frequency, str) or not frequency.strip():
@@ -393,16 +456,14 @@ def parse_users_listing(payload: Any) -> tuple[dict[str, Any], list[Station]]:
         ] if isinstance(raw_images, list) else []
         logo_url = normalize_media_url(item.get("logoUrl")) or (image_urls[0] if image_urls else "")
 
-        profile_details = item.get("details")
-        if not isinstance(profile_details, str):
-            profile_details = ""
         comments = _clean_station_comments(item.get("comments"))
         likes = item.get("likes")
         comment_count = item.get("commentCount")
         stations.append(Station(
             station_id=station_id.strip()[:160],
             name=name.strip()[:120],
-            description=description.strip()[:500],
+            description=description.strip()[:1_000],
+            description_source=description_source,
             frequency=frequency.strip()[:40],
             rating=rating,
             mode=mode.strip()[:24],
@@ -432,7 +493,11 @@ def fetch_station_image(url: str) -> bytes:
 
     request = Request(
         safe_url,
-        headers={"User-Agent": USER_AGENT, "Accept": "image/*"},
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Referer": f"{BASE_URL}/",
+        },
     )
     with urlopen(request, timeout=HTTP_TIMEOUT) as response:
         if not normalize_media_url(response.geturl()):
@@ -758,7 +823,7 @@ def build_app() -> None:
     selected_station_id = ""
     image_cache: dict[tuple[str, int], Any] = {}
     image_loading: set[str] = set()
-    image_labels: dict[str, list[tuple[tk.Label, int]]] = {}
+    image_labels: dict[str, list[tuple[tk.Label, int, str]]] = {}
     current_page = "overview"
     shell_frame: tk.Frame | None = None
     content_frame: tk.Frame | None = None
@@ -898,19 +963,38 @@ def build_app() -> None:
         )
 
     def request_station_image(url: str) -> None:
-        if not url or url in image_loading:
+        if not url:
             return
+        display_url = describe_media_url(url)
+        if url in image_loading:
+            print(
+                f"[TXITPY] Image request reused while loading: {display_url}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return
+
         image_loading.add(url)
+        print(
+            f"[TXITPY] Image request started: {display_url}",
+            file=sys.stderr,
+            flush=True,
+        )
 
         def worker() -> None:
             try:
                 data = fetch_station_image(url)
-                client.events.put({"kind": "station_image", "url": url, "data": data})
+                client.events.put({
+                    "kind": "station_image",
+                    "url": url,
+                    "data": data,
+                    "byte_count": len(data),
+                })
             except Exception as exc:
                 client.events.put({
                     "kind": "station_image_error",
                     "url": url,
-                    "text": safe_error_text(str(exc), max_chars=300),
+                    "text": safe_error_text(str(exc), max_chars=500),
                 })
 
         threading.Thread(
@@ -925,7 +1009,7 @@ def build_app() -> None:
         *,
         size: int,
         placeholder: str = "TX",
-        radius: int = 14,
+        role: str = "station image",
     ) -> tk.Label:
         surface = parent.cget("bg")
         label = tk.Label(
@@ -941,6 +1025,11 @@ def build_app() -> None:
             anchor="center",
         )
         if not url:
+            print(
+                f"[TXITPY] Image skipped: {role} has no image URL.",
+                file=sys.stderr,
+                flush=True,
+            )
             return label
 
         key = (url, size)
@@ -948,17 +1037,21 @@ def build_app() -> None:
         if photo is not None:
             label.configure(image=photo, text="", width=size, height=size, bg=surface)
             label.image = photo
+            print(
+                f"[TXITPY] Image cache hit: {role} ({describe_media_url(url)})",
+                file=sys.stderr,
+                flush=True,
+            )
             return label
 
-        image_labels.setdefault(url, []).append((label, size))
+        image_labels.setdefault(url, []).append((label, size, role))
         request_station_image(url)
         return label
 
     def apply_station_image(url: str, data: bytes) -> None:
         image_loading.discard(url)
         waiting = image_labels.pop(url, [])
-        if not waiting:
-            return
+        display_url = describe_media_url(url)
         try:
             from io import BytesIO
             from PIL import Image, ImageOps, ImageTk
@@ -967,12 +1060,30 @@ def build_app() -> None:
             source.load()
             source = source.convert("RGBA")
         except Exception as exc:
-            print(f"[TXITPY] Station image could not be decoded: {safe_error_text(str(exc), 200)}", file=sys.stderr, flush=True)
+            print(
+                f"[TXITPY] Image decode error: {display_url}: "
+                f"{safe_error_text(str(exc), 300)}",
+                file=sys.stderr,
+                flush=True,
+            )
             return
 
-        for label, size in waiting:
+        print(
+            f"[TXITPY] Image downloaded: {display_url} "
+            f"({len(data)} bytes, {source.width}x{source.height})",
+            file=sys.stderr,
+            flush=True,
+        )
+        applied = 0
+        for label, size, role in waiting:
             try:
                 if not label.winfo_exists():
+                    print(
+                        f"[TXITPY] Image target discarded: {role} widget no longer exists "
+                        f"({display_url})",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                     continue
                 image = ImageOps.fit(
                     source,
@@ -990,8 +1101,26 @@ def build_app() -> None:
                     bg=label.cget("bg"),
                 )
                 label.image = photo
-            except tk.TclError:
-                continue
+                applied += 1
+                print(
+                    f"[TXITPY] Image applied: {role} ({size}x{size}, {display_url})",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            except tk.TclError as exc:
+                print(
+                    f"[TXITPY] Image apply error: {role} ({display_url}): "
+                    f"{safe_error_text(str(exc), 200)}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+        if waiting and not applied:
+            print(
+                f"[TXITPY] Image downloaded but not displayed: {display_url}",
+                file=sys.stderr,
+                flush=True,
+            )
 
     def bind_station_card(widget: tk.Widget, station_id: str) -> None:
         widget.configure(cursor="hand2")
@@ -1117,7 +1246,7 @@ def build_app() -> None:
             content.pack(fill="both", expand=True)
 
             logo_url = row.get("logo_url") or ""
-            image = make_image_label(content, logo_url, size=112)
+            image = make_image_label(content, logo_url, size=112, role=f"station card logo: {row.get('station', 'unknown')}")
             image.pack(side="left", padx=(0, 14), pady=4)
 
             details = tk.Frame(content, bg=palette["surfaceContainerLow"])
@@ -1487,7 +1616,7 @@ def build_app() -> None:
         upper = tk.Frame(profile, bg=palette["surfaceContainerLow"])
         upper.pack(fill="x")
 
-        logo = make_image_label(upper, str(row.get("logo_url") or ""), size=176, placeholder="TXITY")
+        logo = make_image_label(upper, str(row.get("logo_url") or ""), size=176, placeholder="TXITY", role=f"station profile logo: {row.get('station', 'unknown')}")
         logo.pack(side="left", padx=(0, 16), pady=(0, 12))
 
         heading = tk.Frame(upper, bg=palette["surfaceContainerLow"])
@@ -1533,6 +1662,7 @@ def build_app() -> None:
             avatar_url,
             size=42,
             placeholder="D",
+            role=f"station owner avatar: {row.get('station', 'unknown')}",
         )
         avatar.pack(side="left", padx=(0, 10))
         make_label(
@@ -1588,6 +1718,7 @@ def build_app() -> None:
                         str(block.get("image_url")),
                         size=min(360, max(80, int(width * 5))),
                         placeholder="Image",
+                        role=f"station page image: {row.get('station', 'unknown')}",
                     )
                     image_block.place(
                         relx=x / 100,
@@ -1653,7 +1784,7 @@ def build_app() -> None:
             gallery = tk.Frame(gallery_card, bg=palette["surfaceContainerLow"])
             gallery.pack(anchor="w")
             for url in gallery_urls[:6]:
-                make_image_label(gallery, url, size=140, placeholder="Image").pack(
+                make_image_label(gallery, url, size=140, placeholder="Image", role=f"station gallery: {row.get('station', 'unknown')}").pack(
                     side="left",
                     padx=(0, 10),
                 )
@@ -1683,6 +1814,7 @@ def build_app() -> None:
                     str(comment.get("avatar_url") or ""),
                     size=40,
                     placeholder="D",
+                    role=f"comment avatar: {comment.get('author', 'unknown')}",
                 )
                 comment_avatar.pack(side="left", padx=(0, 10))
                 comment_body = tk.Frame(comment_row, bg=palette["surfaceContainerLow"])
@@ -2006,6 +2138,38 @@ def build_app() -> None:
                     if station_rows else
                     "TXITY users.json loaded successfully, but its stations array is empty."
                 )
+                for station in station_rows:
+                    station_name = safe_error_text(str(station.get("station") or "Unknown station"), 100)
+                    description = str(station.get("description") or "").strip()
+                    source = str(station.get("description_source") or "none")
+                    if description:
+                        print(
+                            f"[TXITPY] Description loaded: {station_name} "
+                            f"(source={source}, {len(description)} characters).",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"[TXITPY] Description missing: {station_name} "
+                            "(shortDescription, description, summary and details were empty).",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                    profile_details = str(station.get("details_text") or "").strip()
+                    if profile_details:
+                        print(
+                            f"[TXITPY] Station details loaded: {station_name} "
+                            f"({len(profile_details)} characters).",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"[TXITPY] Station details empty: {station_name}.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
                 update_station_tree()
                 summary_var.set(
                     f"TXITY currently reports "
@@ -2027,7 +2191,16 @@ def build_app() -> None:
                 url = event.get("url")
                 if isinstance(url, str):
                     image_loading.discard(url)
-                    image_labels.pop(url, None)
+                    waiting = image_labels.pop(url, [])
+                    roles = sorted({role for _label, _size, role in waiting})
+                    role_text = ", ".join(roles) if roles else "no active image widgets"
+                    print(
+                        f"[TXITPY] Image load error: {role_text} "
+                        f"({describe_media_url(url)}): "
+                        f"{safe_error_text(str(event.get('text') or 'Unknown image error'), 500)}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
 
             elif kind == "stations_error":
                 details = safe_error_text(
