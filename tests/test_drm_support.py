@@ -13,6 +13,7 @@ from drm_support import (
     VISUAL_STUDIO_BUILD_TOOLS_LABEL,
     VISUAL_STUDIO_BUILD_TOOLS_URL,
     VISUAL_STUDIO_WORKLOAD,
+    _visual_studio_build_tools_command,
     LocalDRMPlaylistServer,
     _patch_decdrm_output_validation,
     _run_command,
@@ -48,6 +49,20 @@ class DRMConfigurationTests(unittest.TestCase):
             "Microsoft.VisualStudio.Workload.VCTools",
         )
         self.assertIn("Desktop development with C++", VISUAL_STUDIO_BUILD_TOOLS_LABEL)
+
+    def test_build_tools_installer_only_modifies_buildtools_installations(self):
+        installer = Path("vs_BuildTools.exe")
+        buildtools = Path("C:/Program Files/Microsoft Visual Studio/18/BuildTools")
+        community = Path("C:/Program Files/Microsoft Visual Studio/18/Community")
+
+        buildtools_command = _visual_studio_build_tools_command(installer, buildtools)
+        community_command = _visual_studio_build_tools_command(installer, community)
+
+        self.assertIn("modify", buildtools_command)
+        self.assertIn(str(buildtools), buildtools_command)
+        self.assertNotIn("modify", community_command)
+        self.assertIn(VISUAL_STUDIO_WORKLOAD, community_command)
+        self.assertIn("--includeRecommended", community_command)
 
     def test_decdrm_source_is_pinned(self):
         self.assertEqual(DECDRM_VERSION, "0.7.1")
