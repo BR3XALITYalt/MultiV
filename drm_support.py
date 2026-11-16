@@ -121,7 +121,7 @@ def _visual_studio_installation_path(*, require_cpp: bool) -> Path | None:
         return None
     command = [
         str(vswhere),
-        "-latest",
+        "-all" if require_cpp else "-latest",
         "-products",
         "*",
     ]
