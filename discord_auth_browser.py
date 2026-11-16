@@ -230,7 +230,13 @@ def main(argv: list[str] | None = None) -> int:
             loaded_window.run_js(WATCHER_SCRIPT)
         except Exception as exc:
             # Navigation can race script injection, so keep the window open
-            # and record the underlying browser error for diagnosis.
+            # and report the underlying browser error.
+            details = format_exception_details(exc)
+            print(
+                f"[TXITPY browser window script error]\n{details}",
+                file=sys.stderr,
+                flush=True,
+            )
             write_diagnostic("inject-auth-watcher", exc)
 
     try:
