@@ -9,6 +9,11 @@ from transmitter import (
     AUDIO_FRAME_INTERVAL_SECONDS,
     PLAYLIST_AUDIO_QUEUE_FRAMES,
     PLAYLIST_PREROLL_FRAMES,
+    LIVE_AUDIO_SILENCE_GRACE_SECONDS,
+    CONTROL_RECONNECT_GRACE_SECONDS,
+    begin_windows_system_awake,
+    end_windows_system_awake,
+    should_send_live_audio_silence,
     next_playlist_frame_deadline,
     playlist_frame_wait_seconds,
     build_audio_socket_url,
@@ -71,6 +76,19 @@ class TransmitterProtocolTests(unittest.TestCase):
             PLAYLIST_PREROLL_FRAMES * AUDIO_FRAME_INTERVAL_SECONDS,
             2.7306666666666666,
         )
+
+    def test_live_audio_silence_only_fills_sustained_input_gaps(self):
+        self.assertEqual(LIVE_AUDIO_SILENCE_GRACE_SECONDS, 0.1)
+        self.assertFalse(should_send_live_audio_silence(10.0, 10.05))
+        self.assertTrue(should_send_live_audio_silence(10.0, 10.1))
+
+    def test_control_reconnect_grace_allows_short_disconnects(self):
+        self.assertEqual(CONTROL_RECONNECT_GRACE_SECONDS, 20.0)
+
+    def test_windows_awake_request_cleanup_resets_execution_state(self):
+        states = []
+        end_windows_system_awake((None, states.append))
+        self.assertEqual(states, [0x80000000])
 
     def test_parse_frequency_units(self):
         self.assertEqual(parse_rf_frequency("7.250 MHz"), 7_250_000)
