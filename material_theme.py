@@ -7,7 +7,7 @@ MATERIAL_3_EXPRESSIVE = {
     "name": "txity-m3",
     "display_name": "TXITY Material 3",
     "light": {
-        "primary": "#1B6EF3",
+        "primary": "#185ABC",
         "onPrimary": "#FFFFFF",
         "primaryContainer": "#D9E2FF",
         "onPrimaryContainer": "#001945",
