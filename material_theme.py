@@ -5,41 +5,6 @@ from __future__ import annotations
 import math
 
 
-def rounded_rectangle_points(
-    width: float,
-    height: float,
-    radius: float,
-    *,
-    segments: int = 14,
-) -> list[float]:
-    """Return an evenly sampled rounded-rectangle outline in clockwise order."""
-    if width <= 0 or height <= 0:
-        raise ValueError("Rounded rectangle dimensions must be positive.")
-    if segments < 2:
-        raise ValueError("A rounded rectangle needs at least two arc segments.")
-
-    radius = max(0.0, min(float(radius), width / 2, height / 2))
-    if radius == 0:
-        return [0, 0, width, 0, width, height, 0, height]
-
-    corners = (
-        (radius, radius, math.pi, 1.5 * math.pi),
-        (width - radius, radius, 1.5 * math.pi, 2 * math.pi),
-        (width - radius, height - radius, 0, 0.5 * math.pi),
-        (radius, height - radius, 0.5 * math.pi, math.pi),
-    )
-    points: list[float] = []
-    for center_x, center_y, start, end in corners:
-        for step in range(segments + 1):
-            angle = start + (end - start) * step / segments
-            points.extend((
-                center_x + radius * math.cos(angle),
-                center_y + radius * math.sin(angle),
-            ))
-    return points
-
-
-
 def render_rounded_rectangle(
     width: int,
     height: int,
