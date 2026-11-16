@@ -11,12 +11,15 @@ import base64
 import hmac
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
 import sys
 import threading
 import time
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from queue import Queue
@@ -26,7 +29,90 @@ from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 BASE_URL = "https://txity.radiodiscussion.org"
 AUTH_START_URL = f"{BASE_URL}/auth/discord/start"
 CALLBACK_TIMEOUT_SECONDS = 300
-MAX_CALLBACK_BODY = 12_000
+MAX_CALLBACK_BODY = 20_000
+
+
+def diagnostic_log_path(filename: str = "discord-auth.log") -> Path:
+    """Return the per-user location for diagnostic logs."""
+    root = Path(os.environ.get("LOCALAPPDATA") or Path.home())
+    return root / "TXITPY" / "logs" / filename
+
+
+def safe_error_text(value: BaseException | str, max_chars: int = 16_000) -> str:
+    """Preserve exception context while removing URLs and credential values."""
+    message = str(value).replace("\r", "")
+    message = re.sub(r"https?://[^\s'\"<>]+", "[URL redacted]", message)
+    message = re.sub(
+        r"""(?i)(["']?(?:access[_-]?token|refresh[_-]?token|discord[_-]?auth|authtoken|token|code|state|secret|sessionsecret)["']?\s*[:=]\s*)["']?([^&\s,"'}]+)["']?""",
+        r"\1[redacted]",
+        message,
+    )
+    message = re.sub(r"(?i)\bBearer\s+[^\s,]+", "Bearer [redacted]", message)
+    message = re.sub(r"\b[A-Za-z0-9_-]{48,}\b", "[long value redacted]", message)
+    message = "".join(
+        character for character in message
+        if character in "\n\t" or character.isprintable()
+    )
+    return message[:max_chars] or "No additional error details were provided."
+
+
+def format_exception_details(error: BaseException, max_chars: int = 16_000) -> str:
+    """Format a complete traceback and sanitize secrets before displaying it."""
+    details = "".join(
+        traceback.format_exception(type(error), error, error.__traceback__)
+    )
+    return safe_error_text(details, max_chars=max_chars)
+
+
+def write_diagnostic_text(
+    stage: str,
+    details: str,
+    filename: str = "discord-auth.log",
+) -> Path | None:
+    """Append sanitized diagnostic details to a local log."""
+    path = diagnostic_log_path(filename)
+    clean_details = safe_error_text(details, max_chars=24_000)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(
+                f"{datetime.now(timezone.utc).isoformat()} [{stage}]\n"
+                f"{clean_details}\n\n"
+            )
+        return path
+    except OSError:
+        return None
+
+
+def write_diagnostic(
+    stage: str,
+    error: BaseException,
+    filename: str = "discord-auth.log",
+) -> Path | None:
+    """Append a sanitized exception and its full traceback to the local log."""
+    return write_diagnostic_text(
+        stage,
+        format_exception_details(error),
+        filename=filename,
+    )
+
+
+def read_diagnostic_since(
+    offset: int = 0,
+    filename: str = "discord-auth.log",
+    max_chars: int = 14_000,
+) -> str:
+    """Read diagnostic entries written after a browser process was started."""
+    path = diagnostic_log_path(filename)
+    try:
+        with path.open("rb") as stream:
+            stream.seek(max(0, offset))
+            return safe_error_text(
+                stream.read().decode("utf-8", errors="replace"),
+                max_chars=max_chars,
+            )
+    except OSError:
+        return ""
 
 
 def is_auth_token(value: Any) -> bool:
@@ -272,10 +358,7 @@ class DiscordAuthManager:
                 if path == "/failure":
                     raw_message = payload.get("message")
                     if isinstance(raw_message, str):
-                        message = "".join(
-                            character for character in raw_message[:1800]
-                            if character.isprintable() or character in "\\n\\t"
-                        )
+                        message = safe_error_text(raw_message, max_chars=16_000)
                     else:
                         message = "The embedded sign-in window could not start."
                     if not manager._fail(state, message):
@@ -335,6 +418,11 @@ class DiscordAuthManager:
 
         complete_url = f"http://127.0.0.1:{server.server_port}/complete"
         helper_path = Path(__file__).with_name("discord_auth_browser.py")
+        log_path = diagnostic_log_path()
+        try:
+            diagnostic_offset = log_path.stat().st_size
+        except OSError:
+            diagnostic_offset = 0
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
         try:
             process = subprocess.Popen(
@@ -344,12 +432,17 @@ class DiscordAuthManager:
                 stderr=subprocess.DEVNULL,
                 creationflags=creation_flags,
             )
-        except OSError:
+        except OSError as exc:
             self._stop_server_for_state(state)
-            self.events.put({
-                "kind": "auth_error",
-                "text": "The embedded sign-in window could not be started.",
-            })
+            details = format_exception_details(exc)
+            saved_log = write_diagnostic("launch-browser-process", exc)
+            message = (
+                "TXITPY could not launch the sign-in browser process.\n\n"
+                f"{details}"
+            )
+            if saved_log is not None:
+                message += f"\n\nDiagnostic log: {saved_log}"
+            self.events.put({"kind": "auth_error", "text": message})
             return
 
         with self._lock:
@@ -360,12 +453,17 @@ class DiscordAuthManager:
         })
         threading.Thread(
             target=self._watch_browser,
-            args=(process, state),
+            args=(process, state, diagnostic_offset),
             daemon=True,
             name="txity-auth-browser-monitor",
         ).start()
 
-    def _watch_browser(self, process: subprocess.Popen[Any], state: str) -> None:
+    def _watch_browser(
+        self,
+        process: subprocess.Popen[Any],
+        state: str,
+        diagnostic_offset: int,
+    ) -> None:
         exit_code = process.wait()
         with self._lock:
             if self._browser_process is process:
@@ -377,11 +475,25 @@ class DiscordAuthManager:
             )
         if active:
             self._stop_server_for_state(state)
-            message = (
-                "The sign-in window was closed before Discord sign-in completed."
-                if exit_code == 0
-                else "The embedded sign-in window stopped unexpectedly. Check that WebView2 is installed."
-            )
+            if exit_code == 0:
+                message = (
+                    "The sign-in window was closed before Discord sign-in completed. "
+                    "Process exit code: 0."
+                )
+            else:
+                details = read_diagnostic_since(diagnostic_offset)
+                message = (
+                    "The embedded sign-in window exited unexpectedly. "
+                    f"Process exit code: {exit_code}."
+                )
+                if details:
+                    message += f"\n\nBrowser diagnostics:\n{details}"
+                else:
+                    message += (
+                        "\n\nThe browser process did not write a diagnostic traceback. "
+                        "Check the WebView2 Runtime installation and the Python environment."
+                    )
+                message += f"\n\nDiagnostic log: {diagnostic_log_path()}"
             self.events.put({"kind": "auth_error", "text": message})
 
     def _fail(self, state: str, message: str) -> bool:
