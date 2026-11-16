@@ -1,4 +1,7 @@
+import tempfile
+import threading
 import unittest
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from transmitter import (
@@ -9,6 +12,7 @@ from transmitter import (
     AUDIO_FRAME_INTERVAL_SECONDS,
     PLAYLIST_AUDIO_QUEUE_FRAMES,
     PLAYLIST_PREROLL_FRAMES,
+    prepare_playlist_audio_cache,
     next_playlist_frame_deadline,
     playlist_frame_wait_seconds,
     build_audio_socket_url,
@@ -61,8 +65,63 @@ class TransmitterProtocolTests(unittest.TestCase):
 
     def test_playlist_buffer_has_room_for_preroll(self):
         self.assertGreater(PLAYLIST_AUDIO_QUEUE_FRAMES, PLAYLIST_PREROLL_FRAMES)
-        self.assertEqual(PLAYLIST_AUDIO_QUEUE_FRAMES, 256)
-        self.assertEqual(PLAYLIST_PREROLL_FRAMES, 96)
+        self.assertEqual(PLAYLIST_AUDIO_QUEUE_FRAMES, 2_048)
+        self.assertEqual(PLAYLIST_PREROLL_FRAMES, 512)
+
+    def test_playlist_audio_is_predecoded_to_frame_aligned_cache(self):
+        import numpy as np
+        import soundfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first_path = root / "first.wav"
+            second_path = root / "second.ogg"
+            first_samples = np.linspace(-0.5, 0.5, 4_800, dtype=np.float32)
+            second_samples = np.linspace(0.5, -0.5, 4_410, dtype=np.float32)
+            soundfile.write(str(first_path), first_samples, 48_000, format="WAV")
+            soundfile.write(
+                str(second_path),
+                second_samples,
+                44_100,
+                format="OGG",
+                subtype="VORBIS",
+            )
+
+            progress = []
+            cache, segments = prepare_playlist_audio_cache(
+                [str(first_path), str(second_path)],
+                threading.Event(),
+                on_progress=lambda path, index, count: progress.append((path, index, count)),
+            )
+            try:
+                self.assertEqual(
+                    progress,
+                    [
+                        (str(first_path), 1, 2),
+                        (str(second_path), 2, 2),
+                    ],
+                )
+                self.assertEqual(list(segments), [str(first_path), str(second_path)])
+
+                first_offset, first_size = segments[str(first_path)]
+                second_offset, second_size = segments[str(second_path)]
+                self.assertEqual(first_offset, 0)
+                self.assertEqual(second_offset, first_size)
+                for offset, size in segments.values():
+                    self.assertEqual(offset % FRAME_BYTES, 0)
+                    self.assertGreater(size, 0)
+                    self.assertEqual(size % FRAME_BYTES, 0)
+
+                cache.seek(first_offset)
+                first_audio = np.frombuffer(cache.read(first_size), dtype="<f4")
+                cache.seek(second_offset)
+                second_audio = np.frombuffer(cache.read(second_size), dtype="<f4")
+                self.assertTrue(np.isfinite(first_audio).all())
+                self.assertTrue(np.isfinite(second_audio).all())
+                self.assertGreater(np.max(np.abs(first_audio)), 0.1)
+                self.assertGreater(np.max(np.abs(second_audio)), 0.1)
+            finally:
+                cache.close()
 
     def test_parse_frequency_units(self):
         self.assertEqual(parse_rf_frequency("7.250 MHz"), 7_250_000)
