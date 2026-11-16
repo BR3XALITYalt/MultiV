@@ -4,8 +4,8 @@ from __future__ import annotations
 
 
 MATERIAL_3_EXPRESSIVE = {
-    "name": "txity-m3",
-    "display_name": "TXITY Material 3",
+    "name": "txitpy-m3",
+    "display_name": "TXITPY Material 3",
     "light": {
         "primary": "#185ABC",
         "onPrimary": "#FFFFFF",
