@@ -2,6 +2,7 @@ import base64
 import json
 import time
 import unittest
+from queue import Queue
 
 from discord_auth import (
     AUTH_START_URL,
@@ -69,25 +70,25 @@ class DiscordAuthValidationTests(unittest.TestCase):
         self.assertIsNone(user_from_txity_token(token))
 
     def test_auth_route_defaults_to_txity_route(self):
-        manager = DiscordAuthManager(__import__("queue").Queue())
+        manager = DiscordAuthManager(Queue())
         manager.configure(None, True)
         self.assertEqual(manager.auth_start_url, AUTH_START_URL)
         self.assertTrue(manager.secure_auth_enabled)
 
     def test_rejects_non_txity_auth_routes(self):
-        manager = DiscordAuthManager(__import__("queue").Queue())
+        manager = DiscordAuthManager(Queue())
         manager.configure("https://attacker.example/login", True)
         self.assertFalse(manager.secure_auth_enabled)
         manager.configure("http://txity.radiodiscussion.org/login", True)
         self.assertFalse(manager.secure_auth_enabled)
 
     def test_explicit_blank_auth_route_disables_login(self):
-        manager = DiscordAuthManager(__import__("queue").Queue())
+        manager = DiscordAuthManager(Queue())
         manager.configure("", True)
         self.assertFalse(manager.secure_auth_enabled)
 
     def test_requires_server_secure_auth_flag(self):
-        manager = DiscordAuthManager(__import__("queue").Queue())
+        manager = DiscordAuthManager(Queue())
         manager.configure("/auth/discord/start", False)
         self.assertFalse(manager.secure_auth_enabled)
 
