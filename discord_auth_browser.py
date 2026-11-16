@@ -13,6 +13,7 @@ import os
 import sys
 import threading
 from pathlib import Path
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from discord_auth import (
@@ -225,28 +226,59 @@ def main(argv: list[str] | None = None) -> int:
 
     bridge.window = window
 
+    def on_shown() -> None:
+        print(
+            "[TXITPY] Embedded sign-in window shown; waiting for the page to load.",
+            file=sys.stderr,
+            flush=True,
+        )
+
     def on_loaded(loaded_window) -> None:
         try:
+            current_url = loaded_window.get_current_url() or ""
+            parsed_url = urlsplit(current_url)
+            page_location = parsed_url.netloc + parsed_url.path
+            print(
+                f"[TXITPY] Sign-in page loaded: {page_location or 'URL unavailable'}",
+                file=sys.stderr,
+                flush=True,
+            )
+            write_diagnostic_text("page-loaded", page_location or "URL unavailable")
             loaded_window.run_js(WATCHER_SCRIPT)
         except Exception as exc:
             # Navigation can race script injection, so keep the window open
             # and report the underlying browser error.
             details = format_exception_details(exc)
             print(
-                f"[TXITPY browser window script error]\n{details}",
+                f"[TXITPY browser page-load error]\n{details}",
                 file=sys.stderr,
                 flush=True,
             )
             write_diagnostic("inject-auth-watcher", exc)
 
     try:
+        window.events.shown += on_shown
         window.events.loaded += on_loaded
     except Exception as exc:
         bridge.report_startup_failure("register-window-events", exc)
         return 1
 
     try:
+        renderer = "edgechromium" if sys.platform == "win32" else None
+        try:
+            from importlib.metadata import version
+            webview_version = version("pywebview")
+        except Exception:
+            webview_version = "unknown"
+
+        print(
+            f"[TXITPY] Starting pywebview {webview_version}; "
+            f"renderer={renderer or 'platform default'}.",
+            file=sys.stderr,
+            flush=True,
+        )
         webview.start(
+            gui=renderer,
             private_mode=False,
             storage_path=str(profile_path),
             debug=False,
