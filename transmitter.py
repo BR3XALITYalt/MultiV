@@ -990,6 +990,9 @@ class TxityTransmitter:
 
             if not wait_for_control_connection():
                 return
+            last_control_generation = getattr(
+                self.client, "control_generation", None
+            )
 
             if needs_audio:
                 audio_socket = open_audio_connection()
