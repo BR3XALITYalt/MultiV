@@ -849,7 +849,7 @@ def build_app() -> None:
         parent: tk.Misc,
         *,
         background: str | None = None,
-        padding: int = 18,
+        padding: int = 16,
     ) -> tk.Frame:
         surface_color = background or palette["surfaceContainerLow"]
         return RoundedSurface(
@@ -858,7 +858,7 @@ def build_app() -> None:
             outside=parent.cget("bg"),
             outline=palette["outlineVariant"],
             padding=padding,
-            radius=20,
+            radius=18,
         )
 
     def request_station_image(url: str) -> None:
@@ -939,9 +939,19 @@ def build_app() -> None:
                     continue
                 image = source.copy()
                 image.thumbnail((size, size), Image.Resampling.LANCZOS)
+                image = image.convert("RGBA")
+                mask = Image.new("L", image.size, 0)
+                from PIL import ImageDraw
+                mask_radius = max(4, min(image.size) // 8)
+                ImageDraw.Draw(mask).rounded_rectangle(
+                    (0, 0, image.width - 1, image.height - 1),
+                    radius=mask_radius,
+                    fill=255,
+                )
+                image.putalpha(mask)
                 photo = ImageTk.PhotoImage(image)
                 image_cache[(url, size)] = photo
-                label.configure(image=photo, text="", width=0, height=0, bg=palette["surfaceContainerHigh"])
+                label.configure(image=photo, text="", width=0, height=0, bg=label.cget("bg"))
                 label.image = photo
             except tk.TclError:
                 continue
@@ -1040,8 +1050,8 @@ def build_app() -> None:
         )
 
         if not visible:
-            empty = make_card(station_cards_frame, padding=22)
-            empty.pack(fill="x", padx=8, pady=8)
+            empty = make_card(station_cards_frame, padding=16)
+            empty.pack(fill="x", padx=6, pady=6)
             message = "No stations match that search." if query else "No stations are currently listed."
             make_label(
                 empty,
@@ -1056,13 +1066,13 @@ def build_app() -> None:
 
         for index, row in enumerate(visible):
             station_id = str(row.get("id", ""))
-            card = make_card(station_cards_frame, padding=10)
+            card = make_card(station_cards_frame, padding=12)
             card.grid(
                 row=index // 2,
                 column=index % 2,
                 sticky="nsew",
-                padx=8,
-                pady=8,
+                padx=6,
+                pady=6,
             )
             card.configure(cursor="hand2")
 
@@ -1139,7 +1149,7 @@ def build_app() -> None:
         card = make_card(
             outer,
             background=palette["surfaceContainerLow"],
-            padding=32,
+            padding=24,
         )
         card.place(relx=0.5, rely=0.46, anchor="center", width=520)
 
@@ -1295,8 +1305,8 @@ def build_app() -> None:
                 row=row,
                 column=column,
                 sticky="nsew",
-                padx=(0 if column == 0 else 6, 0 if column == 3 else 6),
-                pady=(0, 12),
+                padx=6,
+                pady=6,
             )
             make_label(
                 card,
@@ -1312,8 +1322,8 @@ def build_app() -> None:
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="w", pady=(7, 0))
 
-        info = make_card(page, padding=18)
-        info.pack(fill="x", pady=(4, 16))
+        info = make_card(page, padding=16)
+        info.pack(fill="x", pady=(8, 12))
         make_label(
             info,
             variable=summary_var,
@@ -1355,8 +1365,8 @@ def build_app() -> None:
             background=palette["surfaceContainerLowest"],
             outside=palette["background"],
             outline=palette["outlineVariant"],
-            padding=2,
-            radius=15,
+            padding=5,
+            radius=14,
         )
         search_shell.pack(side="left", fill="x", expand=True)
         search = tk.Entry(
@@ -1372,7 +1382,7 @@ def build_app() -> None:
             borderwidth=0,
             highlightthickness=0,
         )
-        search.pack(fill="x", expand=True, ipady=7)
+        search.pack(fill="x", expand=True, ipady=5)
         search.bind("<KeyRelease>", lambda _event: update_station_tree())
 
         make_button(
@@ -1459,13 +1469,13 @@ def build_app() -> None:
             wraplength=900,
         ).pack(anchor="w", pady=(0, 16))
 
-        profile = make_card(page, padding=20)
-        profile.pack(fill="x", pady=(0, 15))
+        profile = make_card(page, padding=16)
+        profile.pack(fill="x", pady=(0, 12))
         upper = tk.Frame(profile, bg=palette["surfaceContainerLow"])
         upper.pack(fill="x")
 
         logo = make_image_label(upper, str(row.get("logo_url") or ""), size=176, placeholder="TXITY")
-        logo.pack(side="left", padx=(0, 20), pady=(2, 14))
+        logo.pack(side="left", padx=(0, 16), pady=(0, 12))
 
         heading = tk.Frame(upper, bg=palette["surfaceContainerLow"])
         heading.pack(side="left", fill="both", expand=True)
@@ -1597,8 +1607,8 @@ def build_app() -> None:
                     )
         else:
             details_text = profile_details or "No extra station details yet."
-            details_card = make_card(page, padding=18)
-            details_card.pack(fill="x", pady=(0, 15))
+            details_card = make_card(page, padding=16)
+            details_card.pack(fill="x", pady=(0, 12))
             make_label(
                 details_card,
                 "Station details",
@@ -1620,7 +1630,7 @@ def build_app() -> None:
         ]
         if gallery_urls:
             gallery_card = make_card(page, padding=16)
-            gallery_card.pack(fill="x", pady=(0, 15))
+            gallery_card.pack(fill="x", pady=(0, 12))
             make_label(
                 gallery_card,
                 "Images",
@@ -1636,8 +1646,8 @@ def build_app() -> None:
                 )
 
         comments = row.get("comments") if isinstance(row.get("comments"), list) else []
-        comments_card = make_card(page, padding=18)
-        comments_card.pack(fill="x", pady=(0, 22))
+        comments_card = make_card(page, padding=16)
+        comments_card.pack(fill="x", pady=(0, 16))
         make_label(
             comments_card,
             f"Comments ({row.get('comment_count', len(comments))})",
@@ -1692,7 +1702,7 @@ def build_app() -> None:
             background=palette["background"],
         ).pack(anchor="w", pady=(8, 18))
 
-        card = make_card(page, padding=24)
+        card = make_card(page, padding=16)
         card.pack(fill="x")
 
         make_label(
@@ -1764,11 +1774,11 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
             outside=palette["background"],
             outline=palette["outlineVariant"],
-            padding=12,
-            radius=22,
+            padding=10,
+            radius=20,
         )
-        topbar.configure(height=68)
-        topbar.pack(fill="x", padx=14, pady=(12, 8))
+        topbar.configure(height=64)
+        topbar.pack(fill="x", padx=18, pady=(12, 10))
         topbar.pack_propagate(False)
 
         make_label(
@@ -1852,8 +1862,8 @@ def build_app() -> None:
             content_frame = tk.Frame(
                 shell_frame,
                 bg=palette["background"],
-                padx=24,
-                pady=12,
+                padx=20,
+                pady=10,
             )
             content_frame.pack(fill="both", expand=True)
 
@@ -1877,8 +1887,8 @@ def build_app() -> None:
             content_frame = tk.Frame(
                 shell_frame,
                 bg=palette["background"],
-                padx=24,
-                pady=20,
+                padx=20,
+                pady=16,
             )
             content_frame.pack(fill="both", expand=True)
             show_gate(content_frame)
