@@ -360,8 +360,9 @@ def build_app() -> None:
 
     def disconnect_discord() -> None:
         client.set_discord_auth(None, None)
+        auth_manager.clear_browser_session()
         auth_account.set("Not connected to Discord")
-        auth_browser_status.set("TXITPY disconnected its Discord session. The system browser may still be signed in.")
+        auth_browser_status.set("TXITPY disconnected the session and cleared its embedded browser profile.")
 
     def shutdown() -> None:
         client.disconnect()
@@ -514,14 +515,14 @@ def build_app() -> None:
                     bs.Label("Connection", font="heading-md")
                     bs.Label(BASE_URL, accent="primary")
                     bs.Label(
-                        "TXITPY opens TXITY's official Discord sign-in route in your system browser. "
-                        "A one-use loopback callback returns the signed token to this app.",
+                        "TXITPY opens TXITY's official Discord sign-in flow in an embedded browser window. "
+                        "The completed session is returned to this app through a one-use local callback.",
                         wrap_width=760,
                     )
                     bs.Label(
-                        "The system browser keeps TXITY's normal website session. TXITPY keeps the "
-                        "returned token in memory and supplies it to the status WebSocket; it does not "
-                        "write the token to a settings file or log it.",
+                        "TXITY stores its normal website session in TXITPY's embedded browser profile. "
+                        "TXITPY keeps the active token in memory and supplies it to the status connection. "
+                        "Disconnect clears that browser profile.",
                         wrap_width=760,
                     )
                     bs.Label(
