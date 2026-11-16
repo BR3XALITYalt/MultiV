@@ -110,7 +110,7 @@ jobs:
           mode = "B"
           occupancy = 0
           msc_mode = "64-QAM"
-          sdc_mode = "4-QAM"
+          sdc_mode = "16-QAM"
           interleaving = "short"
           protection_a = 0
           protection_b = 0
