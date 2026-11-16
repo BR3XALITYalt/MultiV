@@ -8,10 +8,10 @@ from __future__ import annotations
 import json
 import queue
 import secrets
+import sys
 import threading
 import uuid
 import webbrowser
-import sys
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any
