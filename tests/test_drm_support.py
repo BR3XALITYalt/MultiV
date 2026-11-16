@@ -14,6 +14,8 @@ from drm_support import (
     DRM_PLAYLIST_EXTENSIONS,
     DRM_LANGUAGES,
     DRM_PROGRAMME_TYPES,
+    DRM_AUDIO_CODECS,
+    DRM_INTERLEAVING_OPTIONS,
     VISUAL_STUDIO_BUILD_TOOLS_LABEL,
     VISUAL_STUDIO_BUILD_TOOLS_URL,
     VISUAL_STUDIO_WORKLOAD,
@@ -190,6 +192,7 @@ class DRMConfigurationTests(unittest.TestCase):
         self.assertEqual(config["channel"]["occupancy"], 0)
         self.assertEqual(config["channel"]["msc_mode"], "64-QAM")
         self.assertEqual(config["channel"]["sdc_mode"], "16-QAM")
+        self.assertEqual(config["channel"]["interleaving"], "long")
         self.assertEqual(config["channel"]["protection_b"], 1)
         self.assertEqual(config["output"]["sample_format"], "float32")
         self.assertEqual(config["output"]["format"], "real")
@@ -198,8 +201,8 @@ class DRMConfigurationTests(unittest.TestCase):
         service = config["service"][0]
         self.assertEqual(service["language"], "English")
         self.assertEqual(service["programme_type"], "No programme type")
-        self.assertEqual(service["audio"]["codec"], "he-aac")
-        self.assertEqual(service["audio"]["core_rate"], 12000)
+        self.assertEqual(service["audio"]["codec"], "xhe-aac")
+        self.assertNotIn("core_rate", service["audio"])
         self.assertFalse(service["audio"]["stereo"])
         self.assertEqual(
             service["audio"]["input"]["url"],
@@ -268,6 +271,41 @@ class DRMConfigurationTests(unittest.TestCase):
         self.assertIn("English", DRM_LANGUAGES)
         self.assertIn("Rock Music", DRM_PROGRAMME_TYPES)
         self.assertIn("No programme type", DRM_PROGRAMME_TYPES)
+
+    def test_writes_legacy_he_aac_and_short_interleaving_when_selected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = write_drm_station_config(
+                Path(folder) / "station.toml",
+                station_name="Legacy DRM",
+                input_device_name="default",
+                audio_codec="HE-AAC",
+                interleaving="short",
+            )
+            config = tomllib.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(config["channel"]["interleaving"], "short")
+        self.assertEqual(config["service"][0]["audio"]["codec"], "he-aac")
+        self.assertEqual(config["service"][0]["audio"]["core_rate"], 12000)
+
+    def test_rejects_unknown_drm_audio_codec_or_interleaving(self):
+        invalid_values = (
+            {"audio_codec": "MP3"},
+            {"audio_codec": "AAC-LC"},
+            {"interleaving": "medium"},
+        )
+        for options in invalid_values:
+            with self.subTest(options=options), tempfile.TemporaryDirectory() as folder:
+                with self.assertRaises(ValueError):
+                    write_drm_station_config(
+                        Path(folder) / "station.toml",
+                        station_name="Test",
+                        input_device_name="default",
+                        **options,
+                    )
+
+    def test_drm_quality_choices_match_the_writer(self):
+        self.assertEqual(DRM_AUDIO_CODECS, ("xHE-AAC", "HE-AAC"))
+        self.assertEqual(DRM_INTERLEAVING_OPTIONS, ("long", "short"))
 
     def test_writes_microphone_device_input(self):
         with tempfile.TemporaryDirectory() as folder:
