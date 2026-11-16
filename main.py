@@ -2198,6 +2198,7 @@ def build_app() -> None:
                 highlightcolor=palette["primary"],
             )
             entry.pack(fill="x", ipady=7)
+            return entry
 
         def style_tx_combobox(widget: ttk.Combobox) -> None:
             style = ttk.Style(root)
@@ -2224,6 +2225,10 @@ def build_app() -> None:
                 ],
             )
             widget.configure(style="TXITY.Transmit.TCombobox", font=("Segoe UI", 11))
+            # A wheel over a closed combobox should move the page, not cycle options.
+            widget.bind("<MouseWheel>", scroll_active_canvas)
+            widget.bind("<Button-4>", lambda event: scroll_active_canvas(event, -1))
+            widget.bind("<Button-5>", lambda event: scroll_active_canvas(event, 1))
 
         station_card = make_card(page, padding=16)
         station_card.pack(fill="x", pady=(0, 12))
@@ -2359,6 +2364,212 @@ def build_app() -> None:
             anchor="w",
         )
         sharing.pack(anchor="w", padx=6, pady=(8, 0))
+
+        fade_card = make_card(page, padding=16)
+        fade_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            fade_card,
+            "Signal fading",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 8))
+        fade_enabled = tk.Checkbutton(
+            fade_card,
+            text="Enable signal fading",
+            variable=tx_fade_enabled_var,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerHighest"],
+            highlightthickness=0,
+            bd=0,
+            anchor="w",
+        )
+        fade_enabled.pack(anchor="w", padx=6, pady=(0, 6))
+        fade_fields = tk.Frame(fade_card, bg=palette["surfaceContainerLow"])
+        fade_fields.pack(fill="x")
+        fade_fields.grid_columnconfigure(0, weight=1, uniform="fade-fields")
+        fade_fields.grid_columnconfigure(1, weight=1, uniform="fade-fields")
+        fade_seconds_entry = add_tx_entry(
+            fade_fields, "Fade cycle length (10-60 seconds)",
+            tx_fade_seconds_var, column=0, row=0,
+        )
+        fade_min_entry = add_tx_entry(
+            fade_fields, "Lowest power point (-140 to 50 dBm)",
+            tx_fade_min_dbm_var, column=1, row=0,
+        )
+        fade_shape_frame = tk.Frame(fade_fields, bg=palette["surfaceContainerLow"])
+        fade_shape_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=6)
+        make_label(
+            fade_shape_frame,
+            "Fade style",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        fade_shape_picker = ttk.Combobox(
+            fade_shape_frame,
+            textvariable=tx_fade_shape_var,
+            values=("0", "1", "2", "3", "4", "5"),
+            state="readonly",
+            height=6,
+        )
+        fade_shape_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(fade_shape_picker)
+        fade_shape_names = {
+            "0": "Smooth QSB dip",
+            "1": "Linear triangle dip",
+            "2": "Deep notch fade",
+            "3": "Fast flutter / multipath",
+            "4": "Rolling multi-rate QSB",
+            "5": "Random QSB",
+        }
+        fade_shape_help_var = tk.StringVar(root)
+        def update_fade_shape_help(_event=None) -> None:
+            fade_shape_help_var.set(fade_shape_names.get(tx_fade_shape_var.get(), "Choose a fade curve."))
+        fade_shape_picker.bind("<<ComboboxSelected>>", update_fade_shape_help)
+        update_fade_shape_help()
+        make_label(
+            fade_shape_frame,
+            variable=fade_shape_help_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(5, 0))
+
+        def update_fade_controls(*_args) -> None:
+            state = "normal" if tx_fade_enabled_var.get() else "disabled"
+            fade_seconds_entry.configure(state=state)
+            fade_min_entry.configure(state=state)
+            fade_shape_picker.configure(state="readonly" if state == "normal" else "disabled")
+        tx_fade_enabled_var.trace_add("write", update_fade_controls)
+        update_fade_controls()
+
+        audio_filter_card = make_card(page, padding=16)
+        audio_filter_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            audio_filter_card,
+            "Audio processing and filters",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 8))
+        agc_row = tk.Frame(audio_filter_card, bg=palette["surfaceContainerLow"])
+        agc_row.pack(fill="x", padx=6, pady=(0, 8))
+        agc_toggle = tk.Checkbutton(
+            agc_row,
+            text="Server AGC enabled",
+            variable=tx_agc_enabled_var,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerHighest"],
+            highlightthickness=0,
+            bd=0,
+            anchor="w",
+        )
+        agc_toggle.pack(side="left")
+        audio_filter_grid = tk.Frame(audio_filter_card, bg=palette["surfaceContainerLow"])
+        audio_filter_grid.pack(fill="x")
+        for column in range(2):
+            audio_filter_grid.grid_columnconfigure(column, weight=1, uniform="audio-filter-fields")
+
+        def add_audio_scale(
+            label: str,
+            variable: tk.StringVar,
+            minimum: float,
+            maximum: float,
+            step: float,
+            formatter,
+            row: int,
+            column: int,
+        ) -> None:
+            wrapper = tk.Frame(audio_filter_grid, bg=palette["surfaceContainerLow"])
+            wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
+            make_label(
+                wrapper,
+                label,
+                font=("Segoe UI", 9, "bold"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w")
+            value_var = tk.StringVar(root, "")
+            def update_readout(*_args) -> None:
+                try:
+                    value_var.set(formatter(float(variable.get())))
+                except (TypeError, ValueError):
+                    value_var.set("Invalid value")
+            variable.trace_add("write", update_readout)
+            update_readout()
+            scale = tk.Scale(
+                wrapper,
+                variable=variable,
+                from_=minimum,
+                to=maximum,
+                resolution=step,
+                orient="horizontal",
+                showvalue=False,
+                highlightthickness=0,
+                borderwidth=0,
+                relief="flat",
+                bg=palette["surfaceContainerLow"],
+                fg=palette["onSurface"],
+                troughcolor=palette["surfaceContainerHighest"],
+                activebackground=palette["primary"],
+                font=("Segoe UI", 9),
+            )
+            scale.pack(fill="x", pady=(1, 0))
+            make_label(
+                wrapper,
+                variable=value_var,
+                font=("Segoe UI", 9, "bold"),
+                color=palette["primary"],
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="e")
+
+        add_audio_scale("AGC target level", tx_agc_target_var, 0.16, 0.24, 0.01,
+                        lambda value: f"{value:.2f} RMS", 0, 0)
+        add_audio_scale("Microphone gain", tx_mic_gain_var, -6, 6, 1,
+                        lambda value: f"{value:+.0f} dB", 0, 1)
+        add_audio_scale("Bass", tx_bass_var, -4, 4, 1,
+                        lambda value: f"{value:+.0f} dB", 1, 0)
+        add_audio_scale("Treble", tx_treble_var, -4, 4, 1,
+                        lambda value: f"{value:+.0f} dB", 1, 1)
+        add_audio_scale("Presence / clarity", tx_presence_var, -1, 1, 1,
+                        lambda value: f"{value:+.0f} dB", 2, 0)
+        add_audio_scale("Compression / drive", tx_drive_var, 0, 0.025, 0.005,
+                        lambda value: f"{value * 100:.1f}%", 2, 1)
+        add_audio_scale("SSB voice width", tx_ssb_bandwidth_var, 2400, 10000, 100,
+                        lambda value: f"{value / 1000:.1f} kHz", 3, 0)
+        add_audio_scale("SSB low cut", tx_ssb_low_cut_var, 0, 2000, 25,
+                        lambda value: f"{value:.0f} Hz", 3, 1)
+        add_audio_scale("SSB high edge cut", tx_ssb_high_cut_var, 0, 3000, 25,
+                        lambda value: f"{value:.0f} Hz", 4, 0)
+        add_audio_scale("AM / DSB bandwidth", tx_am_bandwidth_var, 3000, 12000, 500,
+                        lambda value: f"{value / 1000:.1f} kHz", 4, 1)
+        am_pre_emphasis = tk.Checkbutton(
+            audio_filter_card,
+            text="AM pre-emphasis (brighter audio)",
+            variable=tx_am_pre_emphasis_var,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerHighest"],
+            highlightthickness=0,
+            bd=0,
+            anchor="w",
+        )
+        am_pre_emphasis.pack(anchor="w", padx=6, pady=(7, 0))
+        make_label(
+            audio_filter_card,
+            "These processing values are sent with the TXITY virtual-service configuration when transmission starts.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", padx=6, pady=(7, 0))
 
         audio_card = make_card(page, padding=16)
         audio_card.pack(fill="x", pady=(0, 12))
