@@ -2425,6 +2425,9 @@ def build_app() -> None:
             except tk.TclError:
                 pass
 
+        def start_drm_setup() -> None:
+            start_drm_setup()
+
         def poll_drm_setup() -> None:
             completed = False
             while True:
@@ -2477,15 +2480,39 @@ def build_app() -> None:
                 update_mode_help()
                 return
 
-            missing_build_tools = status.get("missing_build_tools") or []
+            missing_build_tools = [
+                str(item) for item in (status.get("missing_build_tools") or [])
+            ]
             if missing_build_tools:
+                from drm_support import VISUAL_STUDIO_BUILD_TOOLS_LABEL
+
+                if (
+                    os.name == "nt"
+                    and missing_build_tools == [VISUAL_STUDIO_BUILD_TOOLS_LABEL]
+                ):
+                    install_prompt = (
+                        "DRM needs Microsoft's Visual Studio C++ Build Tools.\n\n"
+                        "TXITPY can download the official installer and add the "
+                        "'Desktop development with C++' workload, including the MSVC compiler "
+                        "and Windows SDK. The installer may request administrator approval.\n\n"
+                        "Install the C++ build tools and continue setting up DRM?"
+                    )
+                    if messagebox.askyesno(
+                        "Install DRM build tools",
+                        install_prompt,
+                        parent=root,
+                    ):
+                        start_drm_setup()
+                    else:
+                        restore_previous_mode()
+                    return
+
                 restore_previous_mode()
                 messagebox.showerror(
                     "DRM build tools missing",
-                    "DRM also needs Git, CMake, and a C/C++ compiler. "
-                    "TXITPY could not detect: "
-                    + ", ".join(str(item) for item in missing_build_tools)
-                    + ". Install the missing tools, restart TXITPY, and select DRM again.",
+                    "DRM needs these build tools, which TXITPY could not detect:\n\n"
+                    + "\n".join(missing_build_tools)
+                    + "\n\nInstall the missing tools, then select DRM again.",
                     parent=root,
                 )
                 return
