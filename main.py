@@ -2263,7 +2263,7 @@ def build_app() -> None:
                     else:
                         print(
                             f"[TXITPY] Description missing: {station_name} "
-                            "(shortDescription, description, summary and details were empty).",
+                            "(shortDescription, description, summary, details and pageLayout text were empty).",
                             file=sys.stderr,
                             flush=True,
                         )
