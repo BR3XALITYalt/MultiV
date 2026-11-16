@@ -2733,30 +2733,35 @@ def build_app() -> None:
                 return
 
             added_sources: list[str] = []
+            exclusions_cleared = False
             with playlist_watch_lock:
                 existing_sources = {canonical_playlist_path(item) for item in tx_playlist_sources}
                 for source in normalized_sources:
                     identity = canonical_playlist_path(source)
-                    if identity in existing_sources:
-                        continue
-                    tx_playlist_sources.append(source)
-                    existing_sources.add(identity)
-                    added_sources.append(source)
-
                     source_path = Path(source)
+                    if identity not in existing_sources:
+                        tx_playlist_sources.append(source)
+                        existing_sources.add(identity)
+                        added_sources.append(source)
+
                     if source_path.is_dir():
                         exclusions_to_clear = [
                             excluded for excluded in tx_playlist_excluded_files
                             if playlist_path_is_within(excluded, source_path)
                         ]
-                        tx_playlist_excluded_files.difference_update(exclusions_to_clear)
-                    else:
+                        if exclusions_to_clear:
+                            tx_playlist_excluded_files.difference_update(exclusions_to_clear)
+                            exclusions_cleared = True
+                    elif identity in tx_playlist_excluded_files:
                         tx_playlist_excluded_files.discard(identity)
+                        exclusions_cleared = True
 
-            if added_sources:
+            if added_sources or exclusions_cleared:
                 added, _removed = refresh_playlist_from_sources()
                 if added:
                     tx_playlist_status_var.set(f"Added {added} track(s).")
+                elif exclusions_cleared:
+                    tx_playlist_status_var.set("Playlist entries restored.")
                 elif any(Path(item).is_dir() for item in added_sources):
                     tx_playlist_status_var.set(
                         "Folder added. TXITPY will refresh the playlist when its contents change."
