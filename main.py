@@ -2318,7 +2318,6 @@ def build_app() -> None:
         sharing.pack(anchor="w", padx=6, pady=(8, 0))
 
         advanced_container = tk.Frame(page, bg=palette["background"])
-        advanced_container.pack_forget()
         advanced_expanded = False
 
         def toggle_advanced_settings() -> None:
