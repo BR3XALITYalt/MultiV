@@ -267,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
         installed_version = version("pywebview")
     except Exception:
         installed_version = "unknown"
-    report_stage(f"pywebview {installed_version} imported successfully.")
+    report_stage(f"Loaded pywebview {installed_version}.")
 
     local_app_data = os.environ.get("LOCALAPPDATA")
     profile_root = Path(local_app_data) if local_app_data else Path.home()
