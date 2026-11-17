@@ -18,15 +18,18 @@ class PlaylistDecoderTests(unittest.TestCase):
             timeline = np.arange(30_720, dtype=np.float32) / 48_000
             signal = (0.2 * np.sin(2 * np.pi * 440 * timeline)).astype(np.float32)
             samples = np.vstack((signal, signal))
-            frame = av.AudioFrame.from_ndarray(
-                samples,
-                format="fltp",
-                layout="stereo",
-            )
-            frame.sample_rate = 48_000
+            frame_size = 1_024 if codec == "aac" else 960
 
-            for packet in stream.encode(frame):
-                output.mux(packet)
+            for offset in range(0, samples.shape[1], frame_size):
+                frame = av.AudioFrame.from_ndarray(
+                    samples[:, offset:offset + frame_size],
+                    format="fltp",
+                    layout="stereo",
+                )
+                frame.sample_rate = 48_000
+                for packet in stream.encode(frame):
+                    output.mux(packet)
+
             for packet in stream.encode(None):
                 output.mux(packet)
         finally:
