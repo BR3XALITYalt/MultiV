@@ -413,7 +413,7 @@ class TxityWebGUI:
                             owner._login_attempts.pop(remote, None)
                         body = b"<!doctype html><meta http-equiv='refresh' content='0;url=/'><a href='/'>Continue</a>"
                         self._send(
-                            303,
+                            200,
                             body,
                             "text/html; charset=utf-8",
                             f"txitpy_session={session_id}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_SECONDS}",
