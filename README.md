@@ -49,7 +49,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-TXITPY
 The installer uses the current Python executable, the settings file in the current user's `%APPDATA%\TXITPY` folder, and `C:\ProgramData\TXITPY\discord-token.txt`. It creates the log directory, configures automatic restart after unexpected exits, and starts the service. Pass explicit paths when the defaults do not match the machine:
 
 ```powershell
-.\scripts\Install-TXITPYService.ps1 `
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-TXITPYService.ps1 `
   -PythonPath "C:\Python312\python.exe" `
   -NssmPath "C:\Tools\nssm.exe" `
   -ConfigFile "C:\ProgramData\TXITPY\transmit-settings.json" `
