@@ -38,8 +38,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--no-gui",
+        "--nogui",
         action="store_true",
-        help="Run headlessly and start transmitting with saved settings.",
+        help="Run headlessly and start transmitting with saved settings (alias: --nogui).",
     )
     parser.add_argument(
         "--config",
@@ -224,10 +225,19 @@ def _resolve_device(
         raise ValueError(f"No {device_type} devices were found.")
 
     matches: list[tuple[int, str]] = []
-    if value.isdecimal():
-        matches = [item for item in devices if item[0] == int(value)]
+    saved_index = None
+    saved_label = value
+    if ":" in value:
+        prefix, suffix = value.split(":", 1)
+        if prefix.strip().isdecimal():
+            saved_index = int(prefix.strip())
+            saved_label = suffix.strip()
+
+    if value.isdecimal() or saved_index is not None:
+        device_index = int(value) if value.isdecimal() else saved_index
+        matches = [item for item in devices if item[0] == device_index]
     else:
-        needle = value.casefold()
+        needle = saved_label.casefold()
         matches = [
             item for item in devices
             if needle == item[1].casefold() or needle in item[1].casefold()
@@ -279,10 +289,12 @@ def build_headless_plan(
         raise ValueError("DRM mode supports microphone and playlist inputs, not desktop audio loopback.")
 
     selected_device: int | None = None
-    selected_device_name = "Not used"
+    selected_device_name = "Not used" if mode == "CW" else "System default"
     device_request = args.audio_device or _setting_text(settings, "audio_device", "System default")
 
-    if audio_source == "mic":
+    if mode == "CW":
+        pass
+    elif audio_source == "mic":
         if str(device_request).strip().casefold() in {"", "default", "system default"}:
             selected_device_name = "System default"
         else:
