@@ -5,7 +5,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cli import _handle_event, _read_auth_token, build_argument_parser, build_headless_plan
+from cli import (
+    _handle_event,
+    _install_shutdown_handlers,
+    _read_auth_token,
+    _shutdown_headless,
+    build_argument_parser,
+    build_headless_plan,
+)
 
 
 class CommandLineTests(unittest.TestCase):
@@ -294,6 +301,80 @@ class CommandLineTests(unittest.TestCase):
         self.assertFalse(state["retry_pending"])
         self.assertTrue(shutdown_event.is_set())
         self.assertEqual(transmitter.stop_calls, 1)
+
+    def test_nssm_console_signal_requests_graceful_shutdown(self):
+        shutdown_event = threading.Event()
+        logger = logging.getLogger("test.txitpy-shutdown-signal")
+        handlers = {}
+
+        def capture_signal(signum, handler):
+            previous = object()
+            handlers[signum] = handler
+            return previous
+
+        with patch("cli.signal.signal", side_effect=capture_signal):
+            old_handlers = _install_shutdown_handlers(shutdown_event, logger)
+
+        self.assertTrue(old_handlers)
+        self.assertIn(__import__("signal").SIGINT, handlers)
+        handlers[__import__("signal").SIGINT](__import__("signal").SIGINT, None)
+        self.assertTrue(shutdown_event.is_set())
+
+    def test_headless_shutdown_stops_audio_before_disconnecting_control(self):
+        operations = []
+
+        class FakeTransmitter:
+            is_busy = True
+
+            def stop(self, wait=0.0):
+                operations.append(("transmitter.stop", wait))
+                self.is_busy = False
+
+        class FakeClient:
+            def disconnect(self, wait=0.0):
+                operations.append(("client.disconnect", wait))
+
+        _shutdown_headless(
+            FakeTransmitter(),
+            FakeClient(),
+            logging.getLogger("test.txitpy-shutdown-order"),
+        )
+
+        self.assertEqual(
+            operations,
+            [
+                ("transmitter.stop", 10.0),
+                ("client.disconnect", 2.0),
+            ],
+        )
+
+    def test_headless_shutdown_closes_control_if_transmitter_does_not_exit(self):
+        operations = []
+
+        class FakeTransmitter:
+            is_busy = True
+
+            def stop(self, wait=0.0):
+                operations.append(("transmitter.stop", wait))
+
+        class FakeClient:
+            def disconnect(self, wait=0.0):
+                operations.append(("client.disconnect", wait))
+
+        _shutdown_headless(
+            FakeTransmitter(),
+            FakeClient(),
+            logging.getLogger("test.txitpy-shutdown-timeout"),
+        )
+
+        self.assertEqual(
+            operations,
+            [
+                ("transmitter.stop", 10.0),
+                ("client.disconnect", 2.0),
+                ("transmitter.stop", 2.0),
+            ],
+        )
 
     def test_headless_logs_transmitter_audio_and_playlist_diagnostics(self):
         logger = logging.getLogger("test.txitpy-headless-diagnostics")
