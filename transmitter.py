@@ -193,7 +193,7 @@ def nfm_transport_settings(target_frequency_hz: Any) -> tuple[str, int]:
     """Place a 6 kHz NFM IF at the requested channel center using TXITY SSB."""
     target_hz = parse_rf_frequency(target_frequency_hz)
     if not TXITY_RF_ROOM_MIN_HZ <= target_hz <= TXITY_RF_ROOM_MAX_HZ:
-        raise ValueError("NFM is currently available inside TXITY's 7.000-8.000 MHz room.")
+        raise ValueError("NFM runs only in TXITY's 7.000-8.000 MHz room.")
 
     upper_carrier_hz = target_hz - NFM_IF_HZ
     if TXITY_RF_ROOM_MIN_HZ <= upper_carrier_hz <= TXITY_RF_ROOM_MAX_HZ:
@@ -758,7 +758,7 @@ class TxityTransmitter:
             if not config.get("allowOverlapVisitors") or not secondary_config.get("allowOverlapVisitors"):
                 raise ValueError("AM (DEV) must force overlap permission on both paths.")
         if drm_mode and selected_source == "loopback":
-            raise ValueError("DRM mode currently supports microphone and playlist inputs, not desktop audio loopback.")
+            raise ValueError("DRM mode supports microphone and playlist inputs. It does not support desktop audio loopback.")
         selected_playlist = collect_audio_files(playlist_files or [])
         if selected_source == "playlist" and not selected_playlist:
             raise ValueError("Add at least one supported audio file to the playlist.")
@@ -1281,7 +1281,7 @@ class TxityTransmitter:
                             secondary_rejection_count = 1
                         if secondary_rejection_count >= 2:
                             reason_labels = {
-                                2: "transmitter capacity is currently full",
+                                2: "TXITY's transmitter capacity is full",
                                 3: "TXITY rejected frequency sharing or overlap",
                                 4: "the total transmitter limit was reached",
                                 5: "enter a station name",
