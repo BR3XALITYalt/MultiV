@@ -75,12 +75,7 @@ def prepare_rade_encoder(
     root = _runtime_cache_root()
     install_dir = root / "runtime"
     executable = install_dir / "freedv_rade_tx.exe"
-    required_files = (
-        executable,
-        install_dir / "libgcc_s_seh-1.dll",
-        install_dir / "libwinpthread-1.dll",
-        install_dir / "libssp-0.dll",
-    )
+    required_files = (executable,)
     rade_libraries = (
         install_dir / "rade.dll",
         install_dir / "librade.dll",
