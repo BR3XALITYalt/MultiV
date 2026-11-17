@@ -2088,14 +2088,16 @@ def build_app() -> None:
             1 for variable in tx_frequency_fallback_vars if variable.get().strip()
         )
         if fallback_count:
+            frequency_word = "frequency" if fallback_count == 1 else "frequencies"
             messages.append(
-                f"Automatic fallback is enabled with {fallback_count} alternate "
-                f"frequency{'ies' if fallback_count != 1 else ''}."
+                f"Automatic fallback is enabled with {fallback_count} alternate {frequency_word}."
             )
         messages.append("This is a client-side estimate; TXITY's server decides whether a shared frequency is accepted.")
         tx_frequency_check_var.set(" ".join(messages))
 
     tx_frequency_var.trace_add("write", lambda *_args: update_frequency_check())
+    for fallback_variable in tx_frequency_fallback_vars:
+        fallback_variable.trace_add("write", lambda *_args: update_frequency_check())
     tx_mode_var.trace_add("write", lambda *_args: update_frequency_check())
     tx_allow_overlap_var.trace_add("write", lambda *_args: update_frequency_check())
 
