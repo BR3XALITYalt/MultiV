@@ -1320,6 +1320,7 @@ def build_app() -> None:
     tx_negative_status_reason: str | None = None
     tx_negative_status_count = 0
     tx_ptt_confirmed = False
+    tx_last_status_signature: tuple[Any, ...] | None = None
     tx_terminal_server_message: str | None = None
     frequency_retry_context: dict[str, Any] | None = None
     station_search_var = tk.StringVar(root, "")
@@ -4304,7 +4305,39 @@ def build_app() -> None:
         nonlocal server_band_min_hz, server_band_max_hz
         nonlocal tx_negative_status_reason, tx_negative_status_count
         nonlocal tx_ptt_confirmed, tx_terminal_server_message, frequency_retry_context
+        nonlocal tx_last_status_signature
         low, high = data.get("bandMinHz"), data.get("bandMaxHz")
+
+        if transmitter.is_busy:
+            status_signature = tuple(
+                data.get(key)
+                for key in (
+                    "ptt",
+                    "txStartUsable",
+                    "txStartReason",
+                    "txBlockReason",
+                    "queuePosition",
+                )
+            )
+            if status_signature != tx_last_status_signature:
+                tx_last_status_signature = status_signature
+                status_fields = {
+                    key: data.get(key)
+                    for key in (
+                        "ptt",
+                        "txStartUsable",
+                        "txStartReason",
+                        "txBlockReason",
+                        "queuePosition",
+                    )
+                    if key in data
+                }
+                client.events.put({
+                    "kind": "tx_log",
+                    "text": "TXITY status changed: " + json.dumps(status_fields, sort_keys=True),
+                })
+        else:
+            tx_last_status_signature = None
         if isinstance(low, (int, float)) and isinstance(high, (int, float)):
             server_band_min_hz = int(low)
             server_band_max_hz = int(high)
@@ -4440,7 +4473,7 @@ def build_app() -> None:
         nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows, current_page, tx_profile_initialized
         nonlocal users_listing_received, frequency_retry_context
         nonlocal tx_negative_status_reason, tx_negative_status_count
-        nonlocal tx_ptt_confirmed, tx_terminal_server_message
+        nonlocal tx_ptt_confirmed, tx_terminal_server_message, tx_last_status_signature
         while True:
             try:
                 event = client.events.get_nowait()
@@ -4451,6 +4484,15 @@ def build_app() -> None:
             if kind == "connection":
                 text = str(event.get("text", ""))
                 connection_var.set(text)
+
+            elif kind == "tx_log":
+                log_text = str(event.get("text") or "").strip()
+                if log_text:
+                    print(
+                        "[TXITPY] " + log_text[:1_500],
+                        file=sys.stderr,
+                        flush=True,
+                    )
 
             elif kind == "status":
                 apply_status(event.get("data", {}))
@@ -4463,6 +4505,7 @@ def build_app() -> None:
                     and bool(frequency_retry_context.get("pending"))
                 )
                 if state == "starting":
+                    tx_last_status_signature = None
                     tx_negative_status_reason = None
                     tx_negative_status_count = 0
                     tx_ptt_confirmed = False
