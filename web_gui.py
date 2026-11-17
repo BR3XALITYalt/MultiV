@@ -457,7 +457,7 @@ footer {
 <div class="field"><label for="station_name">Station name</label><input id="station_name" maxlength="48" required></div>
 <div class="field"><label for="description">Short description</label><input id="description" maxlength="180"></div>
 <div class="field"><label for="frequency">Transmit frequency</label><input id="frequency" maxlength="32" placeholder="7.250 MHz" required></div>
-<div class="field"><label for="mode">Signal type</label><select id="mode"><option>AM</option><option>USB</option><option>LSB</option><option>USB+C</option><option>LSB+C</option><option>DSB</option><option>NFM</option><option>DRM</option><option>CW</option></select></div>
+<div class="field"><label for="mode">Signal type</label><select id="mode"><option>AM</option><option>USB</option><option>LSB</option><option>USB+C</option><option>LSB+C</option><option>DSB</option><option>NFM</option><option>RADE</option><option>DRM</option><option>CW</option></select></div>
 <div class="field"><label for="station_dbm">Station power (dBm)</label><input id="station_dbm" type="number" min="-140" max="53" step="1"></div>
 <div class="field"><label>Audio source</label><div id="audio-source" class="state-box">Selected in the TXITPY desktop app</div><p class="hint">Select the microphone, desktop audio, or playlist in the desktop app.</p></div>
 <div class="field full"><label class="checkbox"><input id="allow_overlap" type="checkbox"> Allow frequency sharing with other stations</label></div>
@@ -779,7 +779,7 @@ class TxityWebGUI:
                                     return
                                 values[key] = value
                             mode = data.get("mode", "AM")
-                            if mode not in {"AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "DRM", "CW"}:
+                            if mode not in {"AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "RADE", "DRM", "CW"}:
                                 self._json(400, {"ok": False, "message": "Unsupported signal type."})
                                 return
                             values["mode"] = mode
