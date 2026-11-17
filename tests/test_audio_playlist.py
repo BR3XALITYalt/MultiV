@@ -19,7 +19,7 @@ class ReverseRandom:
 class AudioPlaylistTests(unittest.TestCase):
     def test_supported_extensions_include_common_audio_formats(self):
         self.assertTrue({
-            ".wav", ".flac", ".ogg", ".aiff", ".aif", ".mp3"
+            ".wav", ".flac", ".ogg", ".aiff", ".aif", ".mp3", ".m4a", ".opus"
         }.issubset(SUPPORTED_AUDIO_EXTENSIONS))
 
     def test_collects_audio_files_recursively_and_deduplicates(self):
