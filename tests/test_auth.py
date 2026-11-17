@@ -1,16 +1,21 @@
 import base64
 import json
+import tempfile
 import time
 import unittest
+from pathlib import Path
 from queue import Queue
+from unittest.mock import patch
 
 from discord_auth import (
     AUTH_START_URL,
     DiscordAuthManager,
     clean_discord_user,
+    clear_auth_token,
     format_exception_details,
     is_auth_token,
     safe_error_text,
+    save_auth_token,
     user_from_txity_token,
 )
 from discord_auth_browser import (
@@ -28,6 +33,43 @@ def fake_txity_token(payload):
 class DiscordAuthValidationTests(unittest.TestCase):
     def test_accepts_opaque_token(self):
         self.assertTrue(is_auth_token("signed.txity.token-value"))
+
+    def test_auth_token_is_saved_and_cleared_from_appdata_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            token_path = Path(directory) / "TXITPY" / "token.txt"
+            with patch("discord_auth.auth_token_path", return_value=token_path):
+                saved_path = save_auth_token("signed.txity.token-value")
+                self.assertEqual(saved_path, token_path)
+                self.assertEqual(
+                    token_path.read_text(encoding="utf-8"),
+                    "signed.txity.token-value\n",
+                )
+                self.assertTrue(clear_auth_token())
+                self.assertFalse(token_path.exists())
+
+    def test_auth_callback_persists_token_before_emitting_success(self):
+        token = fake_txity_token({
+            "id": "123456789",
+            "username": "example",
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            token_path = Path(directory) / "TXITPY" / "token.txt"
+            events = Queue()
+            manager = DiscordAuthManager(events)
+            manager._state = "test-state"
+            with patch("discord_auth.auth_token_path", return_value=token_path):
+                accepted = manager._complete(
+                    "test-state",
+                    token,
+                    {"id": "123456789", "username": "example"},
+                    False,
+                )
+
+            self.assertTrue(accepted)
+            self.assertEqual(token_path.read_text(encoding="utf-8").strip(), token)
+            event = events.get_nowait()
+            self.assertEqual(event["kind"], "auth_token")
+            self.assertEqual(event["token"], token)
 
     def test_rejects_empty_short_and_non_string_tokens(self):
         self.assertFalse(is_auth_token(""))
