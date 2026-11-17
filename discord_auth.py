@@ -116,12 +116,51 @@ def read_diagnostic_since(
 
 
 def is_auth_token(value: Any) -> bool:
-    """Validate an opaque TXITY token without logging or persisting it."""
+    """Validate an opaque TXITY session token."""
     return (
         isinstance(value, str)
         and 16 <= len(value) <= 8192
         and not any(character.isspace() or ord(character) < 32 for character in value)
     )
+
+
+def auth_token_path() -> Path:
+    """Return the per-user TXITY session token path."""
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming"))
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
+    return base / "TXITPY" / "token.txt"
+
+
+def save_auth_token(token: str) -> Path:
+    """Atomically save a validated TXITY session token for headless mode."""
+    if not is_auth_token(token):
+        raise ValueError("The TXITY session token is invalid.")
+
+    path = auth_token_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+    try:
+        temporary_path.write_text(token + "\\n", encoding="utf-8")
+        os.replace(temporary_path, path)
+    finally:
+        try:
+            temporary_path.unlink()
+        except FileNotFoundError:
+            pass
+    return path
+
+
+def clear_auth_token() -> bool:
+    """Remove the saved TXITY session token, if one exists."""
+    try:
+        auth_token_path().unlink()
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return True
 
 
 def clean_discord_user(value: Any) -> dict[str, str] | None:
@@ -642,6 +681,7 @@ class DiscordAuthManager:
             self._timeout = None
         if timeout is not None:
             timeout.cancel()
+        clear_auth_token()
         self.events.put({"kind": "auth_restore_missing"})
         return True
 
@@ -671,18 +711,19 @@ class DiscordAuthManager:
                 pass
 
     def clear_browser_session(self) -> bool:
-        """Remove the embedded browser profile used for TXITY sign-in."""
+        """Remove the saved TXITY token and embedded browser sign-in profile."""
         self.close()
+        token_cleared = clear_auth_token()
         local_app_data = os.environ.get("LOCALAPPDATA")
         profile_root = Path(local_app_data) if local_app_data else Path.home()
         profile_path = profile_root / "TXITPY" / "BrowserProfile"
         try:
             shutil.rmtree(profile_path, ignore_errors=False)
         except FileNotFoundError:
-            return True
+            return token_cleared
         except OSError:
             return False
-        return not profile_path.exists()
+        return token_cleared and not profile_path.exists()
 
     def _state_matches(self, value: Any) -> bool:
         with self._lock:
@@ -703,11 +744,24 @@ class DiscordAuthManager:
         with self._lock:
             if not self._state or self._completed or not hmac.compare_digest(state, self._state):
                 return False
-            self._completed = True
-            timeout = self._timeout
-            self._timeout = None
+            try:
+                save_auth_token(token)
+            except (OSError, ValueError) as exc:
+                self._completed = True
+                timeout = self._timeout
+                self._timeout = None
+                save_error = f"Could not save the TXITY session token in the TXITPY AppData folder: {exc}"
+            else:
+                self._completed = True
+                timeout = self._timeout
+                self._timeout = None
+                save_error = ""
+
         if timeout is not None:
             timeout.cancel()
+        if save_error:
+            self.events.put({"kind": "auth_error", "text": save_error})
+            return False
         self.events.put({
             "kind": "auth_token",
             "token": token,
