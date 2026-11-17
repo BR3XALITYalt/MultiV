@@ -3,8 +3,9 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from cli import _handle_event, build_argument_parser, build_headless_plan
+from cli import _handle_event, _read_auth_token, build_argument_parser, build_headless_plan
 
 
 class CommandLineTests(unittest.TestCase):
@@ -27,6 +28,18 @@ class CommandLineTests(unittest.TestCase):
         self.assertFalse(args.loop)
         self.assertFalse(args.shuffle)
         self.assertEqual(args.auth_token_file, Path("C:/ProgramData/TXITPY/token.txt"))
+
+    def test_headless_reads_saved_appdata_token_by_default(self):
+        with tempfile.TemporaryDirectory() as directory:
+            token_file = Path(directory) / "TXITPY" / "token.txt"
+            token_file.parent.mkdir(parents=True)
+            token_file.write_text("saved-token-for-headless-test", encoding="utf-8")
+            args = self.parser.parse_args(["--no-gui"])
+            with patch("cli.auth_token_path", return_value=token_file):
+                self.assertEqual(
+                    _read_auth_token(args),
+                    "saved-token-for-headless-test",
+                )
 
     def test_saved_settings_are_used_when_no_cli_override_is_given(self):
         with tempfile.TemporaryDirectory() as directory:
