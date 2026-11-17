@@ -275,7 +275,7 @@ class TransmitterProtocolTests(unittest.TestCase):
                     )
 
     def test_validates_required_config_values(self):
-        with self.assertRaisesRegex(ValueError, "Station name"):
+        with self.assertRaisesRegex(ValueError, "station name"):
             build_transmit_config(
                 station_name="", description="", frequency="7.250 MHz",
                 mode="AM", station_dbm=50, allow_overlap=False,
