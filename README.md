@@ -72,6 +72,20 @@ TXITY does not have a native DRM mode. TXITPY carries the generated DRM waveform
 
 For CW, choose **CW** as the mode and enter a message and speed in the **CW message** section. Select **Repeat CW message** to keep it playing.
 
+## Station profile and browser control
+
+Open **Settings** to edit your station logo URL and station page details. TXITPY sends these as the TXITY `stationLogoUrl` and `stationDetails` fields when it configures your station. Station page details are limited to 1,200 characters.
+
+The **Browser control panel** can be enabled from **Settings**. Set a password of at least 12 characters, then enable the Web GUI. It listens on `0.0.0.0:23234` and is available on this computer at:
+
+```text
+http://127.0.0.1:23234
+```
+
+Other devices on the same local network can use the computer's LAN IP and port `23234`. The browser interface follows TXITY's main transmit and station-profile page structure. It can update station settings and request transmission start/stop. Audio device and playlist selection remain in the desktop app.
+
+The Web GUI uses a salted PBKDF2 password hash and authenticated browser sessions. It uses plain HTTP, not HTTPS, so use it only on a trusted local network. Do not expose port `23234` to the public internet or forward it through your router. The desktop application must remain running for browser control to work.
+
 ## Stations
 
 Open **Stations** to browse the directory. Select a station to view its profile and comments.
