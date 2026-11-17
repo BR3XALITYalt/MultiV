@@ -1087,8 +1087,13 @@ class TxityTransmitter:
         secondary_rejection_signature = None
         secondary_rejection_count = 0
 
-        def wait_for_control_connection() -> bool:
+        def wait_for_control_connection(*, initial_pair_startup: bool = False) -> bool:
             nonlocal control_wait_reported
+            initial_deadline = (
+                time.monotonic() + 20.0
+                if initial_pair_startup and secondary_client is not None
+                else None
+            )
             while not self._stop_event.is_set():
                 drain_secondary_events()
                 unavailable = [
@@ -1113,6 +1118,12 @@ class TxityTransmitter:
                         ),
                     })
                     control_wait_reported = True
+                if initial_deadline is not None and time.monotonic() >= initial_deadline:
+                    raise TimeoutError(
+                        "AM (DEV) could not establish both authenticated TXITY control "
+                        f"sessions within 20 seconds. Still unavailable: {', '.join(unavailable)}. "
+                        "See the preceding LSB control-session and WebSocket diagnostics."
+                    )
                 self._stop_event.wait(0.5)
             return False
 
@@ -1369,7 +1380,7 @@ class TxityTransmitter:
                     ),
                 })
 
-            if not wait_for_control_connection():
+            if not wait_for_control_connection(initial_pair_startup=am_dev_mode):
                 return
             last_control_generation = getattr(
                 self.client, "control_generation", None
