@@ -4399,6 +4399,13 @@ def build_app() -> None:
             highlightcolor=palette["primary"],
         )
         password_entry.pack(side="left", fill="x", expand=True, ipady=7, padx=(0, 8))
+        make_label(
+            web_card,
+            "Use at least 12 characters. The password is stored as a salted PBKDF2 hash.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(5, 8))
         make_button(
             password_row,
             "Save password",
