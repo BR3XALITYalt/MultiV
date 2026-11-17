@@ -58,6 +58,7 @@ function Quote-ProcessArgument {
 
 function Set-ServiceAccount {
     if ([string]::IsNullOrWhiteSpace($ServiceAccount) -or $ServiceAccount -eq "LocalSystem") {
+        Invoke-Nssm @("reset", $ServiceName, "ObjectName")
         return
     }
 
@@ -176,7 +177,7 @@ Invoke-Nssm @("set", $ServiceName, "AppExit", "Default", "Restart")
 Invoke-Nssm @("set", $ServiceName, "AppRestartDelay", "5000")
 Invoke-Nssm @("set", $ServiceName, "AppStdout", (Join-Path $logDirectory "nssm-stdout.log"))
 Invoke-Nssm @("set", $ServiceName, "AppStderr", (Join-Path $logDirectory "nssm-stderr.log"))
-Invoke-Nssm @("set", $ServiceName, "AppRotateFiles", "1")
+Invoke-Nssm @("set", $ServiceName, "AppRotate", "1")
 Invoke-Nssm @("set", $ServiceName, "AppRotateOnline", "1")
 Invoke-Nssm @("set", $ServiceName, "AppRotateBytes", "10485760")
 Invoke-Nssm @("set", $ServiceName, "Start", "SERVICE_AUTO_START")
