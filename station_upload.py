@@ -128,7 +128,7 @@ def upload_station_image(
     if not is_auth_token(auth_token):
         raise RuntimeError("Sign in with Discord before uploading a station image.")
     if kind != "logo":
-        raise ValueError("TXITPY supports station logo uploads.")
+        raise ValueError("MultiV supports station logo uploads.")
     if (
         not isinstance(data_url, str)
         or len(data_url) > (MAX_UPLOAD_BYTES * 4 // 3) + 256
