@@ -18,6 +18,18 @@ from station_upload import (
 from txity_client import TxityClient
 
 
+class FakeOpener:
+    def __init__(self, response):
+        self.response = response
+        self.request = None
+        self.timeout = None
+
+    def open(self, request, timeout):
+        self.request = request
+        self.timeout = timeout
+        return self.response
+
+
 class FakeResponse:
     def __init__(self, body):
         self.body = body
@@ -69,15 +81,18 @@ class StationImageUploadTests(unittest.TestCase):
             "data": {"imageUrl": "/uploads/stations/logo-123.png"},
         }).encode("utf-8"))
 
-        with patch("station_upload.urlopen", return_value=response) as mocked:
+        opener = FakeOpener(response)
+        with patch("station_upload.build_opener", return_value=opener) as mocked:
             result = upload_station_image(
                 "293ab92c-db4a-410c-9c8b-6a90bc9b1b32",
                 token,
                 data_url,
             )
 
-        request = mocked.call_args.args[0]
+        request = opener.request
         body = json.loads(request.data)
+        self.assertEqual(mocked.call_count, 1)
+        self.assertEqual(opener.timeout, 30)
         self.assertEqual(request.full_url, UPLOAD_URL)
         self.assertEqual(request.method, "POST")
         self.assertEqual(request.get_header("Content-type"), "application/json")
@@ -105,7 +120,7 @@ class StationImageUploadTests(unittest.TestCase):
             "success": False,
             "message": "Image rejected",
         }).encode("utf-8"))
-        with patch("station_upload.urlopen", return_value=response):
+        with patch("station_upload.build_opener", return_value=FakeOpener(response)):
             with self.assertRaisesRegex(RuntimeError, "Image rejected"):
                 upload_station_image(
                     "293ab92c-db4a-410c-9c8b-6a90bc9b1b32",
@@ -115,7 +130,7 @@ class StationImageUploadTests(unittest.TestCase):
 
     def test_rejects_missing_uploaded_image_url(self):
         response = FakeResponse(b'{"ok":true,"message":"Uploaded"}')
-        with patch("station_upload.urlopen", return_value=response):
+        with patch("station_upload.build_opener", return_value=FakeOpener(response)):
             with self.assertRaisesRegex(RuntimeError, "did not return"):
                 upload_station_image(
                     "293ab92c-db4a-410c-9c8b-6a90bc9b1b32",
