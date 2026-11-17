@@ -321,6 +321,7 @@ def build_transmit_config(
     drm_iso_language: str = "",
     drm_iso_country: str = "",
     drm_audio_codec: str = "xHE-AAC",
+    drm_msc_mode: str = "16-QAM",
     drm_interleaving: str = "long",
 ) -> dict[str, Any]:
     """Create the TXITY config message using the website's currentConfig schema."""
@@ -442,6 +443,7 @@ def build_transmit_config(
             "_txitpyDrmIsoLanguage": str(drm_iso_language or "").strip(),
             "_txitpyDrmIsoCountry": str(drm_iso_country or "").strip(),
             "_txitpyDrmAudioCodec": str(drm_audio_codec or "xHE-AAC").strip(),
+            "_txitpyDrmMscMode": str(drm_msc_mode or "16-QAM").strip().upper(),
             "_txitpyDrmInterleaving": str(drm_interleaving or "long").strip().casefold(),
         })
     return configuration
@@ -1017,6 +1019,7 @@ class TxityTransmitter:
                     "iso_language": config.get("_txitpyDrmIsoLanguage", ""),
                     "iso_country": config.get("_txitpyDrmIsoCountry", ""),
                     "audio_codec": config.get("_txitpyDrmAudioCodec", "xHE-AAC"),
+                    "msc_mode": config.get("_txitpyDrmMscMode", "16-QAM"),
                     "interleaving": config.get("_txitpyDrmInterleaving", "long"),
                 }
 
