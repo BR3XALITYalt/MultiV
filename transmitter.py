@@ -473,7 +473,7 @@ def build_transmit_config(
         "fadeMs": int(round(fade_duration_seconds * 1_000)) if fade_enabled else 0,
         "fadeMinDbm": min(fade_floor, power),
         "fadeShape": fade_curve,
-        "allowOverlapVisitors": bool(allow_overlap)
+        "allowOverlapVisitors": bool(allow_overlap),
         "cwText": str(cw_text or "CQ CQ DE TXITY").strip()[:300],
         "cwWpm": words_per_minute,
         "cwLoop": bool(cw_loop),
