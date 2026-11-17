@@ -2909,7 +2909,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(3, 0))
         make_label(
             playlist_frame,
-            "Supported files: WAV, FLAC, OGG, AIFF, and MP3. Added folders refresh automatically when files change.",
+            "Supported files: WAV, FLAC, OGG, AIFF, MP3, M4A, and Opus. TXITPY refreshes added folders when their contents change.",
             font=("Segoe UI", 8, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3595,7 +3595,7 @@ def build_app() -> None:
 
         description = (
             "TXITPY uses TXITY's official Discord sign-in flow. Your website session "
-            "is kept in a separate browser profile and checked automatically when the "
+            "uses a separate browser profile. TXITPY checks it each time the "
             "desktop app starts. TXITPY saves the TXITY session token in its AppData "
             "folder so headless mode can use it."
         )
@@ -3838,7 +3838,7 @@ def build_app() -> None:
             elif data.get("txStartUsable") is False or data.get("txBlockReason") not in (None, False, ""):
                 reason = data.get("txStartReason", data.get("txBlockReason"))
                 reasons = {
-                    2: "transmitter capacity is currently full",
+                    2: "TXITY's transmitter capacity is full",
                     3: "frequency sharing must be enabled by both stations",
                     4: "the total transmitter limit has been reached",
                     5: "enter a station name",
@@ -4142,7 +4142,7 @@ def build_app() -> None:
                 station_status_var.set(
                     f"Loaded {len(station_rows)} stations from TXITY users.json."
                     if station_rows else
-                    "TXITY users.json loaded successfully, but its stations array is empty."
+                    "TXITY users.json loaded, but its stations array is empty."
                 )
                 for station in station_rows:
                     station_name = safe_error_text(str(station.get("station") or "Unknown station"), 100)
