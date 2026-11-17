@@ -10,6 +10,7 @@ import queue
 import secrets
 import sys
 import threading
+import uuid
 import webbrowser
 from pathlib import Path
 from typing import Any
