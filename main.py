@@ -1904,6 +1904,15 @@ def build_app() -> None:
             color=palette["onSurfaceVariant"],
             background=palette["background"],
         ).pack(side="right", pady=(10, 0))
+        tx_transmit_button = make_button(
+            hero,
+            "Stop Transmission" if transmitter.is_busy else "Start Transmission",
+            toggle_transmission,
+            kind="primary",
+            padx=18,
+            pady=9,
+        )
+        tx_transmit_button.pack(side="right", padx=(12, 0))
 
         def add_tx_entry(
             parent_frame: tk.Misc,
@@ -2601,7 +2610,32 @@ def build_app() -> None:
         )
         sharing.pack(anchor="w", padx=6, pady=(8, 0))
 
-        fade_card = make_card(page, padding=16)
+        advanced_container = tk.Frame(page, bg=palette["background"])
+        advanced_container.pack_forget()
+        advanced_expanded = False
+
+        def toggle_advanced_settings() -> None:
+            nonlocal advanced_expanded
+            if advanced_expanded:
+                advanced_container.pack_forget()
+                advanced_toggle.configure(text="Show advanced settings")
+                advanced_expanded = False
+            else:
+                advanced_container.pack(fill="x", before=audio_card, pady=(0, 12))
+                advanced_toggle.configure(text="Hide advanced settings")
+                advanced_expanded = True
+
+        advanced_toggle = make_button(
+            page,
+            "Show advanced settings",
+            toggle_advanced_settings,
+            kind="tonal",
+            padx=14,
+            pady=8,
+        )
+        advanced_toggle.pack(anchor="w", pady=(0, 10))
+
+        fade_card = make_card(advanced_container, padding=16)
         fade_card.pack(fill="x", pady=(0, 12))
         make_label(
             fade_card,
@@ -2682,7 +2716,7 @@ def build_app() -> None:
         tx_fade_enabled_var.trace_add("write", update_fade_controls)
         update_fade_controls()
 
-        audio_filter_card = make_card(page, padding=16)
+        audio_filter_card = make_card(advanced_container, padding=16)
         audio_filter_card.pack(fill="x", pady=(0, 12))
         make_label(
             audio_filter_card,
@@ -3343,16 +3377,6 @@ def build_app() -> None:
             maximum=100,
             style="TXITY.Horizontal.TProgressbar",
         )
-
-        tx_transmit_button = make_button(
-            page,
-            "Stop Transmission" if transmitter.is_busy else "Start Transmission",
-            toggle_transmission,
-            kind="primary",
-            padx=24,
-            pady=12,
-        )
-        tx_transmit_button.pack(anchor="w", pady=(0, 12))
 
         make_label(
             page,
