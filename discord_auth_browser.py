@@ -55,12 +55,12 @@ WATCHER_SCRIPT = r"""
                 document.title = "Discord sign-in complete";
                 document.body.innerHTML =
                     "<main style='font:16px system-ui;max-width:36rem;margin:12vh auto;padding:0 1.5rem;color:#171717'>" +
-                    "<h1>Sign-in complete</h1><p>You can return to TXITPY.</p></main>";
+                    "<h1>Sign-in complete</h1><p>You can return to MultiV.</p></main>";
             } else {
-                document.title = "TXITPY sign-in could not be completed";
+                document.title = "MultiV sign-in could not be completed";
             }
         }).catch(() => {
-            document.title = "TXITPY sign-in could not be completed";
+            document.title = "MultiV sign-in could not be completed";
         });
     }, 1000);
 })();
@@ -105,7 +105,7 @@ class AuthBridge:
             write_diagnostic("send-failure-to-parent", exc)
 
     def no_session(self) -> dict[str, bool]:
-        """Notify TXITPY that the persistent browser profile has no valid session."""
+        """Notify MultiV that the persistent browser profile has no valid session."""
         with self._lock:
             if self._finished:
                 return {"ok": False}
@@ -127,7 +127,7 @@ class AuthBridge:
             accepted = isinstance(result, dict) and result.get("ok") is True
             if accepted:
                 print(
-                    "[TXITPY] No saved Discord session was found.",
+                    "[MultiV] No saved Discord session was found.",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -162,7 +162,7 @@ class AuthBridge:
             return {"ok": False}
 
         print(
-            "[TXITPY] Discord session detected in TXITY browser storage.",
+            "[MultiV] Discord session detected in TXITY browser storage.",
             file=sys.stderr,
             flush=True,
         )
@@ -189,7 +189,7 @@ class AuthBridge:
             if not isinstance(result, dict) or result.get("ok") is not True:
                 raise RuntimeError("The local sign-in callback returned an invalid response.")
             print(
-                "[TXITPY] TXITPY accepted the Discord session through the local callback.",
+                "[MultiV] MultiV accepted the Discord session through the local callback.",
                 file=sys.stderr,
                 flush=True,
             )
@@ -197,7 +197,7 @@ class AuthBridge:
             details = format_exception_details(exc)
             log_path = write_diagnostic("complete-local-callback", exc)
             message = (
-                "TXITPY could not transfer the Discord session to the desktop application.\n\n"
+                "MultiV could not transfer the Discord session to the desktop application.\n\n"
                 f"{details}"
             )
             if log_path is not None:
@@ -224,7 +224,7 @@ class AuthBridge:
         )
         if stage == "import-webview":
             message += (
-                "\n\nInstall the TXITPY Python dependencies with: "
+                "\n\nInstall the MultiV Python dependencies with: "
                 "python -m pip install -r requirements.txt"
             )
         lowered = details.lower()
@@ -244,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     def report_stage(message: str) -> None:
-        print(f"[TXITPY] {message}", file=sys.stderr, flush=True)
+        print(f"[MultiV] {message}", file=sys.stderr, flush=True)
 
     report_stage("Embedded browser helper process started.")
     os.environ["PYWEBVIEW_LOG"] = "debug"
@@ -322,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
             parsed_url = urlsplit(current_url)
             page_location = parsed_url.netloc + parsed_url.path
             print(
-                f"[TXITPY] Sign-in page loaded: {page_location or 'URL unavailable'}",
+                f"[MultiV] Sign-in page loaded: {page_location or 'URL unavailable'}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -338,7 +338,7 @@ def main(argv: list[str] | None = None) -> int:
             # and report the underlying browser error.
             details = format_exception_details(exc)
             print(
-                f"[TXITPY browser page-load error]\n{details}",
+                f"[MultiV browser page-load error]\n{details}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -358,7 +358,7 @@ def main(argv: list[str] | None = None) -> int:
                 "The browser process started, but pywebview did not show its window "
                 "within 20 seconds. The GUI renderer may be blocked during startup."
             )
-            print(f"[TXITPY browser warning] {message}", file=sys.stderr, flush=True)
+            print(f"[MultiV browser warning] {message}", file=sys.stderr, flush=True)
             write_diagnostic_text("window-show-timeout", message)
             return
         if not page_loaded.wait(30):
@@ -366,7 +366,7 @@ def main(argv: list[str] | None = None) -> int:
                 "The sign-in window appeared, but the TXITY webpage did not finish "
                 "loading within 30 seconds."
             )
-            print(f"[TXITPY browser warning] {message}", file=sys.stderr, flush=True)
+            print(f"[MultiV browser warning] {message}", file=sys.stderr, flush=True)
             write_diagnostic_text("page-load-timeout", message)
 
     threading.Thread(
