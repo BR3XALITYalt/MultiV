@@ -37,7 +37,6 @@ from drm_support import (
 from transmitter import (
     TxityTransmitter,
     apply_nfm_transport,
-    build_am_dev_pair_configs,
     build_frequency_candidates,
     build_transmit_config,
     find_frequency_overlaps,
@@ -164,6 +163,8 @@ def build_app() -> None:
     saved_mode = saved_text("mode", "AM").strip().upper()
     if saved_mode == "DRM [EXPERIMENTAL]":
         saved_mode = "DRM"
+    elif saved_mode == "AM (DEV)":
+        saved_mode = "AM"
     tx_mode_var = tk.StringVar(root, saved_mode)
     tx_mode_display_var = tk.StringVar(
         root,
@@ -1340,51 +1341,27 @@ def build_app() -> None:
             )
             apply_nfm_transport(config, candidates[0][1])
 
-            am_dev_mode = str(config.get("_txitpyMode") or "").upper() == "AM (DEV)"
-            secondary_client = None
-            secondary_config = None
-            if am_dev_mode:
-                config, secondary_config = build_am_dev_pair_configs(config)
-                secondary_client = TxityClient()
-                secondary_client.set_discord_auth(client.auth_token, client.discord_user)
-                secondary_client.connect()
-                client.events.put({
-                    "kind": "tx_log",
-                    "text": (
-                        "AM (DEV) requested: opening a second authenticated TXITY session "
-                        "for the overlapping LSB+C path. USB+C remains on the primary session."
-                    ),
-                })
-                frequency_retry_context = None
-            else:
-                frequency_retry_context = {
-                    "base_config": dict(config),
-                    "candidates": candidates,
-                    "next_index": 1,
-                    "current_index": 0,
-                    "pending": False,
-                    "input_device": selected_device,
-                    "audio_source": audio_source,
-                    "playlist_files": list(playlist_files),
-                    "playlist_shuffle": tx_playlist_shuffle_var.get(),
-                    "playlist_loop": tx_playlist_loop_var.get(),
-                }
+            frequency_retry_context = {
+                "base_config": dict(config),
+                "candidates": candidates,
+                "next_index": 1,
+                "current_index": 0,
+                "pending": False,
+                "input_device": selected_device,
+                "audio_source": audio_source,
+                "playlist_files": list(playlist_files),
+                "playlist_shuffle": tx_playlist_shuffle_var.get(),
+                "playlist_loop": tx_playlist_loop_var.get(),
+            }
 
-            try:
-                transmitter.start(
-                    config,
-                    input_device=selected_device,
-                    audio_source=audio_source,
-                    playlist_files=playlist_files,
-                    playlist_shuffle=tx_playlist_shuffle_var.get(),
-                    playlist_loop=tx_playlist_loop_var.get(),
-                    secondary_client=secondary_client,
-                    secondary_config=secondary_config,
-                )
-            except Exception:
-                if secondary_client is not None:
-                    secondary_client.disconnect(wait=1.0)
-                raise
+            transmitter.start(
+                config,
+                input_device=selected_device,
+                audio_source=audio_source,
+                playlist_files=playlist_files,
+                playlist_shuffle=tx_playlist_shuffle_var.get(),
+                playlist_loop=tx_playlist_loop_var.get(),
+            )
             tx_status_var.set("Preparing transmission...")
             if audio_source == "playlist":
                 tx_playlist_status_var.set("Preparing playlist...")
@@ -2043,7 +2020,7 @@ def build_app() -> None:
         mode_picker = ttk.Combobox(
             mode_frame,
             textvariable=tx_mode_display_var,
-            values=("AM", "AM (DEV)", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "DRM [EXPERIMENTAL]", "CW"),
+            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "DRM [EXPERIMENTAL]", "CW"),
             state="readonly",
             height=8,
         )
@@ -2063,20 +2040,15 @@ def build_app() -> None:
         def update_mode_help(_event=None) -> None:
             descriptions = {
                 "AM": "AM - normal AM with carrier.",
-                "AM (DEV)": (
-                    "AM (DEV) - opens two TXITY sessions at the same frequency: USB+C and LSB+C. "
-                    "Both receive the same audio frames and overlap is forced on. This is a pseudo-AM "
-                    "transport experiment; carrier phase coherence is not guaranteed."
-                ),
                 "USB": "USB - upper sideband.",
                 "LSB": "LSB - lower sideband.",
                 "USB+C": "USB+C - upper sideband with carrier.",
                 "LSB+C": "LSB+C - lower sideband with carrier.",
                 "DSB": "DSB - double-sideband suppressed carrier.",
                 "NFM": (
-                    "NFM - software-generated narrow FM with 2.5 kHz peak deviation, a 3 kHz audio band, "
-                    "and a 6 kHz IF. The NFM transport-width slider requests a 1-20 kHz TXITY USB/LSB "
-                    "passband. Settings narrower than the generated signal may clip it."
+                    "NFM - software-generated narrow FM with 2.5 kHz peak deviation, a 30-2,000 Hz audio band, "
+                    "and a 5 kHz IF. TXITPY shifts the USB reference down 1 kHz and the carrier reference up "
+                    "1 kHz to keep the entered channel center fixed. Estimated occupied bandwidth: 9 kHz."
                 ),
                 "DRM": "DRM [EXPERIMENTAL] - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Use a microphone or OGG, MP3, or FLAC playlists.",
                 "CW": "CW - carrier only. TXITPY sends the configured CW message instead of microphone or desktop audio.",
