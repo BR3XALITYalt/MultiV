@@ -448,7 +448,7 @@ def _rustup_windows_target() -> str:
 def _download_verified_rustup_installer(on_log: Callable[[str], None] | None = None) -> Path:
     if os.name != "nt":
         raise RuntimeError(
-            "Automatic Rust installation is currently supported on Windows. "
+            "TXITPY can install Rust on Windows. "
             "Install Rust 1.88 or newer from https://rust-lang.org/tools/install, then reopen TXITPY."
         )
     target = _rustup_windows_target()
