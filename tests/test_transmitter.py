@@ -19,8 +19,7 @@ from transmitter import (
     begin_windows_system_awake,
     end_windows_system_awake,
     should_send_live_audio_silence,
-    next_playlist_frame_deadline,
-    next_drm_frame_deadline,
+    next_audio_frame_deadline,
     playlist_frame_wait_seconds,
     build_audio_socket_url,
     build_transmit_config,
@@ -28,7 +27,6 @@ from transmitter import (
     StreamingLinearResampler,
     find_frequency_overlaps,
     mode_bandwidth_hz,
-    tx_status_diagnostic_snapshot,
 )
 
 
@@ -40,7 +38,7 @@ class TransmitterProtocolTests(unittest.TestCase):
 
     def test_playlist_frames_are_paced_at_48khz(self):
         self.assertAlmostEqual(AUDIO_FRAME_INTERVAL_SECONDS, 512 / 48_000)
-        first_deadline = next_playlist_frame_deadline(None, 10.0)
+        first_deadline = next_audio_frame_deadline(None, 10.0)
         self.assertAlmostEqual(
             playlist_frame_wait_seconds(first_deadline, 10.0),
             AUDIO_FRAME_INTERVAL_SECONDS,
@@ -51,9 +49,9 @@ class TransmitterProtocolTests(unittest.TestCase):
         )
         self.assertEqual(playlist_frame_wait_seconds(first_deadline, 10.02), 0.0)
 
-    def test_playlist_deadlines_do_not_accumulate_small_scheduler_delays(self):
-        first_deadline = next_playlist_frame_deadline(None, 10.0)
-        second_deadline = next_playlist_frame_deadline(
+    def test_audio_deadline_advances_without_scheduler_drift(self):
+        first_deadline = next_audio_frame_deadline(None, 10.0)
+        second_deadline = next_audio_frame_deadline(
             first_deadline,
             first_deadline + 0.001,
         )
@@ -62,34 +60,31 @@ class TransmitterProtocolTests(unittest.TestCase):
             first_deadline + AUDIO_FRAME_INTERVAL_SECONDS,
         )
 
-    def test_playlist_deadline_resets_after_a_long_stall(self):
-        first_deadline = next_playlist_frame_deadline(None, 10.0)
+    def test_playlist_deadline_skips_a_missed_slot(self):
+        first_deadline = next_audio_frame_deadline(None, 10.0)
         late_now = first_deadline + AUDIO_FRAME_INTERVAL_SECONDS + 0.05
-        next_deadline = next_playlist_frame_deadline(first_deadline, late_now)
+        next_deadline = next_audio_frame_deadline(first_deadline, late_now)
         self.assertAlmostEqual(
             next_deadline,
             late_now + AUDIO_FRAME_INTERVAL_SECONDS,
         )
 
-    def test_drm_deadline_keeps_the_sample_clock_after_small_delays(self):
-        first_deadline = next_drm_frame_deadline(None, 10.0)
-        second_deadline = next_drm_frame_deadline(
-            first_deadline,
-            first_deadline + 0.001,
-        )
-        self.assertAlmostEqual(
-            second_deadline,
-            first_deadline + AUDIO_FRAME_INTERVAL_SECONDS,
-        )
-
-    def test_drm_deadline_does_not_add_a_second_interval_after_a_late_send(self):
-        first_deadline = next_drm_frame_deadline(None, 10.0)
+    def test_drm_deadline_catches_up_after_a_late_send(self):
+        first_deadline = next_audio_frame_deadline(None, 10.0)
         late_now = first_deadline + 2 * AUDIO_FRAME_INTERVAL_SECONDS + 0.05
-        next_deadline = next_drm_frame_deadline(first_deadline, late_now)
+        next_deadline = next_audio_frame_deadline(
+            first_deadline,
+            late_now,
+            catch_up_after_delay=True,
+        )
         self.assertEqual(next_deadline, late_now)
         self.assertEqual(playlist_frame_wait_seconds(next_deadline, late_now), 0.0)
 
-        following_deadline = next_drm_frame_deadline(next_deadline, late_now)
+        following_deadline = next_audio_frame_deadline(
+            next_deadline,
+            late_now,
+            catch_up_after_delay=True,
+        )
         self.assertAlmostEqual(
             following_deadline,
             late_now + AUDIO_FRAME_INTERVAL_SECONDS,
@@ -310,9 +305,9 @@ class TransmitterProtocolTests(unittest.TestCase):
         resampler = StreamingLinearResampler(48_000, 48_000)
         np.testing.assert_array_equal(resampler.process(samples), samples)
 
-    def test_drm_test_tone_is_a_supported_audio_source(self):
+    def test_audio_sources_are_limited_to_supported_inputs(self):
         self.assertIn("DRM", SUPPORTED_MODES)
-        self.assertIn("tone", SUPPORTED_AUDIO_SOURCES)
+        self.assertEqual(SUPPORTED_AUDIO_SOURCES, ("mic", "loopback", "playlist"))
 
     def test_drm_mode_uses_one_dsb_transport_channel(self):
         self.assertIn("DRM", SUPPORTED_MODES)
@@ -390,31 +385,6 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(mode_bandwidth_hz("LSB+C"), 10_000)
         self.assertEqual(mode_bandwidth_hz("CW"), 500)
 
-    def test_tx_status_diagnostics_include_request_context_without_credentials(self):
-        snapshot = tx_status_diagnostic_snapshot(
-            {
-                "ptt": False,
-                "txStartUsable": False,
-                "txStartReason": 3,
-                "txBlockReason": 3,
-                "discordAuthToken": "must-not-be-logged",
-            },
-            request_frequency_hz=7_250_000,
-            request_mode="DRM",
-            allow_overlap=False,
-        )
-        self.assertEqual(snapshot["ptt"], False)
-        self.assertEqual(snapshot["txStartReason"], 3)
-        self.assertEqual(snapshot["requestRfHz"], 7_250_000)
-        self.assertEqual(snapshot["requestMode"], "DRM")
-        self.assertFalse(snapshot["requestAllowOverlapVisitors"])
-        self.assertNotIn("discordAuthToken", snapshot)
-
-    def test_tx_status_diagnostics_ignore_unrelated_payload_fields(self):
-        snapshot = tx_status_diagnostic_snapshot(
-            {"ptt": True, "someOtherField": "ignored"}
-        )
-        self.assertEqual(snapshot, {"ptt": True})
 
     def test_detects_overlapping_virtual_station_frequency(self):
         overlaps = find_frequency_overlaps(
