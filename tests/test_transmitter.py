@@ -186,7 +186,7 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertTrue(config["agcEnabled"])
         self.assertEqual(config["agcTarget"], 0.19)
         self.assertEqual(config["micGainDb"], 0)
-        self.assertEqual(config["ssbBandwidthHz"], 12_000)
+        self.assertEqual(config["ssbBandwidthHz"], 10_000)
         self.assertFalse(config["cwLoop"])
         self.assertEqual(config["discordAuthToken"], "test-token")
 
@@ -453,7 +453,7 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["_txitpyNfmDeviationHz"], 2_500)
         self.assertEqual(config["_txitpyNfmInputGainDb"], 3)
         self.assertEqual(config["_txitpyNfmSideband"], "USB")
-        self.assertEqual(config["ssbBandwidthHz"], 10_000)
+        self.assertEqual(config["ssbBandwidthHz"], 12_000)
         self.assertEqual(config["ssbLowCutHz"], 0)
         self.assertEqual(config["ssbHighCutHz"], 0)
         self.assertFalse(config["agcEnabled"])
