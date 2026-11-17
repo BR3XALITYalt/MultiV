@@ -198,7 +198,7 @@ TXITY_RF_ROOM_MAX_HZ = 8_000_000
 
 
 def nfm_transport_settings(target_frequency_hz: Any) -> tuple[str, int]:
-    """Place a 6 kHz NFM IF at the requested channel center using TXITY SSB."""
+    """Place a 5 kHz NFM IF at the requested channel centre using TXITY SSB."""
     target_hz = parse_rf_frequency(target_frequency_hz)
     if not TXITY_RF_ROOM_MIN_HZ <= target_hz <= TXITY_RF_ROOM_MAX_HZ:
         raise ValueError("NFM runs only in TXITY's 7.000-8.000 MHz room.")
@@ -211,7 +211,7 @@ def nfm_transport_settings(target_frequency_hz: Any) -> tuple[str, int]:
     if TXITY_RF_ROOM_MIN_HZ <= lower_carrier_hz <= TXITY_RF_ROOM_MAX_HZ:
         return "LSB", lower_carrier_hz
 
-    raise ValueError("NFM needs 6 kHz of tuning room around the requested frequency.")
+    raise ValueError("NFM needs 5 kHz of tuning room around the requested frequency.")
 
 
 def apply_nfm_transport(
@@ -1670,6 +1670,8 @@ class TxityTransmitter:
 
                 if audio_thread_error:
                     raise RuntimeError(audio_thread_error[0])
+                if rade_mode and rade_encoder is not None and rade_encoder.error:
+                    raise RuntimeError(rade_encoder.error)
                 if drm_playlist_server and drm_playlist_server.finished.is_set():
                     if drm_playlist_stop_deadline is None:
                         drm_playlist_stop_deadline = time.monotonic() + 0.6
