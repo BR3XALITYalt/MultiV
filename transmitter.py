@@ -608,7 +608,7 @@ def list_loopback_devices() -> list[tuple[int, str]]:
         import pyaudiowpatch as pyaudio
     except ImportError as exc:
         raise RuntimeError(
-            "Desktop audio capture requires PyAudioWPatch. Install the project requirements and reopen TXITPY."
+            "Desktop audio capture requires PyAudioWPatch. Install the project requirements and reopen MultiV."
         ) from exc
 
     manager = pyaudio.PyAudio()
@@ -1298,7 +1298,7 @@ class TxityTransmitter:
                     )
                     drm_config_path = write_drm_station_config(
                         drm_temp_path / "station.toml",
-                        station_name=config.get("stationName", "TXITPY"),
+                        station_name=config.get("stationName", "MultiV"),
                         playlist_url=drm_playlist_server.url,
                         **drm_metadata,
                     )
@@ -1314,7 +1314,7 @@ class TxityTransmitter:
                             raise RuntimeError("The selected microphone does not have a usable device name.")
                     drm_config_path = write_drm_station_config(
                         drm_temp_path / "station.toml",
-                        station_name=config.get("stationName", "TXITPY"),
+                        station_name=config.get("stationName", "MultiV"),
                         input_device_name=input_name,
                         **drm_metadata,
                     )
@@ -1337,7 +1337,7 @@ class TxityTransmitter:
                         import pyaudiowpatch as pyaudio
                     except ImportError as exc:
                         raise RuntimeError(
-                            "Desktop audio capture requires PyAudioWPatch. Install the project requirements and reopen TXITPY."
+                            "Desktop audio capture requires PyAudioWPatch. Install the project requirements and reopen MultiV."
                         ) from exc
 
                     if input_device is None:
@@ -1691,7 +1691,7 @@ class TxityTransmitter:
                         self.events.put({
                             "kind": "tx_audio_warning",
                             "text": (
-                                "Audio input reported an error. TXITPY will keep the stream open "
+                                "Audio input reported an error. MultiV will keep the stream open "
                                 f"and send silence until input resumes: {details}"
                             ),
                         })
