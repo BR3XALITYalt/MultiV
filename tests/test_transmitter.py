@@ -2,6 +2,7 @@ import unittest
 from urllib.parse import parse_qs, urlparse
 
 from transmitter import (
+    AUDIO_QUEUE_FRAMES,
     AUDIO_URL,
     FRAME_BYTES,
     SAMPLE_RATE_HZ,
