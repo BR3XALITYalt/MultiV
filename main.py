@@ -46,6 +46,7 @@ from drm_support import (
 from transmitter import (
     TxityTransmitter,
     apply_nfm_transport,
+    build_am_dev_pair_configs,
     build_frequency_candidates,
     build_transmit_config,
     find_frequency_overlaps,
@@ -2210,26 +2211,52 @@ def build_app() -> None:
                 [variable.get() for variable in tx_frequency_fallback_vars],
             )
             apply_nfm_transport(config, candidates[0][1])
-            frequency_retry_context = {
-                "base_config": dict(config),
-                "candidates": candidates,
-                "next_index": 1,
-                "current_index": 0,
-                "pending": False,
-                "input_device": selected_device,
-                "audio_source": audio_source,
-                "playlist_files": list(playlist_files),
-                "playlist_shuffle": tx_playlist_shuffle_var.get(),
-                "playlist_loop": tx_playlist_loop_var.get(),
-            }
-            transmitter.start(
-                config,
-                input_device=selected_device,
-                audio_source=audio_source,
-                playlist_files=playlist_files,
-                playlist_shuffle=tx_playlist_shuffle_var.get(),
-                playlist_loop=tx_playlist_loop_var.get(),
-            )
+
+            am_dev_mode = str(config.get("_txitpyMode") or "").upper() == "AM (DEV)"
+            secondary_client = None
+            secondary_config = None
+            if am_dev_mode:
+                config, secondary_config = build_am_dev_pair_configs(config)
+                secondary_client = TxityClient()
+                secondary_client.set_discord_auth(client.auth_token, client.discord_user)
+                secondary_client.connect()
+                client.events.put({
+                    "kind": "tx_log",
+                    "text": (
+                        "AM (DEV) requested: opening a second authenticated TXITY session "
+                        "for the overlapping LSB+C path. USB+C remains on the primary session."
+                    ),
+                })
+                frequency_retry_context = None
+            else:
+                frequency_retry_context = {
+                    "base_config": dict(config),
+                    "candidates": candidates,
+                    "next_index": 1,
+                    "current_index": 0,
+                    "pending": False,
+                    "input_device": selected_device,
+                    "audio_source": audio_source,
+                    "playlist_files": list(playlist_files),
+                    "playlist_shuffle": tx_playlist_shuffle_var.get(),
+                    "playlist_loop": tx_playlist_loop_var.get(),
+                }
+
+            try:
+                transmitter.start(
+                    config,
+                    input_device=selected_device,
+                    audio_source=audio_source,
+                    playlist_files=playlist_files,
+                    playlist_shuffle=tx_playlist_shuffle_var.get(),
+                    playlist_loop=tx_playlist_loop_var.get(),
+                    secondary_client=secondary_client,
+                    secondary_config=secondary_config,
+                )
+            except Exception:
+                if secondary_client is not None:
+                    secondary_client.disconnect(wait=1.0)
+                raise
             tx_status_var.set("Preparing transmission...")
             if audio_source == "playlist":
                 tx_playlist_status_var.set("Preparing playlist...")
@@ -2722,7 +2749,7 @@ def build_app() -> None:
         mode_picker = ttk.Combobox(
             mode_frame,
             textvariable=tx_mode_display_var,
-            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "DRM [EXPERIMENTAL]", "CW"),
+            values=("AM", "AM (DEV)", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "DRM [EXPERIMENTAL]", "CW"),
             state="readonly",
             height=8,
         )
@@ -2742,6 +2769,11 @@ def build_app() -> None:
         def update_mode_help(_event=None) -> None:
             descriptions = {
                 "AM": "AM - normal AM with carrier.",
+                "AM (DEV)": (
+                    "AM (DEV) - opens two TXITY sessions at the same frequency: USB+C and LSB+C. "
+                    "Both receive the same audio frames and overlap is forced on. This is a pseudo-AM "
+                    "transport experiment; carrier phase coherence is not guaranteed."
+                ),
                 "USB": "USB - upper sideband.",
                 "LSB": "LSB - lower sideband.",
                 "USB+C": "USB+C - upper sideband with carrier.",
