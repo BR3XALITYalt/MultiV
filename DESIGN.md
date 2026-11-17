@@ -1,8 +1,8 @@
-# TXITPY interface direction
+# MultiV interface direction
 
 ## Product
 
-TXITPY is a Windows desktop client for TXITY's simulated radio-broadcast service. The main tasks are checking TXITY service status, finding stations, managing a Discord session, and configuring a virtual audio stream.
+MultiV is a Windows desktop client for TXITY's simulated radio-broadcast service. The main tasks are checking TXITY service status, finding stations, managing a Discord session, and configuring a virtual audio stream.
 
 ## Design read
 
