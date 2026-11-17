@@ -35,19 +35,14 @@ TXITPY reconnects when its control or audio connection drops. It restores the st
 
 ### NFM
 
-TXITPY generates NFM with a 6 kHz intermediate frequency, 2.5 kHz peak deviation, and a 30-3,000 Hz audio band. The estimated Carson-rule bandwidth is 11 kHz.
+TXITPY generates NFM with a 5 kHz intermediate frequency, 2.5 kHz peak deviation, and a 30-2,000 Hz audio band. The estimated Carson-rule bandwidth is 9 kHz. The 500 Hz clearance between the IF and the deviation-plus-audio limit keeps the generated spectrum above DC.
 
 The **NFM transport bandwidth** control requests a TXITY USB/LSB passband from 1 to 20 kHz. It defaults to 12 kHz. This control changes the transport passband, not FM deviation or the audio filter. A narrower passband can clip the signal.
 
-TXITY does not offer native NFM. TXITPY sends its generated FM signal through the existing USB or LSB transport. The frequency you enter is the NFM channel center; TXITY's station directory shows the underlying sideband transport with its carrier offset by 6 kHz.
+TXITY does not offer native NFM. TXITPY sends its generated FM signal through the existing USB or LSB transport. To correct the observed passband asymmetry, TXITPY moves the NFM IF down by 1 kHz (6 kHz to 5 kHz) and moves the TXITY carrier reference up by 1 kHz. These offsets cancel, so the entered channel center does not change. The station directory shows the underlying sideband transport with its reference 5 kHz below the selected center for USB, or 5 kHz above it for LSB.
 
 NFM runs only in TXITY's 7.000-8.000 MHz room. An independent receiver test has not verified this signal path. TXITY filtering and receiver settings can affect the result.
 
-### AM (DEV)
-
-**AM (DEV)** is a diagnostic mode. It opens two TXITY sessions under the same Discord account at the same frequency. One session uses USB+C and the other uses LSB+C. TXITPY enables frequency overlap for both sessions and sends each the same 512-sample, 48 kHz Float32 audio frame.
-
-TXITY may reject the second session. Its server generates each carrier independently, so the two carriers may not share phase or amplitude. A successful connection does not guarantee a correctly reconstructed AM signal.
 
 ### DRM [EXPERIMENTAL]
 
