@@ -3471,6 +3471,14 @@ def build_app() -> None:
 
         make_label(
             logo_frame,
+            "PNG, JPEG, WebP, or GIF. Maximum file size: 5 MB.",
+            font=("Segoe UI", 8, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(5, 0))
+
+        make_label(
+            logo_frame,
             variable=tx_logo_upload_status_var,
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
@@ -4157,7 +4165,7 @@ def build_app() -> None:
                 if uploaded_url:
                     tx_logo_url_var.set(uploaded_url[:512])
                     tx_logo_upload_status_var.set(
-                        "Logo uploaded. TXITPY saved the hosted image URL."
+                        "Logo uploaded. The hosted URL is in the Station logo URL field."
                     )
                 else:
                     tx_logo_upload_status_var.set(
