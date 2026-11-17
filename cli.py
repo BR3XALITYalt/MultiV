@@ -63,7 +63,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--station-name", help="Override the saved station name.")
     parser.add_argument("--description", help="Override the saved station description.")
-    parser.add_argument("--frequency", help="Override the saved frequency, for example 7.250 MHz.")
+    parser.add_argument("--frequency", help="Override the saved primary frequency, for example 7.250 MHz.")
+    parser.add_argument(
+        "--frequency-fallback",
+        action="append",
+        default=None,
+        metavar="FREQUENCY",
+        help="Add a fallback frequency in retry order. Repeat for multiple frequencies.",
+    )
     parser.add_argument(
         "--mode",
         type=str.upper,
@@ -360,7 +367,11 @@ def build_headless_plan(
         if args.frequency is not None
         else _setting_text(settings, "frequency", "7.250 MHz")
     )
-    raw_fallbacks = settings.get("frequency_fallbacks", [])
+    raw_fallbacks = (
+        args.frequency_fallback
+        if args.frequency_fallback is not None
+        else settings.get("frequency_fallbacks", [])
+    )
     if not isinstance(raw_fallbacks, list):
         raw_fallbacks = []
     frequency_candidates = build_frequency_candidates(
