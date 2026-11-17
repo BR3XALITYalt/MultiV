@@ -77,17 +77,26 @@ def prepare_rade_encoder(
     executable = install_dir / "freedv_rade_tx.exe"
     required_files = (
         executable,
-        install_dir / "librade.dll",
         install_dir / "libgcc_s_seh-1.dll",
         install_dir / "libwinpthread-1.dll",
         install_dir / "libssp-0.dll",
     )
-    if all(path.is_file() for path in required_files):
+    rade_libraries = (
+        install_dir / "rade.dll",
+        install_dir / "librade.dll",
+    )
+    if (
+        all(path.is_file() for path in required_files)
+        and any(path.is_file() for path in rade_libraries)
+    ):
         return executable
 
     root.mkdir(parents=True, exist_ok=True)
     with _runtime_install_lock:
-        if all(path.is_file() for path in required_files):
+        if (
+            all(path.is_file() for path in required_files)
+            and any(path.is_file() for path in rade_libraries)
+        ):
             return executable
 
         if on_log:
@@ -126,6 +135,8 @@ def prepare_rade_encoder(
                 path.name for path in required_files
                 if not (extracted / path.name).is_file()
             ]
+            if not any((extracted / path.name).is_file() for path in rade_libraries):
+                missing.append("rade.dll or librade.dll")
             if missing:
                 raise RuntimeError(
                     "The FreeDV RADE runtime package is incomplete: "
@@ -444,11 +455,11 @@ class FreeDVRadeEncoder:
                         32767,
                     ).astype("<i2", copy=False)
                     try:
-                        self._input_queue.put(pcm.tobytes(), timeout=1.0)
+                        self._input_queue.put(pcm.tobytes(), timeout=timeout)
                     except queue.Full:
                         self._set_error("FreeDV RADE could not flush its final speech frame.")
                 try:
-                    self._input_queue.put(None, timeout=1.0)
+                    self._input_queue.put(None, timeout=timeout)
                 except queue.Full:
                     self._set_error("FreeDV RADE did not drain its speech input queue.")
                     try:
