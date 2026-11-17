@@ -1,5 +1,6 @@
 import unittest
 
+import station_directory
 from station_directory import (
     describe_status_socket_error,
     format_duration,
@@ -232,7 +233,7 @@ class StationParserTests(unittest.TestCase):
             def read(self, _limit):
                 return image_data
 
-        with patch("main.urlopen", return_value=FakeResponse()):
+        with patch("station_directory.urlopen", return_value=FakeResponse()):
             self.assertEqual(
                 fetch_station_image("https://txity.radiodiscussion.org/uploads/test.png"),
                 image_data,
