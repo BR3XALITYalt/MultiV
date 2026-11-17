@@ -2494,9 +2494,7 @@ def build_app() -> None:
         signal_card = make_card(page, padding=16)
         signal_card.pack(fill="x", pady=(0, 12))
 
-        drm_metadata_slot = tk.Frame(page, bg=palette["background"])
-        drm_metadata_slot.pack(fill="x")
-        drm_metadata_card = make_card(drm_metadata_slot, padding=16)
+        drm_metadata_card = make_card(page, padding=16)
         make_label(
             drm_metadata_card,
             "DRM service metadata",
@@ -4343,7 +4341,7 @@ def build_app() -> None:
 
     def drain_events() -> None:
         nonlocal discord_authenticated, auth_restore_started, auth_enabled, station_rows, current_page, tx_profile_initialized
-        nonlocal users_listing_received
+        nonlocal users_listing_received, frequency_retry_context
         nonlocal tx_negative_status_reason, tx_negative_status_count
         nonlocal tx_ptt_confirmed, tx_terminal_server_message
         while True:
