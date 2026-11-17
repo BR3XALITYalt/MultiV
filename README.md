@@ -45,6 +45,7 @@ nssm install TXITPY "C:\Python312\python.exe"
 nssm set TXITPY AppDirectory "C:\TXITPY"
 nssm set TXITPY AppParameters '"C:\TXITPY\main.py" --no-gui --auth-token-file "C:\ProgramData\TXITPY\discord-token.txt" --log-file "C:\ProgramData\TXITPY\logs\txitpy.log"'
 nssm set TXITPY AppExit Default Restart
+nssm set TXITPY AppRestartDelay 5000
 nssm set TXITPY Start SERVICE_AUTO_START
 nssm start TXITPY
 ```
