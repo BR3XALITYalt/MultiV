@@ -1,4 +1,4 @@
-"""TXITPY desktop client for TXITY's station directory, status feed, and virtual transmitter.
+"""MultiV desktop client for TXITY's station directory, status feed, and virtual transmitter.
 
 Discord sign-in uses TXITY's official OAuth route and a one-use loopback callback.
 """
@@ -110,7 +110,7 @@ def build_app() -> None:
 
     root = tk.Tk()
     palette = apply_tk_theme(root, theme_mode)
-    root.title("TXITPY")
+    root.title("MultiV")
     root.geometry("1180x790")
     root.minsize(900, 650)
     root.configure(background=palette["background"])
@@ -228,7 +228,7 @@ def build_app() -> None:
             if tx_playlist_files else "No playlist loaded."
         ),
     )
-    tx_cw_text_var = tk.StringVar(root, saved_text("cw_text", "CQ CQ DE TXITPY"))
+    tx_cw_text_var = tk.StringVar(root, saved_text("cw_text", "CQ CQ DE MULTIV"))
     tx_cw_wpm_var = tk.StringVar(root, saved_text("cw_wpm", "18"))
     tx_cw_loop_var = tk.BooleanVar(root, saved_bool("cw_loop", True))
     tx_allow_overlap_var = tk.BooleanVar(root, saved_bool("allow_overlap", False))
@@ -1016,7 +1016,7 @@ def build_app() -> None:
 
         make_label(
             card,
-            "TXITPY",
+            "MultiV",
             font=("Segoe UI", 30, "bold"),
             background=palette["surfaceContainerLow"],
             color=palette["primary"],
@@ -1029,8 +1029,8 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(14, 6))
         make_label(
             card,
-            "Sign in with Discord to use the TXITPY desktop app. "
-            "TXITPY checks your saved session each time it starts.",
+            "Sign in with Discord to use the MultiV desktop app. "
+            "MultiV checks your saved session each time it starts.",
             font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -1238,9 +1238,9 @@ def build_app() -> None:
         if fallback_count:
             frequency_word = "frequency" if fallback_count == 1 else "frequencies"
             messages.append(
-                f"TXITPY will try {fallback_count} alternate {frequency_word} if TXITY rejects the first frequency."
+                f"MultiV will try {fallback_count} alternate {frequency_word} if TXITY rejects the first frequency."
             )
-        messages.append("TXITPY estimates overlap from the station list. TXITY makes the final decision about shared frequencies.")
+        messages.append("MultiV estimates overlap from the station list. TXITY makes the final decision about shared frequencies.")
         tx_frequency_check_var.set(" ".join(messages))
 
     tx_frequency_var.trace_add("write", lambda *_args: update_frequency_check())
@@ -1435,7 +1435,7 @@ def build_app() -> None:
                         web_gui_status_var.set("A transmission is already starting or active.")
                     elif not discord_authenticated:
                         web_gui_status_var.set(
-                            "Sign in to Discord in the TXITPY desktop app before transmitting."
+                            "Sign in to Discord in the MultiV desktop app before transmitting."
                         )
                     else:
                         toggle_transmission()
@@ -1589,7 +1589,7 @@ def build_app() -> None:
         hero.pack(fill="x", pady=(6, 16))
         make_label(
             hero,
-            "TXITPY",
+            "MultiV",
             font=("Segoe UI", 28, "bold"),
             background=palette["background"],
         ).pack(side="left")
@@ -2050,7 +2050,7 @@ def build_app() -> None:
                 "DSB": "DSB - double-sideband suppressed carrier.",
                 "NFM": (
                     "NFM - software-generated narrow FM with 2.5 kHz peak deviation, a 30-2,000 Hz audio band, "
-                    "and a 5 kHz IF. TXITPY shifts the USB reference down 1 kHz and the carrier reference up "
+                    "and a 5 kHz IF. MultiV shifts the USB reference down 1 kHz and the carrier reference up "
                     "1 kHz to keep the entered channel center fixed. Estimated occupied bandwidth: 9 kHz."
                 ),
                 "RADE": (
@@ -2058,7 +2058,7 @@ def build_app() -> None:
                     "Uses a 1.5 kHz audio centre and channel. The first start downloads a verified Windows x64 encoder."
                 ),
                 "DRM": "DRM [EXPERIMENTAL] - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Use a microphone or OGG, MP3, or FLAC playlists.",
-                "CW": "CW - carrier only. TXITPY sends the configured CW message instead of microphone or desktop audio.",
+                "CW": "CW - carrier only. MultiV sends the configured CW message instead of microphone or desktop audio.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
             update_drm_metadata_visibility()
@@ -2195,10 +2195,10 @@ def build_app() -> None:
                 ):
                     install_prompt = (
                         "DRM needs Microsoft's Visual Studio C++ Build Tools.\n\n"
-                        "TXITPY can download the official installer and add the "
+                        "MultiV can download the official installer and add the "
                         "'Desktop development with C++' workload, including the MSVC compiler "
                         "and Windows SDK. The installer may request administrator approval. "
-                        "TXITPY will then continue installing any missing DRM dependencies.\n\n"
+                        "MultiV will then continue installing any missing DRM dependencies.\n\n"
                         "Install the C++ build tools and continue setting up DRM?"
                     )
                     if messagebox.askyesno(
@@ -2214,7 +2214,7 @@ def build_app() -> None:
                 restore_previous_mode()
                 messagebox.showerror(
                     "DRM build tools missing",
-                    "DRM needs these build tools, which TXITPY could not detect:\n\n"
+                    "DRM needs these build tools, which MultiV could not detect:\n\n"
                     + "\n".join(missing_build_tools)
                     + "\n\nInstall the missing tools, then select DRM again.",
                     parent=root,
@@ -2230,17 +2230,17 @@ def build_app() -> None:
                 messagebox.showinfo(
                     "Rust is required for DRM",
                     "Install Rust 1.88 or newer from https://rust-lang.org/tools/install, "
-                    "then restart TXITPY and select DRM again.",
+                    "then restart MultiV and select DRM again.",
                     parent=root,
                 )
                 webbrowser.open("https://rust-lang.org/tools/install")
                 return
 
             prompt = (
-                "DRM mode is not ready. TXITPY could not detect:\n\n"
+                "DRM mode is not ready. MultiV could not detect:\n\n"
                 + "\n".join(f"• {item}" for item in missing)
                 + "\n\nDownload and install the missing components and build the DRM encoder now? "
-                "TXITPY will select DRM when setup finishes."
+                "MultiV will select DRM when setup finishes."
             )
             if not messagebox.askyesno("Set up DRM30", prompt, parent=root):
                 restore_previous_mode()
@@ -2568,7 +2568,7 @@ def build_app() -> None:
         am_pre_emphasis.pack(anchor="w", padx=6, pady=(7, 0))
         make_label(
             audio_filter_card,
-            "TXITPY sends these processing values with your TXITY station configuration when you start transmission.",
+            "MultiV sends these processing values with your TXITY station configuration when you start transmission.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -2765,7 +2765,7 @@ def build_app() -> None:
                     tx_playlist_status_var.set("Playlist entries restored.")
                 elif any(Path(item).is_dir() for item in added_sources):
                     tx_playlist_status_var.set(
-                        "Folder added. TXITPY will refresh the playlist when its contents change."
+                        "Folder added. MultiV will refresh the playlist when its contents change."
                     )
                 else:
                     tx_playlist_status_var.set("Those audio files are already in the playlist.")
@@ -2904,7 +2904,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(3, 0))
         make_label(
             playlist_frame,
-            "Supported files: WAV, FLAC, OGG, AIFF, MP3, M4A, and Opus. TXITPY refreshes added folders when their contents change.",
+            "Supported files: WAV, FLAC, OGG, AIFF, MP3, M4A, and Opus. MultiV refreshes added folders when their contents change.",
             font=("Segoe UI", 8, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3046,7 +3046,7 @@ def build_app() -> None:
         make_label(
             connect_card,
             "TXITY provides a virtual SDR++ Server feed. Connect your SDR++ client to the "
-            "server endpoint shown by TXITY, then start the transmission here. TXITPY sends "
+            "server endpoint shown by TXITY, then start the transmission here. MultiV sends "
             "audio to TXITY's virtual service and does not control local RF hardware.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
@@ -3081,7 +3081,7 @@ def build_app() -> None:
 
         make_label(
             page,
-            "TXITPY streams selected audio only to TXITY's virtual service.",
+            "MultiV streams selected audio only to TXITY's virtual service.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
@@ -3386,7 +3386,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(0, 6))
         make_label(
             profile_card,
-            "TXITPY sends these values to TXITY as your public station logo and station-page details.",
+            "MultiV sends these values to TXITY as your public station logo and station-page details.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3512,7 +3512,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(0, 6))
         make_label(
             web_card,
-            "Serve the TXITPY control interface to devices on your local network, using the TXITY transmit and station-page layout.",
+            "Serve the MultiV control interface to devices on your local network, using the TXITY transmit and station-page layout.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3558,7 +3558,7 @@ def build_app() -> None:
         password_entry.pack(side="left", fill="x", expand=True, ipady=7, padx=(0, 8))
         make_label(
             web_card,
-            "Use at least 12 characters. TXITPY stores a salted PBKDF2 hash of your password.",
+            "Use at least 12 characters. MultiV stores a salted PBKDF2 hash of your password.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3639,9 +3639,9 @@ def build_app() -> None:
         ).pack(side="left")
 
         description = (
-            "TXITPY uses TXITY's official Discord sign-in flow. Your website session "
-            "uses a separate browser profile. TXITPY checks it each time the "
-            "desktop app starts. TXITPY saves the TXITY session token in its AppData "
+            "MultiV uses TXITY's official Discord sign-in flow. Your website session "
+            "uses a separate browser profile. MultiV checks it each time the "
+            "desktop app starts. MultiV saves the TXITY session token in its AppData "
             "folder so headless mode can use it."
         )
         make_label(
@@ -3690,7 +3690,7 @@ def build_app() -> None:
 
         make_label(
             topbar,
-            "TXITPY",
+            "MultiV",
             font=("Segoe UI", 17, "bold"),
             color=palette["primary"],
             background=palette["surfaceContainerLow"],
@@ -4003,7 +4003,7 @@ def build_app() -> None:
                 log_text = str(event.get("text") or "").strip()
                 if log_text:
                     print(
-                        "[TXITPY] " + log_text[:1_500],
+                        "[MultiV] " + log_text[:1_500],
                         file=sys.stderr,
                         flush=True,
                     )
@@ -4015,7 +4015,7 @@ def build_app() -> None:
                 state = str(event.get("state") or "")
                 state_text = str(event.get("text") or state)
                 print(
-                    f"[TXITPY] Transmitter state: {state}. {state_text}",
+                    f"[MultiV] Transmitter state: {state}. {state_text}",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -4057,14 +4057,14 @@ def build_app() -> None:
                 tx_status_var.set(f"Transmission error: {details}")
                 if traceback_text:
                     print(
-                        "\n[TXITPY transmission error]\n"
+                        "\n[MultiV transmission error]\n"
                         + traceback_text,
                         file=sys.stderr,
                         flush=True,
                     )
                 else:
                     print(
-                        f"\n[TXITPY transmission error] {details}\n",
+                        f"\n[MultiV transmission error] {details}\n",
                         file=sys.stderr,
                         flush=True,
                     )
@@ -4384,7 +4384,7 @@ if __name__ == "__main__":
             filename="application-errors.log",
         )
         message = (
-            "\n[TXITPY main window startup error]\n"
+            "\n[MultiV main window startup error]\n"
             f"Exception: {type(exc).__name__}: {safe_error_text(exc)}\n\n"
             f"Traceback:\n{details}"
         )
