@@ -1,4 +1,4 @@
-"""Password-protected browser control panel for TXITPY.
+"""Password-protected browser control panel for MultiV.
 
 The server uses only the Python standard library. Credentials are stored as a
 PBKDF2 hash, authenticated sessions are held in memory, and state-changing
@@ -65,7 +65,7 @@ LOGIN_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TXITY - TXITPY Login</title>
+<title>TXITY - MultiV Login</title>
 <style>
 :root{color-scheme:light;--blue:#1769aa;--ink:#202124;--muted:#5f6368;--line:#dadce0;--surface:#fff;--page:#f5f7fa}
 *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);font:15px Arial,Helvetica,sans-serif}
@@ -162,7 +162,7 @@ button {
 </head>
 <body>
 <header class="topbar"><div class="brand">TXITY</div><nav><a href="/">Transmit</a></nav></header>
-<main><h1>TXITPY control panel</h1><p>Sign in to manage your TXITPY transmitter and station profile.</p>
+<main><h1>MultiV control panel</h1><p>Sign in to manage your MultiV transmitter and station profile.</p>
 <section class="card panel"><h2>Local control login</h2><form method="post" action="/login">
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
 <button type="submit">Sign in</button></form>
@@ -176,7 +176,7 @@ DASHBOARD_HTML = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf-token" content="__CSRF__">
-<title>TXITY - TXITPY</title>
+<title>TXITY - MultiV</title>
 <style>
 :root{color-scheme:light;--blue:#1769aa;--blue-dark:#174ea6;--ink:#202124;--muted:#5f6368;--line:#dadce0;--surface:#fff;--page:#f5f7fa;--pale:#e8f0fe;--green:#137333;--red:#b3261e}
 *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);font:15px Arial,Helvetica,sans-serif}
@@ -448,8 +448,8 @@ footer {
 <button class="nav-link" type="button" id="logout">Logout</button>
 </nav></header>
 <main class="shell">
-<div class="hero"><div><h1>TXITY</h1><p class="sub">TXITPY remote station control</p></div>
-<div class="status"><span id="live-dot" class="dot"></span><span id="status">Connecting to TXITPY...</span></div></div>
+<div class="hero"><div><h1>TXITY</h1><p class="sub">MultiV remote station control</p></div>
+<div class="status"><span id="live-dot" class="dot"></span><span id="status">Connecting to MultiV...</span></div></div>
 <form id="control-form">
 <section id="transmit" class="card panel">
 <h2>Station and transmission</h2>
@@ -459,7 +459,7 @@ footer {
 <div class="field"><label for="frequency">Transmit frequency</label><input id="frequency" maxlength="32" placeholder="7.250 MHz" required></div>
 <div class="field"><label for="mode">Signal type</label><select id="mode"><option>AM</option><option>USB</option><option>LSB</option><option>USB+C</option><option>LSB+C</option><option>DSB</option><option>NFM</option><option>RADE</option><option>DRM</option><option>CW</option></select></div>
 <div class="field"><label for="station_dbm">Station power (dBm)</label><input id="station_dbm" type="number" min="-140" max="53" step="1"></div>
-<div class="field"><label>Audio source</label><div id="audio-source" class="state-box">Selected in the TXITPY desktop app</div><p class="hint">Select the microphone, desktop audio, or playlist in the desktop app.</p></div>
+<div class="field"><label>Audio source</label><div id="audio-source" class="state-box">Selected in the MultiV desktop app</div><p class="hint">Select the microphone, desktop audio, or playlist in the desktop app.</p></div>
 <div class="field full"><label class="checkbox"><input id="allow_overlap" type="checkbox"> Allow frequency sharing with other stations</label></div>
 </div>
 <div class="actions"><button class="primary" id="transmit-button" type="button">Start transmission</button><button class="secondary" type="submit">Apply settings</button></div>
@@ -475,7 +475,7 @@ footer {
 </section>
 </form>
 </main>
-<footer>TXITPY browser control · TXITY station configuration</footer>
+<footer>MultiV browser control · TXITY station configuration</footer>
 <script>
 const csrf=document.querySelector('meta[name="csrf-token"]').content;
 const fields=['station_name','description','frequency','mode','station_dbm','station_logo_url','station_details'];
@@ -500,7 +500,7 @@ async function refresh(){
   document.getElementById('status').textContent=s.status||'Connected';
   document.getElementById('live-dot').className='dot'+(s.transmitting?' live':'');
   document.getElementById('transmit-button').textContent=s.transmitting?'Stop transmission':'Start transmission';
-  document.getElementById('audio-source').textContent=s.audio_source||'Selected in the TXITPY desktop app';
+  document.getElementById('audio-source').textContent=s.audio_source||'Selected in the MultiV desktop app';
   if(!initialised){
    fields.forEach(k=>setValue(k,s[k]));
    document.getElementById('allow_overlap').checked=!!s.allow_overlap;
@@ -513,7 +513,7 @@ document.getElementById('control-form').addEventListener('submit',async event=>{
  const data={};
  fields.forEach(k=>data[k]=value(k));
  data.allow_overlap=document.getElementById('allow_overlap').checked;
- try{await request('/api/settings',data);notice('Settings queued for TXITPY.','success');setTimeout(refresh,300);}
+ try{await request('/api/settings',data);notice('Settings queued for MultiV.','success');setTimeout(refresh,300);}
  catch(error){notice(error.message,'error');}
 });
 document.getElementById('transmit-button').addEventListener('click',async()=>{
@@ -577,11 +577,11 @@ class TxityWebGUI:
             if self.running:
                 return
             if not self._password_salt or not self._password_hash:
-                raise ValueError("Set a Web GUI password in TXITPY Settings before enabling the server.")
+                raise ValueError("Set a Web GUI password in MultiV Settings before enabling the server.")
             owner = self
 
             class Handler(BaseHTTPRequestHandler):
-                server_version = "TXITPYWeb/1.0"
+                server_version = "MultiVWeb/1.0"
                 sys_version = ""
 
                 def log_message(self, _format: str, *args: Any) -> None:
@@ -690,7 +690,7 @@ class TxityWebGUI:
                         try:
                             state = owner._state_provider()
                         except Exception:
-                            state = {"status": "TXITPY state is temporarily unavailable."}
+                            state = {"status": "MultiV state is temporarily unavailable."}
                         self._json(200, state if isinstance(state, dict) else {})
                         return
                     self._send(404, b"Not found", "text/plain; charset=utf-8")
@@ -798,7 +798,7 @@ class TxityWebGUI:
                                 return
                             values["station_dbm"] = str(power)
                             owner._command_submitter({"type": "settings", "values": values})
-                            self._json(202, {"ok": True, "message": "Settings queued for TXITPY."})
+                            self._json(202, {"ok": True, "message": "Settings queued for MultiV."})
                             return
 
                         action = data.get("action")
