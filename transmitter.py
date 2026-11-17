@@ -327,7 +327,7 @@ def find_frequency_overlaps(
 def build_audio_socket_url(session_id: str, session_secret: str, auth_token: str) -> str:
     """Build the TXITY audio socket URL without logging its credentials."""
     if not session_id or not session_secret or not auth_token:
-        raise ValueError("Discord login is required before opening the audio connection.")
+        raise ValueError("Sign in with Discord before opening the audio connection.")
     query = urlencode({
         "session": session_id,
         "sessionSecret": session_secret,
@@ -381,7 +381,7 @@ def build_transmit_config(
     """Create the TXITY config message using the website's currentConfig schema."""
     name = str(station_name or "").strip()
     if not name:
-        raise ValueError("Station name is required before starting transmission.")
+        raise ValueError("Enter a station name before starting transmission.")
     if len(name) > 48:
         raise ValueError("Station name must be 48 characters or fewer.")
     if not auth_token:
@@ -1282,13 +1282,13 @@ class TxityTransmitter:
                         if secondary_rejection_count >= 2:
                             reason_labels = {
                                 2: "transmitter capacity is currently full",
-                                3: "frequency sharing or overlap was rejected",
+                                3: "TXITY rejected frequency sharing or overlap",
                                 4: "the total transmitter limit was reached",
-                                5: "a station name is required",
+                                5: "enter a station name",
                                 "2": "transmitter capacity is currently full",
-                                "3": "frequency sharing or overlap was rejected",
+                                "3": "TXITY rejected frequency sharing or overlap",
                                 "4": "the total transmitter limit was reached",
-                                "5": "a station name is required",
+                                "5": "enter a station name",
                             }
                             reason_text = reason_labels.get(rejection, str(rejection))
                             raise RuntimeError(
@@ -1364,7 +1364,7 @@ class TxityTransmitter:
                     if len(supported) != len(playlist_files):
                         self.events.put({
                             "kind": "tx_log",
-                            "text": "DRM playlists skip WAV and AIFF files. OGG, MP3, and FLAC are supported.",
+                            "text": "DRM skips WAV and AIFF playlists. Use OGG, MP3, or FLAC files.",
                         })
                     drm_playlist_server = LocalDRMPlaylistServer(
                         supported,
