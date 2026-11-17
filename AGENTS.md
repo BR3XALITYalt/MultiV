@@ -9,7 +9,7 @@
 ## Interface direction
 
 - Read [DESIGN.md](DESIGN.md) before changing the desktop interface.
-- Refer to the desktop application as **TXITPY**. Use **TXITY** only for the website or the simulated service it connects to.
+- Refer to the desktop application as **MultiV**. Use **TXITY** only for the website or the simulated service it connects to.
 - Keep the existing Material 3-inspired palette, native Tkinter controls, rectangular panels, and horizontal navigation unless the task calls for a change.
 - Follow the documented ENERGY, RHYTHM, and MOTION dials. Record a reason in DESIGN.md when a major visual decision changes.
 
