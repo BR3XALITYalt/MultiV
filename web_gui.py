@@ -171,6 +171,7 @@ const csrf=document.querySelector('meta[name="csrf-token"]').content;
 const fields=['station_name','description','frequency','mode','station_dbm','station_logo_url','station_details'];
 let currentState={transmitting:false};
 let initialised=false;
+let lastServerNotice='';
 function value(id){return document.getElementById(id).value;}
 function setValue(id,v){const e=document.getElementById(id);if(e&&document.activeElement!==e)e.value=v==null?'':String(v);}
 function notice(message,kind){const e=document.getElementById('notice');e.textContent=message;e.className=kind||'';}
@@ -185,6 +186,7 @@ async function refresh(){
   const response=await fetch('/api/state',{cache:'no-store'});
   if(!response.ok)throw new Error('Session expired. Sign in again.');
   const s=await response.json();currentState=s;
+  if(s.notice && s.notice!==lastServerNotice){notice(s.notice);lastServerNotice=s.notice;}
   document.getElementById('status').textContent=s.status||'Connected';
   document.getElementById('live-dot').className='dot'+(s.transmitting?' live':'');
   document.getElementById('transmit-button').textContent=s.transmitting?'Stop transmission':'Start transmission';
@@ -246,6 +248,12 @@ class TxityWebGUI:
     @property
     def running(self) -> bool:
         return self._server is not None and self._thread is not None and self._thread.is_alive()
+
+    @property
+    def address(self) -> tuple[str, int] | None:
+        """Return the bound address, including an OS-selected port when port=0."""
+        with self._lock:
+            return self._server.server_address if self._server is not None else None
 
     def set_credentials(self, salt: str, digest: str) -> None:
         """Replace the password record and invalidate existing browser sessions."""
