@@ -38,36 +38,51 @@ python main.py --no-gui --auth-token-file "C:\ProgramData\TXITPY\discord-token.t
 
 ### NSSM on Windows
 
-Configure the station, mode, audio source, playlist, and any alternate frequencies in TXITPY's desktop app. Save the settings, then place the current Discord session token in a UTF-8 text file.
+Configure your station, audio source, playlist, and alternate frequencies in TXITPY's desktop app, then save the settings. Put your current TXITY Discord session token in a UTF-8 text file. Install NSSM and open an elevated terminal in the TXITPY folder.
 
-Run PowerShell as Administrator from the TXITPY folder. Install NSSM separately and make sure `nssm.exe` is on PATH, or pass its full path:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-TXITPYService.ps1
-```
-
-The installer uses the current Python executable, the settings file in the current user's `%APPDATA%\TXITPY` folder, and `C:\ProgramData\TXITPY\discord-token.txt`. It creates the log directory, configures automatic restart after unexpected exits, and starts the service. Pass explicit paths when the defaults do not match the machine:
+Run:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-TXITPYService.ps1 `
-  -PythonPath "C:\Python312\python.exe" `
-  -NssmPath "C:\Tools\nssm.exe" `
-  -ConfigFile "C:\ProgramData\TXITPY\transmit-settings.json" `
-  -TokenFile "C:\ProgramData\TXITPY\discord-token.txt"
+nssm install TXITPY
 ```
 
-The service defaults to LocalSystem. To run it under a Windows account, pass `-ServiceAccount "COMPUTER\username"`; the installer prompts for that account's password. A regular account may be needed for microphone access. Windows services run outside the interactive desktop session, so desktop-audio loopback may not be available even when the service uses the same account. A playlist is the most predictable background source. Enable **Loop playlist** in the desktop app or use a settings file with playlist looping enabled.
+NSSM opens its service installation window. Set the **Application** tab:
 
-The service reads the saved alternate-frequency list and follows it in order when TXITY denies a frequency-sharing request. Other rejection reasons do not trigger frequency changes.
+| Field | Value |
+|---|---|
+| Path | Full path to `python.exe`, for example `C:\Python312\python.exe` |
+| Startup directory | Your TXITPY folder, for example `C:\TXITPY` |
+| Arguments | See the command below |
 
-To stop and remove the service while keeping its settings, token, and logs:
+Arguments:
+
+```text
+"C:\TXITPY\main.py" --no-gui --auth-token-file "C:\ProgramData\TXITPY\discord-token.txt" --config "C:\Users\YOUR_USER\AppData\Roaming\TXITPY\transmit-settings.json" --log-file "C:\ProgramData\TXITPY\logs\txitpy.log"
+```
+
+Replace the paths with the actual locations on your PC. The `--config` path should point to the same settings file that the desktop app uses. Keep the session token in its own file and restrict access to it.
+
+In the other NSSM tabs, set:
+
+- **Details:** Display name `TXITPY`; startup type **Automatic**.
+- **Log on:** Use the same Windows account that owns your TXITPY settings and audio devices. Enter its Windows password. LocalSystem will use a different profile and usually cannot access the user's saved settings or audio devices.
+- **I/O:** Set stdout and stderr to separate files under `C:\ProgramData\TXITPY\logs`. Create that folder first.
+- **Exit actions:** Set the default action to **Restart**.
+- **Shutdown:** Leave the default shutdown method unless it fails to stop TXITPY cleanly.
+
+Click **Install service**. Then start it from the Services app or with:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Remove-TXITPYService.ps1
+nssm start TXITPY
 ```
 
-DRM service mode does not open the desktop setup prompts. Install the required Rust, Git, CMake, and C/C++ build tools before selecting DRM for a headless service. Use `--list-inputs` or `--list-loopback-devices` to inspect device IDs before choosing `--audio-device`.
+To edit the configuration later, run `nssm edit TXITPY`. To remove it, stop the service and run `nssm remove TXITPY confirm`.
 
+Windows services run outside the interactive desktop session. Desktop-audio loopback may not be available even with the same account. A looping playlist is the most predictable background audio source. Enable **Loop playlist** in the desktop app before saving the settings.
+
+The service reads the saved alternate-frequency list and tries each frequency in order when TXITY rejects a frequency-sharing request. Other rejection reasons do not trigger frequency changes.
+
+DRM service mode does not open the desktop setup prompts. Install the required Rust, Git, CMake, and C/C++ build tools before selecting DRM for a headless service. Use `python main.py --list-inputs` or `python main.py --list-loopback-devices` to inspect available devices before choosing `--audio-device`.
 ## Transmit
 
 Open **Transmit** and enter your station name, frequency, and mode. Choose an audio source:
