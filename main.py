@@ -38,6 +38,7 @@ from drm_support import (
     DRM_LANGUAGES,
     DRM_PROGRAMME_TYPES,
     DRM_AUDIO_CODECS,
+    DRM_MSC_MODES,
     drm_setup_status,
     prepare_drm_encoder,
 )
@@ -1073,6 +1074,7 @@ def build_app() -> None:
     tx_drm_iso_language_var = tk.StringVar(root, saved_text("drm_iso_language", ""))
     tx_drm_iso_country_var = tk.StringVar(root, saved_text("drm_iso_country", ""))
     tx_drm_audio_codec_var = tk.StringVar(root, saved_text("drm_audio_codec", "xHE-AAC"))
+    tx_drm_msc_mode_var = tk.StringVar(root, saved_text("drm_msc_mode", "16-QAM"))
     tx_drm_interleaving_var = tk.StringVar(root, saved_text("drm_interleaving", "Long (2 s)"))
     drm_setup_state: dict[str, Any] = {
         "running": False,
@@ -1165,6 +1167,7 @@ def build_app() -> None:
             "drm_iso_language": tx_drm_iso_language_var.get(),
             "drm_iso_country": tx_drm_iso_country_var.get(),
             "drm_audio_codec": tx_drm_audio_codec_var.get(),
+            "drm_msc_mode": tx_drm_msc_mode_var.get(),
             "drm_interleaving": tx_drm_interleaving_var.get(),
             "station_dbm": tx_power_var.get(),
             "audio_source": tx_audio_source_var.get(),
@@ -2216,6 +2219,7 @@ def build_app() -> None:
                 drm_iso_language=tx_drm_iso_language_var.get(),
                 drm_iso_country=tx_drm_iso_country_var.get(),
                 drm_audio_codec=tx_drm_audio_codec_var.get(),
+                drm_msc_mode=tx_drm_msc_mode_var.get(),
                 drm_interleaving=tx_drm_interleaving_var.get().split(" ", 1)[0].casefold(),
             )
             if config["mode"] == "CW":
@@ -2529,6 +2533,33 @@ def build_app() -> None:
         make_label(
             interleaving_frame,
             "Long interleaving improves resistance to fading, with a little more decoding delay.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
+        msc_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        msc_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            msc_frame,
+            "MSC modulation",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        drm_msc_picker = ttk.Combobox(
+            msc_frame,
+            textvariable=tx_drm_msc_mode_var,
+            values=DRM_MSC_MODES,
+            state="readonly",
+            height=4,
+        )
+        drm_msc_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_msc_picker)
+        make_label(
+            msc_frame,
+            "16-QAM is more robust but carries less audio data. 64-QAM has more capacity when reception is strong.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
