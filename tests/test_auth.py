@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from discord_auth import (
     AUTH_START_URL,
+    auth_token_path,
     DiscordAuthManager,
     clean_discord_user,
     clear_auth_token,
@@ -34,7 +35,19 @@ class DiscordAuthValidationTests(unittest.TestCase):
     def test_accepts_opaque_token(self):
         self.assertTrue(is_auth_token("signed.txity.token-value"))
 
-    def test_auth_token_is_saved_and_cleared_from_appdata_path(self):
+    def test_windows_auth_token_uses_programdata(self):
+        with patch("discord_auth.os.name", "nt"), patch.dict(
+            "discord_auth.os.environ",
+            {"PROGRAMDATA": r"C:\ProgramData"},
+        ):
+            token_path = auth_token_path()
+
+        self.assertEqual(
+            str(token_path).replace("\\", "/"),
+            "C:/ProgramData/TXITPY/token.txt",
+        )
+
+    def test_auth_token_is_saved_and_cleared_from_shared_path(self):
         with tempfile.TemporaryDirectory() as directory:
             token_path = Path(directory) / "TXITPY" / "token.txt"
             with patch("discord_auth.auth_token_path", return_value=token_path):
