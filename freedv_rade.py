@@ -53,7 +53,7 @@ def _runtime_cache_root() -> Path:
 
 
 def _download_asset(url: str, limit: int) -> bytes:
-    request = Request(url, headers={"User-Agent": "TXITPY/FreeDV-RADE"})
+    request = Request(url, headers={"User-Agent": "MultiV/FreeDV-RADE"})
     with urlopen(request, timeout=60) as response:
         data = response.read(limit + 1)
     if not data or len(data) > limit:
