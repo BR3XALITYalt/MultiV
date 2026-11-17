@@ -23,6 +23,8 @@ from transmitter import (
     playlist_frame_wait_seconds,
     build_audio_socket_url,
     build_transmit_config,
+    apply_nfm_transport,
+    nfm_transport_settings,
     parse_rf_frequency,
     StreamingLinearResampler,
     find_frequency_overlaps,
@@ -327,6 +329,7 @@ class TransmitterProtocolTests(unittest.TestCase):
 
     def test_audio_sources_are_limited_to_supported_inputs(self):
         self.assertIn("DRM", SUPPORTED_MODES)
+        self.assertIn("NFM", SUPPORTED_MODES)
         self.assertEqual(SUPPORTED_AUDIO_SOURCES, ("mic", "loopback", "playlist"))
 
     def test_drm_mode_uses_one_dsb_transport_channel(self):
@@ -397,8 +400,63 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["_txitpyDrmAudioCodec"], "xHE-AAC")
         self.assertEqual(config["_txitpyDrmInterleaving"], "long")
 
+    def test_nfm_mode_uses_a_frequency_translated_ssb_transport(self):
+        config = build_transmit_config(
+            station_name="Example NFM",
+            description="NFM test",
+            frequency="7.250 MHz",
+            mode="NFM",
+            station_dbm=40,
+            allow_overlap=False,
+            auth_token="test-token",
+            mic_gain_db=3,
+            agc_enabled=True,
+            drive=0.02,
+        )
+
+        self.assertEqual(config["mode"], "USB")
+        self.assertEqual(config["rfHz"], 7_245_000)
+        self.assertEqual(config["_txitpyMode"], "NFM")
+        self.assertEqual(config["_txitpyNfmIfHz"], 5_000)
+        self.assertEqual(config["_txitpyNfmDeviationHz"], 2_000)
+        self.assertEqual(config["_txitpyNfmInputGainDb"], 3)
+        self.assertEqual(config["_txitpyNfmSideband"], "USB")
+        self.assertEqual(config["ssbBandwidthHz"], 10_000)
+        self.assertEqual(config["ssbLowCutHz"], 0)
+        self.assertEqual(config["ssbHighCutHz"], 0)
+        self.assertFalse(config["agcEnabled"])
+        self.assertEqual(config["micGainDb"], 0)
+        self.assertEqual(config["drive"], 0)
+
+    def test_nfm_transport_handles_edges_of_the_available_room(self):
+        self.assertEqual(nfm_transport_settings("7.000 MHz"), ("LSB", 7_005_000))
+        self.assertEqual(nfm_transport_settings("8.000 MHz"), ("USB", 7_995_000))
+
+        config = {"_txitpyMode": "NFM", "mode": "USB"}
+        apply_nfm_transport(config, 7_000_000)
+        self.assertEqual(config["mode"], "LSB")
+        self.assertEqual(config["rfHz"], 7_005_000)
+
+        with self.assertRaises(ValueError):
+            nfm_transport_settings("6.950 MHz")
+
+    def test_drm_experimental_label_is_accepted_as_a_mode_alias(self):
+        config = build_transmit_config(
+            station_name="Example DRM",
+            description="",
+            frequency="7 MHz",
+            mode="DRM [EXPERIMENTAL]",
+            station_dbm=40,
+            allow_overlap=False,
+            auth_token="test-token",
+        )
+
+        self.assertEqual(config["_txitpyMode"], "DRM")
+        self.assertEqual(config["mode"], "DSB")
+
     def test_mode_bandwidth_defaults_match_txity_transmit_config(self):
         self.assertEqual(mode_bandwidth_hz("DRM"), 12_000)
+        self.assertEqual(mode_bandwidth_hz("NFM"), 9_000)
         self.assertEqual(mode_bandwidth_hz("AM"), 12_000)
         self.assertEqual(mode_bandwidth_hz("DSB"), 12_000)
         self.assertEqual(mode_bandwidth_hz("USB"), 10_000)
