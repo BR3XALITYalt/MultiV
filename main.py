@@ -2200,6 +2200,7 @@ def build_app() -> None:
                 audio_source = {
                     "Desktop audio (output loopback)": "loopback",
                     "Audio playlist": "playlist",
+                    "1khz test tone": "test_tone",
                 }.get(tx_audio_source_var.get(), "mic")
             playlist_files = list(tx_playlist_files) if audio_source == "playlist" else []
             selected_device = (
@@ -3314,6 +3315,7 @@ def build_app() -> None:
                 "Microphone / line input",
                 "Desktop audio (output loopback)",
                 "Audio playlist",
+                "1khz test tone",
             ),
             state="readonly",
             height=4,
@@ -3628,7 +3630,7 @@ def build_app() -> None:
         def refresh_audio_devices(_event=None) -> None:
             tx_audio_device_ids.clear()
             selected_source = tx_audio_source_var.get()
-            if selected_source == "Audio playlist":
+            if selected_source in {"Audio playlist", "1khz test tone"}:
                 return
             if selected_source == "Desktop audio (output loopback)":
                 tx_audio_device_label_var.set("Desktop output device")
@@ -3680,6 +3682,7 @@ def build_app() -> None:
                 "Microphone / line input",
                 "Desktop audio (output loopback)",
                 "Audio playlist",
+                "1khz test tone",
             )
             source_values = base_sources
             source_picker.configure(values=source_values)
@@ -3690,6 +3693,10 @@ def build_app() -> None:
             if selected_source == "Audio playlist":
                 device_frame.grid_remove()
                 playlist_frame.grid()
+                refresh_button.pack_forget()
+            elif selected_source == "1khz test tone":
+                device_frame.grid_remove()
+                playlist_frame.grid_remove()
                 refresh_button.pack_forget()
             else:
                 playlist_frame.grid_remove()
