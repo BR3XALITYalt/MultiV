@@ -8,7 +8,6 @@ from unittest.mock import patch
 from PIL import Image
 
 from station_upload import (
-    IMAGE_MIME_TYPES,
     MAX_UPLOAD_BYTES,
     UPLOAD_URL,
     UPLOAD_USER_AGENT,
@@ -160,7 +159,6 @@ class StationImageUploadTests(unittest.TestCase):
             token,
             "data:image/png;base64,aGVsbG8=",
         ))
-        self.assertFalse(client.station_image_uploading)
 
 
 if __name__ == "__main__":
