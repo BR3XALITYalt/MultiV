@@ -11,7 +11,7 @@ class CommandLineTests(unittest.TestCase):
 
     def test_parser_accepts_headless_service_options(self):
         args = self.parser.parse_args([
-            "--no-gui",
+            "--nogui",
             "--mode", "drm",
             "--audio-source", "playlist",
             "--playlist", "D:/Radio/One.ogg",
