@@ -44,6 +44,16 @@ TXITY does not offer native NFM. TXITPY sends its generated FM signal through th
 NFM runs only in TXITY's 7.000-8.000 MHz room. An independent receiver test has not verified this signal path. TXITY filtering and receiver settings can affect the result.
 
 
+### FreeDV RADE V1
+
+FreeDV RADE V1 encodes microphone, desktop-audio, or playlist speech using the open-source RADE C modem and LPCNet/FARGAN speech encoder. TXITPY uses the stable V1 waveform, not the experimental V2 path.
+
+The generated modem signal is converted to a real 8 kHz audio waveform, resampled to 48 kHz, and sent through TXITY's USB or LSB audio transport. TXITPY places the 1.5 kHz RADE audio centre at the frequency you enter. The selected transport carrier is offset by 1.5 kHz to keep the channel centred. The transport passband is set to 3 kHz.
+
+The first start downloads a Windows x64 encoder package from the TXITPY release and verifies its SHA-256 checksum before installation. RADE encoding is CPU-intensive. TXITPY buffers audio before keying and stops with an error if the encoder cannot keep up. TXITY does not expose a RADE decoder or receive-audio stream to this client, so this mode currently supports transmission only.
+
+Source: [FreeDV RADE](https://freedv.org/radio-autoencoder/) and [RADE C](https://github.com/freedv/rade_c). BSD and Opus notices are included in the runtime package.
+
 ### DRM [EXPERIMENTAL]
 
 DRM builds one mono xHE-AAC programme in a 4.5 kHz DRM30 channel. Choose 16-QAM or 64-QAM for MSC modulation; SDC uses 16-QAM. The default 16-QAM setting improves robustness and carries less audio data. Use 64-QAM when reception is strong and you need more audio capacity.
