@@ -343,7 +343,7 @@ def build_headless_plan(
 
     if audio_source == "playlist" and not playlist_files:
         raise ValueError(
-            "The playlist source is selected, but no supported audio files were found. "
+            "Your playlist does not contain any supported audio files. "
             "Add files with --playlist or update playlist_sources in the settings file."
         )
 
@@ -595,7 +595,7 @@ def _handle_event(
                 "2": "transmitter capacity is currently full",
                 "3": "frequency sharing must be enabled by both stations",
                 "4": "the total transmitter limit has been reached",
-                "5": "a station name is required",
+                "5": "enter a station name",
             }
             if transmitter.server_rejection_ready:
                 if reason_key == state["negative_reason"]:
