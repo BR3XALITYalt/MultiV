@@ -52,6 +52,14 @@ TXITPY supports MP3, WAV, FLAC, OGG, Opus, M4A, and AIFF playlists. During playb
 
 The **NFM** mode generates narrowband FM in TXITPY with a 5 kHz intermediate frequency, 2 kHz peak deviation, and a 30-2,500 Hz audio band. Its input uses a soft limiter instead of hard clipping to reduce distortion on louder music. It supports microphone, desktop-audio loopback, and Playlist input. TXITY does not provide a native NFM transport mode, so TXITPY sends the generated signal through its existing USB or LSB path. The frequency entered in TXITPY is the resulting NFM channel center. The TXITY station directory displays the underlying sideband transport and its carrier, which is offset by 5 kHz. NFM is currently limited to TXITY's 7.000-8.000 MHz room and has not yet been verified with an independent receiver.
 
+### AM (DEV)
+
+**AM (DEV)** is a diagnostic experiment that creates two independent TXITY sessions under the same Discord account at the same RF frequency. One session uses **USB+C** and the other uses **LSB+C**. TXITPY forces `allowOverlapVisitors` on for both and labels the station sessions separately so they can be identified in the TXITY directory.
+
+Audio is captured and decoded once. Each 512-sample, 48 kHz Float32 frame is then sent to both authenticated audio WebSockets in sequence. The client logs both session IDs, control and audio connection states, each sideband's configuration and PTT request, and the measured time between sending the paired frames. If one audio path fails, TXITPY stops the pair rather than continuing with only one side.
+
+This is a **pseudo-AM overlap test**, not a guaranteed phase-coherent AM modulator. TXITY may generate the two carriers independently, so carrier phase and amplitude matching are not guaranteed. The mode is intended to establish whether one account can hold two simultaneous same-frequency sessions and whether the server permits the forced overlap. A successful pair of WebSocket connections and PTT requests does not, by itself, prove that a receiver sees a correctly reconstructed AM waveform.
+
 ### DRM [EXPERIMENTAL]
 
 The **DRM [EXPERIMENTAL]** mode builds a single mono xHE-AAC programme in a 4.5 kHz DRM30 channel using configurable 16-QAM or 64-QAM MSC modulation and 16-QAM SDC modulation. 16-QAM is selected by default for more reliable decoding; it carries four bits per MSC symbol instead of six with 64-QAM, so it reduces available audio capacity. Choose 64-QAM when reception is strong and higher audio capacity matters. Long MSC interleaving (2 seconds) is selected by default to improve resistance to fading. xHE-AAC is designed for good quality at low bit rates; select legacy HE-AAC in the DRM settings when a receiver does not support xHE-AAC. Short interleaving (400 ms) is available for lower delay. It accepts microphone input or OGG, MP3, and FLAC playlists. WAV and AIFF playlist entries are skipped, and desktop-audio loopback is not supported in DRM mode.
