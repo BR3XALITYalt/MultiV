@@ -3435,9 +3435,7 @@ def build_app() -> None:
             highlightbackground=palette["outline"],
             highlightcolor=palette["primary"],
         )
-        logo_input_row = tk.Frame(logo_frame, bg=palette["surfaceContainerLow"])
-        logo_input_row.pack(fill="x")
-        logo_entry.pack(in_=logo_input_row, side="left", fill="x", expand=True, ipady=7)
+        logo_entry.pack(fill="x", ipady=7)
 
         def choose_station_logo() -> None:
             selected_path = filedialog.askopenfilename(
@@ -3460,14 +3458,14 @@ def build_app() -> None:
             set_station_logo_upload_button_enabled(False)
 
         station_logo_upload_button = make_button(
-            logo_input_row,
+            logo_frame,
             "Upload image",
             choose_station_logo,
             kind="tonal",
             padx=14,
             pady=8,
         )
-        station_logo_upload_button.pack(side="left", padx=(8, 0))
+        station_logo_upload_button.pack(anchor="w", pady=(8, 0))
         if client.station_image_uploading:
             station_logo_upload_button.configure(state="disabled")
 
