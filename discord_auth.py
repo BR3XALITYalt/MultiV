@@ -215,14 +215,14 @@ def _callback_page(state: str) -> tuple[bytes, str]:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TXITPY sign-in</title>
+<title>MultiV sign-in</title>
 <style>
 body{{font:16px system-ui,sans-serif;max-width:36rem;margin:12vh auto;padding:0 1.25rem;color:#171717}}
 p{{line-height:1.5;color:#444}}
 </style>
 </head>
 <body>
-<h1>Returning to TXITPY</h1>
+<h1>Returning to MultiV</h1>
 <p id="message">Completing Discord sign-in…</p>
 <script nonce="{nonce}">
 (() => {{
@@ -243,7 +243,7 @@ p{{line-height:1.5;color:#444}}
   }}).then(async response => {{
     const result = await response.json().catch(() => ({{}}));
     if (!response.ok || !result.ok) throw new Error(result.error || "Sign-in could not be completed.");
-    message.textContent = "Discord sign-in complete. You can return to TXITPY.";
+    message.textContent = "Discord sign-in complete. You can return to MultiV.";
   }}).catch(error => {{
     message.textContent = error instanceof Error ? error.message : "Sign-in could not be completed.";
   }});
@@ -506,7 +506,7 @@ class DiscordAuthManager:
             details = format_exception_details(exc)
             saved_log = write_diagnostic("launch-browser-process", exc)
             message = (
-                "TXITPY could not launch the sign-in browser process.\n\n"
+                "MultiV could not launch the sign-in browser process.\n\n"
                 f"{details}"
             )
             if saved_log is not None:
@@ -554,7 +554,7 @@ class DiscordAuthManager:
             log_stream.write(f"{timestamp} [browser-output]\n{block}\n\n")
             log_stream.flush()
             print(
-                f"\n[TXITPY embedded browser]\n{block}\n",
+                f"\n[MultiV embedded browser]\n{block}\n",
                 file=sys.stderr,
                 flush=True,
             )
@@ -574,7 +574,7 @@ class DiscordAuthManager:
                     if not detail:
                         continue
 
-                    if detail.startswith("[TXITPY]"):
+                    if detail.startswith("[MultiV]"):
                         flush_problem_block(log_stream)
                         write_checkpoint(log_stream, detail)
                         continue
@@ -603,7 +603,7 @@ class DiscordAuthManager:
                         # Surface the first error line immediately. Additional
                         # traceback context is grouped into the same log block.
                         print(
-                            f"[TXITPY embedded browser] {detail}",
+                            f"[MultiV embedded browser] {detail}",
                             file=sys.stderr,
                             flush=True,
                         )
@@ -617,7 +617,7 @@ class DiscordAuthManager:
         except Exception as exc:
             details = format_exception_details(exc)
             print(
-                f"\n[TXITPY browser diagnostic reader error]\n{details}\n",
+                f"\n[MultiV browser diagnostic reader error]\n{details}\n",
                 file=sys.stderr,
                 flush=True,
             )
@@ -753,7 +753,7 @@ class DiscordAuthManager:
                 self._completed = True
                 timeout = self._timeout
                 self._timeout = None
-                save_error = f"Could not save the TXITY session token in the TXITPY AppData folder: {exc}"
+                save_error = f"Could not save the TXITY session token in the existing application data folder: {exc}"
             else:
                 self._completed = True
                 timeout = self._timeout
