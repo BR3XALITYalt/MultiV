@@ -31,6 +31,7 @@ from transmitter import (
     find_frequency_overlaps,
     build_frequency_candidates,
     mode_bandwidth_hz,
+    audio_queue_capacity,
 )
 
 
@@ -106,6 +107,13 @@ class TransmitterProtocolTests(unittest.TestCase):
             PLAYLIST_PREROLL_FRAMES * AUDIO_FRAME_INTERVAL_SECONDS,
             2.7306666666666666,
         )
+
+    def test_queue_capacity_supports_every_prerolled_audio_source(self):
+        self.assertEqual(audio_queue_capacity("playlist"), PLAYLIST_AUDIO_QUEUE_FRAMES)
+        self.assertEqual(audio_queue_capacity("test_tone"), PLAYLIST_AUDIO_QUEUE_FRAMES)
+        self.assertEqual(audio_queue_capacity("mic"), AUDIO_QUEUE_FRAMES)
+        self.assertEqual(audio_queue_capacity("loopback"), AUDIO_QUEUE_FRAMES)
+        self.assertEqual(audio_queue_capacity("mic", drm_mode=True), PLAYLIST_AUDIO_QUEUE_FRAMES)
 
     def test_live_audio_silence_only_fills_sustained_input_gaps(self):
         self.assertEqual(LIVE_AUDIO_SILENCE_GRACE_SECONDS, 0.1)
