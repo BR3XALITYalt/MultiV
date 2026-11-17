@@ -22,6 +22,10 @@ from station_directory import (
     fetch_text,
     parse_users_listing,
 )
+from station_upload import (
+    image_file_to_data_url,
+    upload_station_image as post_station_image,
+)
 
 CONTROL_URL = "wss://txity.radiodiscussion.org/ws/control"
 
@@ -43,6 +47,7 @@ class TxityClient:
         self.ws_thread: threading.Thread | None = None
         self.control_send_lock = threading.Lock()
         self.control_generation = 0
+        self.image_upload_lock = threading.Lock()
 
     def set_discord_auth(self, token: Any, user: Any = None) -> None:
         """Attach or disconnect a token received through TXITY's OAuth callback."""
@@ -147,6 +152,54 @@ class TxityClient:
             thread.join(timeout=timeout)
 
         self.events.put({"kind": "connection", "text": "Disconnected"})
+
+    @property
+    def station_image_uploading(self) -> bool:
+        return self.image_upload_lock.locked()
+
+    def upload_station_image_file(self, path: str, *, kind: str = "logo") -> None:
+        """Upload a station image with the active in-memory TXITY session."""
+        with self.auth_lock:
+            session_id = self.session_id
+            auth_token = self.auth_token
+        if not auth_token:
+            raise RuntimeError("Sign in with Discord before uploading a station image.")
+        if not self.image_upload_lock.acquire(blocking=False):
+            raise RuntimeError("A station image upload is already in progress.")
+
+        def worker() -> None:
+            try:
+                data_url = image_file_to_data_url(path)
+                image_url = post_station_image(
+                    session_id,
+                    auth_token,
+                    data_url,
+                    kind=kind,
+                )
+                self.events.put({
+                    "kind": "station_image_upload_success",
+                    "image_kind": kind,
+                    "url": image_url,
+                })
+            except Exception as exc:
+                self.events.put({
+                    "kind": "station_image_upload_error",
+                    "image_kind": kind,
+                    "text": safe_error_text(str(exc), 500),
+                })
+            finally:
+                self.image_upload_lock.release()
+
+        thread = threading.Thread(
+            target=worker,
+            daemon=True,
+            name="txity-image-upload",
+        )
+        try:
+            thread.start()
+        except Exception:
+            self.image_upload_lock.release()
+            raise
 
     def refresh_stations(self) -> None:
         if not self.refresh_lock.acquire(blocking=False):
