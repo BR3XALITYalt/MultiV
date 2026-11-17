@@ -40,6 +40,13 @@ PLAYLIST_PREROLL_FRAMES = 256
 DRM_PREROLL_FRAMES = 94
 PLAYLIST_READ_FRAMES = 8_192
 AUDIO_FRAME_INTERVAL_SECONDS = BATCH_SAMPLES / SAMPLE_RATE_HZ
+
+
+def audio_queue_capacity(audio_source: str, drm_mode: bool = False) -> int:
+    """Return enough queue space for any source that uses startup preroll."""
+    if drm_mode or audio_source in {"playlist", "test_tone"}:
+        return PLAYLIST_AUDIO_QUEUE_FRAMES
+    return AUDIO_QUEUE_FRAMES
 LIVE_AUDIO_SILENCE_GRACE_SECONDS = 0.1
 RECONNECT_INITIAL_DELAY_SECONDS = 1.0
 RECONNECT_MAX_DELAY_SECONDS = 15.0
@@ -767,11 +774,7 @@ class TxityTransmitter:
             if self._starting or self._active or (self._thread and self._thread.is_alive()):
                 raise RuntimeError("A transmission is already starting or active.")
             self._stop_event.clear()
-            queue_frames = (
-                PLAYLIST_AUDIO_QUEUE_FRAMES
-                if selected_source == "playlist" or drm_mode
-                else AUDIO_QUEUE_FRAMES
-            )
+            queue_frames = audio_queue_capacity(selected_source, drm_mode)
             self._audio_queue = queue.Queue(maxsize=queue_frames)
             self._starting = True
             self._active = False
@@ -1545,8 +1548,13 @@ class TxityTransmitter:
                     ):
                         break
                     if time.monotonic() >= buffer_deadline:
+                        source_label = (
+                            "1 kHz test tone"
+                            if audio_source == "test_tone"
+                            else "Playlist audio"
+                        )
                         raise TimeoutError(
-                            "Playlist audio did not fill its startup buffer within 12 seconds."
+                            f"{source_label} did not fill its startup buffer within 12 seconds."
                         )
                     self._stop_event.wait(0.02)
 
