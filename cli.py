@@ -642,6 +642,71 @@ def _handle_event(
                 logger.info("Waiting for TXITY to confirm the PTT request.")
 
 
+def _install_shutdown_handlers(
+    shutdown_event: threading.Event,
+    logger: logging.Logger,
+) -> dict[int, Any]:
+    """Translate NSSM console-control signals into a headless shutdown request."""
+    old_handlers: dict[int, Any] = {}
+
+    def request_shutdown(signum: int, _frame: Any) -> None:
+        if not shutdown_event.is_set():
+            logger.info("Received shutdown signal %s; stopping TXITPY.", signum)
+            shutdown_event.set()
+
+    watched_signals = [signal.SIGINT, signal.SIGTERM]
+    if hasattr(signal, "SIGBREAK"):
+        watched_signals.append(signal.SIGBREAK)
+
+    for signum in watched_signals:
+        try:
+            old_handlers[signum] = signal.signal(signum, request_shutdown)
+        except (OSError, ValueError) as exc:
+            logger.warning("Could not register shutdown signal %s: %s", signum, exc)
+
+    return old_handlers
+
+
+def _shutdown_headless(
+    transmitter: Any,
+    client: Any,
+    logger: logging.Logger,
+) -> None:
+    """Stop audio first, then close the authenticated control connection."""
+    transmitter_still_running = False
+
+    if transmitter is not None:
+        logger.info("Stopping the transmitter and releasing PTT.")
+        try:
+            transmitter.stop(wait=10.0)
+            transmitter_still_running = bool(transmitter.is_busy)
+        except Exception as exc:
+            transmitter_still_running = True
+            logger.warning("Transmitter shutdown raised an error: %s", safe_error_text(str(exc), 800))
+
+    if transmitter_still_running:
+        logger.warning(
+            "The transmitter did not finish within 10 seconds; closing the TXITY control connection."
+        )
+
+    if client is not None:
+        logger.info("Closing the TXITY control connection.")
+        try:
+            client.disconnect(wait=2.0)
+        except Exception as exc:
+            logger.warning("TXITY disconnect raised an error: %s", safe_error_text(str(exc), 800))
+
+    if transmitter_still_running and transmitter is not None:
+        try:
+            transmitter.stop(wait=2.0)
+            if transmitter.is_busy:
+                logger.error("The transmitter thread is still running after the shutdown timeout.")
+        except Exception as exc:
+            logger.warning("Final transmitter wait failed: %s", safe_error_text(str(exc), 800))
+
+    logger.info("TXITPY shutdown sequence complete.")
+
+
 def run_headless(
     args: argparse.Namespace,
     *,
@@ -676,19 +741,7 @@ def run_headless(
         logger.info("Audio device: %s", plan["audio_device_name"])
 
         shutdown_event = threading.Event()
-        old_handlers: dict[int, Any] = {}
-
-        def request_shutdown(_signum: int, _frame: Any) -> None:
-            shutdown_event.set()
-
-        watched_signals = [signal.SIGINT, signal.SIGTERM]
-        if hasattr(signal, "SIGBREAK"):
-            watched_signals.append(signal.SIGBREAK)
-        for signum in watched_signals:
-            try:
-                old_handlers[signum] = signal.signal(signum, request_shutdown)
-            except (OSError, ValueError):
-                pass
+        old_handlers = _install_shutdown_handlers(shutdown_event, logger)
 
         client = None
         transmitter = None
@@ -772,15 +825,14 @@ def run_headless(
 
             return int(state["exit_code"])
         finally:
-            if transmitter is not None:
-                transmitter.stop(wait=5.0)
-            if client is not None:
-                client.disconnect()
-            for signum, previous in old_handlers.items():
-                try:
-                    signal.signal(signum, previous)
-                except (OSError, ValueError):
-                    pass
+            try:
+                _shutdown_headless(transmitter, client, logger)
+            finally:
+                for signum, previous in old_handlers.items():
+                    try:
+                        signal.signal(signum, previous)
+                    except (OSError, ValueError):
+                        pass
 
     except Exception as exc:
         logger.error("%s", safe_error_text(str(exc), 1_200))
