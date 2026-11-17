@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -595,6 +596,20 @@ def _safe_error(error: BaseException) -> str:
     text = re.sub(r"(?i)wss?://[^\s]+", "[WebSocket URL redacted]", text)
     text = re.sub(r"(?i)(authToken|sessionSecret)=([^&\s]+)", r"\1=[redacted]", text)
     return f"{type(error).__name__}: {text[:700]}"
+
+
+def _safe_traceback(error: BaseException) -> str:
+    """Format a full traceback while removing authenticated WebSocket URLs and secrets."""
+    details = "".join(
+        traceback.format_exception(type(error), error, error.__traceback__)
+    )
+    details = re.sub(r"(?i)wss?://[^\s\"'<>]+", "[WebSocket URL redacted]", details)
+    details = re.sub(
+        r"(?i)(authToken|sessionSecret)(=|:\s*)([^&\s,\"'<>]+)",
+        r"\1\2[redacted]",
+        details,
+    )
+    return details.rstrip()
 
 
 class StreamingLinearResampler:
@@ -2004,7 +2019,11 @@ class TxityTransmitter:
 
         except Exception as exc:
             if not self._stop_event.is_set():
-                self.events.put({"kind": "tx_error", "text": _safe_error(exc)})
+                self.events.put({
+                    "kind": "tx_error",
+                    "text": _safe_error(exc),
+                    "traceback": _safe_traceback(exc),
+                })
         finally:
             playlist_completed = playlist_reached_end and not audio_thread_error
             if ptt_sent:
