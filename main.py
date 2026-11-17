@@ -1155,6 +1155,9 @@ def build_app() -> None:
     tx_treble_var = tk.StringVar(root, saved_text("treble_db", "0"))
     tx_presence_var = tk.StringVar(root, saved_text("presence_db", "0"))
     tx_drive_var = tk.StringVar(root, saved_text("drive", "0.015"))
+    tx_nfm_transport_bandwidth_var = tk.StringVar(
+        root, saved_text("nfm_transport_bandwidth_hz", "12000")
+    )
     tx_ssb_bandwidth_var = tk.StringVar(root, saved_text("ssb_bandwidth_hz", "10000"))
     tx_ssb_low_cut_var = tk.StringVar(root, saved_text("ssb_low_cut_hz", "325"))
     tx_ssb_high_cut_var = tk.StringVar(root, saved_text("ssb_high_cut_hz", "0"))
@@ -1212,6 +1215,7 @@ def build_app() -> None:
             "treble_db": tx_treble_var.get(),
             "presence_db": tx_presence_var.get(),
             "drive": tx_drive_var.get(),
+            "nfm_transport_bandwidth_hz": tx_nfm_transport_bandwidth_var.get(),
             "ssb_bandwidth_hz": tx_ssb_bandwidth_var.get(),
             "ssb_low_cut_hz": tx_ssb_low_cut_var.get(),
             "ssb_high_cut_hz": tx_ssb_high_cut_var.get(),
@@ -1285,7 +1289,8 @@ def build_app() -> None:
         tx_details_var, tx_page_layout_var, tx_fade_enabled_var,
         tx_fade_seconds_var, tx_fade_min_dbm_var, tx_fade_shape_var,
         tx_agc_enabled_var, tx_agc_target_var, tx_mic_gain_var, tx_bass_var,
-        tx_treble_var, tx_presence_var, tx_drive_var, tx_ssb_bandwidth_var,
+        tx_treble_var, tx_presence_var, tx_drive_var, tx_nfm_transport_bandwidth_var,
+        tx_ssb_bandwidth_var,
         tx_ssb_low_cut_var, tx_ssb_high_cut_var, tx_am_bandwidth_var,
         tx_am_pre_emphasis_var,
     )
@@ -2173,6 +2178,7 @@ def build_app() -> None:
                 treble_db=tx_treble_var.get(),
                 presence_db=tx_presence_var.get(),
                 drive=tx_drive_var.get(),
+                nfm_transport_bandwidth_hz=tx_nfm_transport_bandwidth_var.get(),
                 ssb_bandwidth_hz=tx_ssb_bandwidth_var.get(),
                 ssb_low_cut_hz=tx_ssb_low_cut_var.get(),
                 ssb_high_cut_hz=tx_ssb_high_cut_var.get(),
@@ -2779,7 +2785,11 @@ def build_app() -> None:
                 "USB+C": "USB+C - upper sideband with carrier.",
                 "LSB+C": "LSB+C - lower sideband with carrier.",
                 "DSB": "DSB - double-sideband suppressed carrier.",
-                "NFM": "NFM - software-generated narrow FM with 2 kHz peak deviation and a 5 kHz IF. The entered frequency is the FM channel center; TXITY carries it through its existing USB or LSB transport.",
+                "NFM": (
+                    "NFM - software-generated narrow FM with 2.5 kHz peak deviation, a 3 kHz audio band, "
+                    "and a 6 kHz IF. The NFM transport-width slider requests a 1-20 kHz TXITY USB/LSB "
+                    "passband. Settings narrower than the generated signal may clip it."
+                ),
                 "DRM": "DRM [EXPERIMENTAL] - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Microphone and OGG, MP3, or FLAC playlists are supported.",
                 "CW": "CW - carrier only. The microphone and desktop audio sources are not used.",
             }
@@ -3158,7 +3168,7 @@ def build_app() -> None:
             formatter,
             row: int,
             column: int,
-        ) -> None:
+        ) -> tk.Frame:
             wrapper = tk.Frame(audio_filter_grid, bg=palette["surfaceContainerLow"])
             wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
             make_label(
@@ -3205,6 +3215,7 @@ def build_app() -> None:
                 color=palette["primary"],
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="e")
+            return wrapper
 
         add_audio_scale("AGC target level", tx_agc_target_var, 0.16, 0.24, 0.01,
                         lambda value: f"{value:.2f} RMS", 0, 0)
@@ -3226,6 +3237,26 @@ def build_app() -> None:
                         lambda value: f"{value:.0f} Hz", 4, 0)
         add_audio_scale("AM / DSB bandwidth", tx_am_bandwidth_var, 3000, 12000, 500,
                         lambda value: f"{value / 1000:.1f} kHz", 4, 1)
+        nfm_bandwidth_control = add_audio_scale(
+            "NFM transport bandwidth",
+            tx_nfm_transport_bandwidth_var,
+            1_000,
+            20_000,
+            1_000,
+            lambda value: f"{value / 1000:.0f} kHz",
+            5,
+            0,
+        )
+
+        def update_nfm_bandwidth_visibility(*_args) -> None:
+            if tx_mode_var.get().strip().upper() == "NFM":
+                nfm_bandwidth_control.grid()
+            else:
+                nfm_bandwidth_control.grid_remove()
+
+        tx_mode_var.trace_add("write", update_nfm_bandwidth_visibility)
+        update_nfm_bandwidth_visibility()
+
         am_pre_emphasis = tk.Checkbutton(
             audio_filter_card,
             text="AM pre-emphasis (brighter audio)",
