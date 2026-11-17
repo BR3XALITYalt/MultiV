@@ -2,7 +2,6 @@ import unittest
 from urllib.parse import parse_qs, urlparse
 
 from transmitter import (
-    AUDIO_QUEUE_FRAMES,
     AUDIO_URL,
     FRAME_BYTES,
     SAMPLE_RATE_HZ,
@@ -32,7 +31,6 @@ from transmitter import (
     find_frequency_overlaps,
     build_frequency_candidates,
     mode_bandwidth_hz,
-    audio_queue_capacity,
 )
 
 
@@ -108,13 +106,6 @@ class TransmitterProtocolTests(unittest.TestCase):
             PLAYLIST_PREROLL_FRAMES * AUDIO_FRAME_INTERVAL_SECONDS,
             2.7306666666666666,
         )
-
-    def test_queue_capacity_supports_every_prerolled_audio_source(self):
-        self.assertEqual(audio_queue_capacity("playlist"), PLAYLIST_AUDIO_QUEUE_FRAMES)
-        self.assertEqual(audio_queue_capacity("test_tone"), PLAYLIST_AUDIO_QUEUE_FRAMES)
-        self.assertEqual(audio_queue_capacity("mic"), AUDIO_QUEUE_FRAMES)
-        self.assertEqual(audio_queue_capacity("loopback"), AUDIO_QUEUE_FRAMES)
-        self.assertEqual(audio_queue_capacity("mic", drm_mode=True), PLAYLIST_AUDIO_QUEUE_FRAMES)
 
     def test_live_audio_silence_only_fills_sustained_input_gaps(self):
         self.assertEqual(LIVE_AUDIO_SILENCE_GRACE_SECONDS, 0.1)
@@ -340,7 +331,7 @@ class TransmitterProtocolTests(unittest.TestCase):
     def test_audio_sources_are_limited_to_supported_inputs(self):
         self.assertIn("DRM", SUPPORTED_MODES)
         self.assertIn("NFM", SUPPORTED_MODES)
-        self.assertEqual(SUPPORTED_AUDIO_SOURCES, ("mic", "loopback", "playlist", "test_tone"))
+        self.assertEqual(SUPPORTED_AUDIO_SOURCES, ("mic", "loopback", "playlist"))
 
     def test_drm_mode_uses_one_dsb_transport_channel(self):
         self.assertIn("DRM", SUPPORTED_MODES)
