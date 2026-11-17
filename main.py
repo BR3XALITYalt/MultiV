@@ -3405,7 +3405,7 @@ def build_app() -> None:
                 parent=root,
                 title="Add audio files",
                 filetypes=(
-                    ("Audio files", "*.wav *.flac *.ogg *.aiff *.aif *.mp3"),
+                    ("Audio files", "*.wav *.flac *.ogg *.aiff *.aif *.mp3 *.m4a *.opus"),
                     ("All files", "*.*"),
                 ),
             )
