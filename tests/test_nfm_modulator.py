@@ -47,6 +47,31 @@ class StreamingNFMModulatorTests(unittest.TestCase):
 
         np.testing.assert_allclose(chunked, one_block, atol=2e-6)
 
+    def test_single_tone_fm_sidebands_are_symmetric_before_transport(self):
+        sample_count = 2 * SAMPLE_RATE_HZ
+        sample_index = np.arange(sample_count, dtype=np.float64)
+        source = (
+            0.25
+            * np.sin(2.0 * np.pi * 1_000 * sample_index / SAMPLE_RATE_HZ)
+        ).astype(np.float32)
+
+        modulator = StreamingNFMModulator()
+        chunks = [
+            modulator.process(source[start:start + 512])
+            for start in range(0, source.size, 512)
+        ]
+        output = np.concatenate(chunks)[SAMPLE_RATE_HZ:]
+        spectrum = np.abs(np.fft.rfft(output))
+
+        lower_sideband = float(spectrum[5_000])
+        upper_sideband = float(spectrum[7_000])
+        self.assertGreater(lower_sideband, 0.01)
+        self.assertAlmostEqual(
+            lower_sideband,
+            upper_sideband,
+            delta=lower_sideband * 1e-5,
+        )
+
     def test_output_is_finite_float32_and_level_limited(self):
         rng = np.random.default_rng(42)
         source = rng.normal(0.0, 1.5, 8_192).astype(np.float32)
