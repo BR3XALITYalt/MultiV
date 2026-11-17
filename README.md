@@ -103,6 +103,21 @@ MultiV stores station and transmission preferences here:
 
 On Windows, MultiV stores the Discord session token separately at `%PROGRAMDATA%\\TXITPY\\token.txt`. On Linux and macOS, it uses the application configuration directory.
 
+## SimTX API foundation
+
+MultiV includes an initial SimTX integration module in `simtx_api.py`. It follows the documented SimTX account API and game protocol v25:
+
+- Device-code authorization and rotating access/refresh credentials.
+- Online server and persistent-station discovery.
+- Single-use, station-bound game-ticket requests.
+- TLS connection setup, the v25 protocol preface, protobuf frame encoding/decoding, and the initial audio-transmitter messages.
+
+This is an integration foundation, not a finished SimTX transmitter. The desktop controls do not use it yet. Audio capture, real-time sample pacing, continuous telemetry handling, reconnect behavior, and secure credential-store integration still need to be connected to MultiV's application lifecycle. The existing TXITY client remains unchanged.
+
+The account client keeps credentials in memory. The caller must store refresh credentials in an operating-system credential store; do not put them in settings files or logs.
+
+Documentation: [SimTX API reference](https://wiki.simtx.net/index.php/SimTX_API) · [Device login](https://wiki.simtx.net/index.php/SimTX_API/Device_login) · [Transmitter session](https://wiki.simtx.net/index.php/SimTX_API/Transmitter_session).
+
 ## Command-line and service mode
 
 Run `python main.py --help` to see all command-line options.
