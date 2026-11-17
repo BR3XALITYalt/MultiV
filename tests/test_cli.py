@@ -45,6 +45,10 @@ class CommandLineTests(unittest.TestCase):
 
         self.assertEqual(plan["config"]["stationName"], "Example Radio")
         self.assertEqual(plan["config"]["rfHz"], 7_250_000)
+        self.assertEqual(
+            plan["frequency_candidates"],
+            [("7.250 MHz", 7_250_000)],
+        )
         self.assertEqual(plan["config"]["stationDbm"], 42)
         self.assertEqual(plan["audio_source"], "playlist")
         self.assertTrue(plan["playlist_loop"])
@@ -75,6 +79,45 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(plan["config"]["stationDbm"], 30)
         self.assertFalse(plan["config"]["allowOverlapVisitors"])
         self.assertEqual(plan["audio_source"], "mic")
+
+    def test_saved_frequency_fallbacks_are_used_in_headless_mode(self):
+        args = self.parser.parse_args(["--no-gui"])
+        plan = build_headless_plan(
+            {
+                "station_name": "Fallback Radio",
+                "frequency": "7.250 MHz",
+                "frequency_fallbacks": ["7.300 MHz", "7.350 MHz"],
+            },
+            args,
+            "test-token",
+        )
+        self.assertEqual(
+            plan["frequency_candidates"],
+            [
+                ("7.250 MHz", 7_250_000),
+                ("7.300 MHz", 7_300_000),
+                ("7.350 MHz", 7_350_000),
+            ],
+        )
+
+    def test_cli_frequency_override_stays_first_before_saved_fallbacks(self):
+        args = self.parser.parse_args(["--no-gui", "--frequency", "14.200 MHz"])
+        plan = build_headless_plan(
+            {
+                "station_name": "Override Radio",
+                "frequency": "7.250 MHz",
+                "frequency_fallbacks": ["7.300 MHz"],
+            },
+            args,
+            "test-token",
+        )
+        self.assertEqual(
+            plan["frequency_candidates"],
+            [
+                ("14.200 MHz", 14_200_000),
+                ("7.300 MHz", 7_300_000),
+            ],
+        )
 
     def test_device_can_be_selected_by_name_or_numeric_id(self):
         devices = [(2, "USB Audio Codec"), (5, "Built-in Microphone")]
