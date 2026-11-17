@@ -23,7 +23,6 @@ from transmitter import (
     playlist_frame_wait_seconds,
     build_audio_socket_url,
     build_transmit_config,
-    build_am_dev_pair_configs,
     apply_nfm_transport,
     nfm_transport_settings,
     parse_rf_frequency,
@@ -401,36 +400,19 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["_txitpyDrmAudioCodec"], "xHE-AAC")
         self.assertEqual(config["_txitpyDrmInterleaving"], "long")
 
-    def test_am_dev_builds_forced_overlapping_usb_and_lsb_carrier_sessions(self):
-        config = build_transmit_config(
-            station_name="Example Radio",
-            description="Pseudo-AM overlap experiment",
-            frequency="7.250 MHz",
-            mode="AM (DEV)",
-            station_dbm=40,
-            allow_overlap=False,
-            auth_token="test-token",
-        )
+    def test_removed_am_dev_mode_is_rejected(self):
+        self.assertNotIn("AM (DEV)", SUPPORTED_MODES)
+        with self.assertRaisesRegex(ValueError, "Unsupported transmission mode"):
+            build_transmit_config(
+                station_name="Example Radio",
+                description="Removed test mode",
+                frequency="7.250 MHz",
+                mode="AM (DEV)",
+                station_dbm=40,
+                allow_overlap=False,
+                auth_token="test-token",
+            )
 
-        self.assertIn("AM (DEV)", SUPPORTED_MODES)
-        self.assertEqual(config["_txitpyMode"], "AM (DEV)")
-        self.assertEqual(config["mode"], "USB+C")
-        self.assertEqual(config["rfHz"], 7_250_000)
-        self.assertTrue(config["allowOverlapVisitors"])
-
-        usb_config, lsb_config = build_am_dev_pair_configs(config)
-        self.assertEqual(usb_config["mode"], "USB+C")
-        self.assertEqual(lsb_config["mode"], "LSB+C")
-        self.assertEqual(usb_config["rfHz"], lsb_config["rfHz"])
-        self.assertTrue(usb_config["allowOverlapVisitors"])
-        self.assertTrue(lsb_config["allowOverlapVisitors"])
-        self.assertNotEqual(usb_config["stationName"], lsb_config["stationName"])
-        self.assertLessEqual(len(usb_config["stationName"]), 48)
-        self.assertLessEqual(len(lsb_config["stationName"]), 48)
-
-    def test_am_dev_pair_builder_rejects_other_modes(self):
-        with self.assertRaisesRegex(ValueError, "AM \(DEV\)"):
-            build_am_dev_pair_configs({"mode": "AM", "rfHz": 7_250_000})
 
     def test_nfm_mode_uses_a_frequency_translated_ssb_transport(self):
         config = build_transmit_config(
@@ -447,9 +429,9 @@ class TransmitterProtocolTests(unittest.TestCase):
         )
 
         self.assertEqual(config["mode"], "USB")
-        self.assertEqual(config["rfHz"], 7_244_000)
+        self.assertEqual(config["rfHz"], 7_245_000)
         self.assertEqual(config["_txitpyMode"], "NFM")
-        self.assertEqual(config["_txitpyNfmIfHz"], 6_000)
+        self.assertEqual(config["_txitpyNfmIfHz"], 5_000)
         self.assertEqual(config["_txitpyNfmDeviationHz"], 2_500)
         self.assertEqual(config["_txitpyNfmInputGainDb"], 3)
         self.assertEqual(config["_txitpyNfmSideband"], "USB")
@@ -490,13 +472,13 @@ class TransmitterProtocolTests(unittest.TestCase):
                     )
 
     def test_nfm_transport_handles_edges_of_the_available_room(self):
-        self.assertEqual(nfm_transport_settings("7.000 MHz"), ("LSB", 7_006_000))
-        self.assertEqual(nfm_transport_settings("8.000 MHz"), ("USB", 7_994_000))
+        self.assertEqual(nfm_transport_settings("7.000 MHz"), ("LSB", 7_005_000))
+        self.assertEqual(nfm_transport_settings("8.000 MHz"), ("USB", 7_995_000))
 
         config = {"_txitpyMode": "NFM", "mode": "USB"}
         apply_nfm_transport(config, 7_000_000)
         self.assertEqual(config["mode"], "LSB")
-        self.assertEqual(config["rfHz"], 7_006_000)
+        self.assertEqual(config["rfHz"], 7_005_000)
 
         with self.assertRaises(ValueError):
             nfm_transport_settings("6.950 MHz")
@@ -516,9 +498,8 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["mode"], "DSB")
 
     def test_mode_bandwidth_defaults_match_txity_transmit_config(self):
-        self.assertEqual(mode_bandwidth_hz("AM (DEV)"), 12_000)
-        self.assertEqual(mode_bandwidth_hz("DRM"), 12_000)
-        self.assertEqual(mode_bandwidth_hz("NFM"), 11_000)
+                self.assertEqual(mode_bandwidth_hz("DRM"), 12_000)
+        self.assertEqual(mode_bandwidth_hz("NFM"), 9_000)
         self.assertEqual(mode_bandwidth_hz("AM"), 12_000)
         self.assertEqual(mode_bandwidth_hz("DSB"), 12_000)
         self.assertEqual(mode_bandwidth_hz("USB"), 10_000)
