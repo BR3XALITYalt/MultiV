@@ -289,15 +289,15 @@ def build_headless_plan(
         raise ValueError("DRM mode supports microphone and playlist inputs, not desktop audio loopback.")
 
     selected_device: int | None = None
-    selected_device_name = "Not used" if mode == "CW" else "System default"
+    selected_device_name = (
+        "Not used"
+        if mode == "CW" or audio_source == "playlist"
+        else "System default"
+    )
     device_request = args.audio_device or _setting_text(settings, "audio_device", "System default")
 
-    if mode == "CW":
-        pass
-    elif audio_source == "mic":
-        if str(device_request).strip().casefold() in {"", "default", "system default"}:
-            selected_device_name = "System default"
-        else:
+    if mode != "CW" and audio_source == "mic":
+        if str(device_request).strip().casefold() not in {"", "default", "system default"}:
             available = input_devices if input_devices is not None else list_audio_inputs()
             selected_device, selected_device_name = _resolve_device(
                 available,
@@ -305,7 +305,7 @@ def build_headless_plan(
                 device_type="audio input",
                 allow_default=True,
             )
-    elif audio_source == "loopback":
+    elif mode != "CW" and audio_source == "loopback":
         available_loopback = (
             loopback_devices
             if loopback_devices is not None
@@ -549,7 +549,7 @@ def run_headless(
         logger.info("Using settings file: %s", settings_path)
         logger.info(
             "Starting %s on %s using %s input.",
-            plan["config"]["mode"],
+            plan["config"].get("_txitpyMode", plan["config"]["mode"]),
             plan["config"]["rfHz"],
             plan["audio_source"],
         )
