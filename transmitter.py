@@ -1208,6 +1208,9 @@ class TxityTransmitter:
                     pass
             audio_socket = None
 
+        def audio_socket_is_available_for_drain(connection: Any) -> bool:
+            return audio_connection_is_open(connection)
+
 
         try:
             if self._stop_event.is_set():
@@ -1869,6 +1872,86 @@ class TxityTransmitter:
                 })
         finally:
             playlist_completed = playlist_reached_end and not audio_thread_error
+            self._stop_event.set()
+
+            if rade_encoder is not None:
+                if input_stream is not None:
+                    try:
+                        input_stream.stop()
+                    except Exception:
+                        pass
+                    try:
+                        input_stream.close()
+                    except Exception:
+                        pass
+                    input_stream = None
+
+                if loopback_stream is not None:
+                    try:
+                        if loopback_stream.is_active():
+                            loopback_stream.stop_stream()
+                    except Exception:
+                        pass
+                    try:
+                        loopback_stream.close()
+                    except Exception:
+                        pass
+                    loopback_stream = None
+
+                if loopback_manager is not None:
+                    try:
+                        loopback_manager.terminate()
+                    except Exception:
+                        pass
+                    loopback_manager = None
+
+                if playlist_thread is not None and playlist_thread is not threading.current_thread():
+                    playlist_thread.join(timeout=2.0)
+
+                try:
+                    rade_encoder.finish()
+                    if rade_encoder.error:
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": f"FreeDV RADE encoder shutdown: {rade_encoder.error[:700]}",
+                        })
+                    enqueue_transport_audio_samples(
+                        [],
+                        flush=True,
+                        playlist_info=rade_playlist_info,
+                    )
+                except Exception as exc:
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": f"FreeDV RADE final-frame handling failed: {_safe_error(exc)}",
+                    })
+
+                if ptt_sent and audio_socket_is_available_for_drain(audio_socket):
+                    pending_items = []
+                    if pending_frame is not None:
+                        pending_items.append(pending_frame)
+                        pending_frame = None
+                    while True:
+                        try:
+                            pending_items.append(audio_queue.get_nowait())
+                        except queue.Empty:
+                            break
+
+                    for item in pending_items:
+                        frame = item[0] if isinstance(item, tuple) else item
+                        try:
+                            audio_socket.send(
+                                frame,
+                                opcode=websocket.ABNF.OPCODE_BINARY,
+                            )
+                        except Exception as exc:
+                            self.events.put({
+                                "kind": "tx_log",
+                                "text": f"Could not flush the final RADE audio frame: {_safe_error(exc)}",
+                            })
+                            break
+                        time.sleep(AUDIO_FRAME_INTERVAL_SECONDS)
+
             if ptt_sent:
                 for label, target_client, _endpoint_config in control_endpoints:
                     try:
@@ -1883,7 +1966,6 @@ class TxityTransmitter:
                             "text": f"Could not send {label} PTT OFF request: {_safe_error(exc)}",
                         })
 
-            self._stop_event.set()
             if drm_stop_path is not None:
                 try:
                     drm_stop_path.touch(exist_ok=True)
