@@ -1012,7 +1012,7 @@ def build_app() -> None:
         make_label(
             card,
             "Sign in with Discord to use the TXITPY desktop app. "
-            "TXITPY checks your saved session automatically on later launches.",
+            "TXITPY checks your saved session each time it starts.",
             font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -1220,7 +1220,7 @@ def build_app() -> None:
         if fallback_count:
             frequency_word = "frequency" if fallback_count == 1 else "frequencies"
             messages.append(
-                f"Automatic fallback is enabled with {fallback_count} alternate {frequency_word}."
+                f"TXITPY will try {fallback_count} alternate {frequency_word} if TXITY rejects the first frequency."
             )
         messages.append("TXITPY estimates overlap from the station list. TXITY makes the final decision about shared frequencies.")
         tx_frequency_check_var.set(" ".join(messages))
@@ -2063,7 +2063,7 @@ def build_app() -> None:
                     "passband. Settings narrower than the generated signal may clip it."
                 ),
                 "DRM": "DRM [EXPERIMENTAL] - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Use a microphone or OGG, MP3, or FLAC playlists.",
-                "CW": "CW - carrier only. The microphone and desktop audio sources are not used.",
+                "CW": "CW - carrier only. TXITPY sends the configured CW message instead of microphone or desktop audio.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
             update_drm_metadata_visibility()
