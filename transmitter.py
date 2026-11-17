@@ -1251,7 +1251,8 @@ class TxityTransmitter:
                         )
                     ):
                         rejection = (
-                            status.get("txStartReason", status.get("txBlockReason"))
+                            status.get("txStartReason")
+                            or status.get("txBlockReason")
                             or "TXITY rejected the LSB PTT request"
                         )
                         if rejection == secondary_rejection_signature:
@@ -1260,9 +1261,20 @@ class TxityTransmitter:
                             secondary_rejection_signature = rejection
                             secondary_rejection_count = 1
                         if secondary_rejection_count >= 2:
+                            reason_labels = {
+                                2: "transmitter capacity is currently full",
+                                3: "frequency sharing or overlap was rejected",
+                                4: "the total transmitter limit was reached",
+                                5: "a station name is required",
+                                "2": "transmitter capacity is currently full",
+                                "3": "frequency sharing or overlap was rejected",
+                                "4": "the total transmitter limit was reached",
+                                "5": "a station name is required",
+                            }
+                            reason_text = reason_labels.get(rejection, str(rejection))
                             raise RuntimeError(
                                 "TXITY did not accept the LSB+C transmission on the second "
-                                f"account session. Server reason: {_safe_error(rejection)}. "
+                                f"account session. Server reason: {reason_text}. "
                                 "The paired AM (DEV) test is stopping so USB does not continue alone."
                             )
                     elif status.get("ptt") is True:
