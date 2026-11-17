@@ -17,7 +17,7 @@ from typing import Any, Callable
 
 from audio_playlist import build_playlist_snapshot, normalize_audio_sources
 from discord_auth import auth_token_path, is_auth_token, safe_error_text
-from service_stop import WindowsServiceStopWindow
+from service_stop import WindowsServiceStopWindow, hide_service_console
 from transmitter import (
     SUPPORTED_MODES,
     build_frequency_candidates,
@@ -719,6 +719,9 @@ def run_headless(
 
     try:
         logger = _configure_logging(args)
+
+        if args.no_gui and os.name == "nt":
+            hide_service_console(logger)
 
         if args.list_inputs:
             _print_devices(list_audio_inputs())
