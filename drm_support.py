@@ -27,6 +27,7 @@ DECDRM_VERSION = "0.7.1"
 DRM_PLAYLIST_EXTENSIONS = frozenset({".flac", ".mp3", ".ogg"})
 DRM_AUDIO_CODECS = ("xHE-AAC", "HE-AAC")
 DRM_INTERLEAVING_OPTIONS = ("long", "short")
+DRM_MSC_MODES = ("16-QAM", "64-QAM")
 
 DRM_LANGUAGES = (
     "No language specified",
@@ -789,6 +790,7 @@ def write_drm_station_config(
     iso_language: str = "",
     iso_country: str = "",
     audio_codec: str = "xHE-AAC",
+    msc_mode: str = "16-QAM",
     interleaving: str = "long",
 ) -> Path:
     """Write a one-service, 4.5 kHz DRM30 station configuration."""
@@ -849,11 +851,15 @@ def write_drm_station_config(
     if selected_interleaving not in DRM_INTERLEAVING_OPTIONS:
         raise ValueError("DRM interleaving must be long or short.")
 
+    selected_msc_mode = str(msc_mode or "").strip().upper()
+    if selected_msc_mode not in DRM_MSC_MODES:
+        raise ValueError("DRM MSC modulation must be 16-QAM or 64-QAM.")
+
     lines = [
         "[channel]",
         'mode = "B"',
         "occupancy = 0",
-        'msc_mode = "64-QAM"',
+        f'msc_mode = "{selected_msc_mode}"',
         'sdc_mode = "16-QAM"',
         f'interleaving = "{selected_interleaving}"',
         "protection_b = 1",
