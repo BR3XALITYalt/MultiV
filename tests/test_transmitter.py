@@ -186,7 +186,7 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertTrue(config["agcEnabled"])
         self.assertEqual(config["agcTarget"], 0.19)
         self.assertEqual(config["micGainDb"], 0)
-        self.assertEqual(config["ssbBandwidthHz"], 10_000)
+        self.assertEqual(config["ssbBandwidthHz"], 12_000)
         self.assertFalse(config["cwLoop"])
         self.assertEqual(config["discordAuthToken"], "test-token")
 
@@ -447,10 +447,10 @@ class TransmitterProtocolTests(unittest.TestCase):
         )
 
         self.assertEqual(config["mode"], "USB")
-        self.assertEqual(config["rfHz"], 7_245_000)
+        self.assertEqual(config["rfHz"], 7_244_000)
         self.assertEqual(config["_txitpyMode"], "NFM")
-        self.assertEqual(config["_txitpyNfmIfHz"], 5_000)
-        self.assertEqual(config["_txitpyNfmDeviationHz"], 2_000)
+        self.assertEqual(config["_txitpyNfmIfHz"], 6_000)
+        self.assertEqual(config["_txitpyNfmDeviationHz"], 2_500)
         self.assertEqual(config["_txitpyNfmInputGainDb"], 3)
         self.assertEqual(config["_txitpyNfmSideband"], "USB")
         self.assertEqual(config["ssbBandwidthHz"], 10_000)
@@ -461,13 +461,13 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["drive"], 0)
 
     def test_nfm_transport_handles_edges_of_the_available_room(self):
-        self.assertEqual(nfm_transport_settings("7.000 MHz"), ("LSB", 7_005_000))
-        self.assertEqual(nfm_transport_settings("8.000 MHz"), ("USB", 7_995_000))
+        self.assertEqual(nfm_transport_settings("7.000 MHz"), ("LSB", 7_006_000))
+        self.assertEqual(nfm_transport_settings("8.000 MHz"), ("USB", 7_994_000))
 
         config = {"_txitpyMode": "NFM", "mode": "USB"}
         apply_nfm_transport(config, 7_000_000)
         self.assertEqual(config["mode"], "LSB")
-        self.assertEqual(config["rfHz"], 7_005_000)
+        self.assertEqual(config["rfHz"], 7_006_000)
 
         with self.assertRaises(ValueError):
             nfm_transport_settings("6.950 MHz")
@@ -489,7 +489,7 @@ class TransmitterProtocolTests(unittest.TestCase):
     def test_mode_bandwidth_defaults_match_txity_transmit_config(self):
         self.assertEqual(mode_bandwidth_hz("AM (DEV)"), 12_000)
         self.assertEqual(mode_bandwidth_hz("DRM"), 12_000)
-        self.assertEqual(mode_bandwidth_hz("NFM"), 9_000)
+        self.assertEqual(mode_bandwidth_hz("NFM"), 11_000)
         self.assertEqual(mode_bandwidth_hz("AM"), 12_000)
         self.assertEqual(mode_bandwidth_hz("DSB"), 12_000)
         self.assertEqual(mode_bandwidth_hz("USB"), 10_000)
