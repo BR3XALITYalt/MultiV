@@ -8,6 +8,7 @@ from unittest.mock import patch
 from cli import (
     _handle_event,
     _install_shutdown_handlers,
+    exit_headless_process,
     _read_auth_token,
     _shutdown_headless,
     build_argument_parser,
@@ -301,6 +302,13 @@ class CommandLineTests(unittest.TestCase):
         self.assertFalse(state["retry_pending"])
         self.assertTrue(shutdown_event.is_set())
         self.assertEqual(transmitter.stop_calls, 1)
+
+    def test_headless_process_exit_flushes_logs_and_uses_exit_code(self):
+        with patch("cli.logging.shutdown") as shutdown_logging, patch("cli.os._exit") as process_exit:
+            exit_headless_process(7)
+
+        shutdown_logging.assert_called_once_with()
+        process_exit.assert_called_once_with(7)
 
     def test_nssm_console_signal_requests_graceful_shutdown(self):
         shutdown_event = threading.Event()
