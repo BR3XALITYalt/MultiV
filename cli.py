@@ -1,4 +1,4 @@
-"""Headless command-line runner for TXITPY."""
+"""Headless command-line runner for MultiV."""
 
 from __future__ import annotations
 
@@ -34,9 +34,9 @@ AUDIO_SOURCE_CHOICES = ("mic", "loopback", "playlist")
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="txitpy",
+        prog="multiv",
         description=(
-            "TXITPY desktop client. Use --no-gui to load saved settings and "
+            "MultiV desktop client. Use --no-gui to load saved settings and "
             "start a transmission from saved settings, including as an NSSM service."
         ),
     )
@@ -60,9 +60,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--auth-token-env",
-        default="TXITPY_DISCORD_AUTH_TOKEN",
+        default="MultiV_DISCORD_AUTH_TOKEN",
         metavar="NAME",
-        help="Environment variable containing the session token (default: TXITPY_DISCORD_AUTH_TOKEN).",
+        help="Environment variable containing the session token (default: MultiV_DISCORD_AUTH_TOKEN).",
     )
     parser.add_argument("--station-name", help="Override the saved station name.")
     parser.add_argument("--description", help="Override the saved station description.")
@@ -180,7 +180,7 @@ def _configure_logging(args: argparse.Namespace) -> logging.Logger:
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
 
-    return logging.getLogger("TXITPY")
+    return logging.getLogger("MultiV")
 
 
 def load_settings(path: Path) -> dict[str, Any]:
@@ -390,7 +390,7 @@ def build_headless_plan(
         station_dbm=args.power if args.power is not None else _setting_text(settings, "station_dbm", "50"),
         allow_overlap=allow_overlap,
         auth_token=auth_token,
-        cw_text=_setting_text(settings, "cw_text", "CQ CQ DE TXITPY"),
+        cw_text=_setting_text(settings, "cw_text", "CQ CQ DE MULTIV"),
         cw_wpm=_setting_text(settings, "cw_wpm", "18"),
         cw_loop=_setting_bool(settings, "cw_loop", True),
         station_logo_url=_setting_text(settings, "station_logo_url", ""),
@@ -468,7 +468,7 @@ def _read_auth_token(args: argparse.Namespace) -> str:
     if not is_auth_token(token):
         raise ValueError(
             f"No valid TXITY Discord session token was found in {source}. "
-            "Sign in with Discord in TXITPY or set the token environment variable."
+            "Sign in with Discord in MultiV or set the token environment variable."
         )
     return token
 
@@ -656,7 +656,7 @@ def _install_shutdown_handlers(
 
     def request_shutdown(signum: int, _frame: Any) -> None:
         if not shutdown_event.is_set():
-            logger.info("Received shutdown signal %s; stopping TXITPY.", signum)
+            logger.info("Received shutdown signal %s; stopping MultiV.", signum)
             shutdown_event.set()
 
     watched_signals = [signal.SIGINT, signal.SIGTERM]
@@ -709,12 +709,12 @@ def _shutdown_headless(
         except Exception as exc:
             logger.warning("Final transmitter wait failed: %s", safe_error_text(str(exc), 800))
 
-    logger.info("TXITPY shutdown sequence complete.")
+    logger.info("MultiV shutdown sequence complete.")
 
 
 def exit_headless_process(exit_code: int) -> None:
     """Flush diagnostics and exit without waiting on unrelated library threads."""
-    logger = logging.getLogger("TXITPY")
+    logger = logging.getLogger("MultiV")
     current_thread = threading.current_thread()
     lingering_threads = [
         thread
@@ -752,7 +752,7 @@ def run_headless(
     transmitter_factory: Callable[[Any, Any], Any],
     default_settings_path: Path,
 ) -> int:
-    logger = logging.getLogger("TXITPY")
+    logger = logging.getLogger("MultiV")
 
     try:
         logger = _configure_logging(args)
@@ -849,7 +849,7 @@ def run_headless(
             if shutdown_event.is_set():
                 return 0
             if not connected:
-                raise ConnectionError("TXITPY stopped before the TXITY connection became ready.")
+                raise ConnectionError("MultiV stopped before the TXITY connection became ready.")
 
             transmitter.start(
                 plan["config"],
