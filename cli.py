@@ -35,7 +35,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         prog="txitpy",
         description=(
             "TXITPY desktop client. Use --no-gui to load saved settings and "
-            "start a transmission directly, for example under NSSM."
+            "start a transmission from saved settings, including as an NSSM service."
         ),
     )
     parser.add_argument(
@@ -592,7 +592,7 @@ def _handle_event(
             reason = data.get("txStartReason", data.get("txBlockReason"))
             reason_key = str(reason if reason is not None else "txStartUsable=false")
             reasons = {
-                "2": "transmitter capacity is currently full",
+                "2": "TXITY's transmitter capacity is full",
                 "3": "frequency sharing must be enabled by both stations",
                 "4": "the total transmitter limit has been reached",
                 "5": "enter a station name",
