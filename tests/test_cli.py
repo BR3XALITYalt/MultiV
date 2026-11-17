@@ -35,7 +35,7 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(args.frequency, "7 MHz")
         self.assertEqual(args.frequency_fallback, ["7.2 MHz", "7.25 MHz", "7.5 MHz"])
 
-    def test_headless_reads_saved_appdata_token_by_default(self):
+    def test_headless_reads_saved_shared_token_by_default(self):
         with tempfile.TemporaryDirectory() as directory:
             token_file = Path(directory) / "TXITPY" / "token.txt"
             token_file.parent.mkdir(parents=True)
