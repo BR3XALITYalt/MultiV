@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 import queue
 import re
@@ -85,7 +86,6 @@ def prepare_rade_encoder(
         return executable
 
     root.mkdir(parents=True, exist_ok=True)
-    lock_path = root / ".install.lock"
     with _runtime_install_lock:
         if all(path.is_file() for path in required_files):
             return executable
@@ -112,7 +112,7 @@ def prepare_rade_encoder(
         try:
             extracted = temporary / "runtime"
             extracted.mkdir()
-            with zipfile.ZipFile(__import__("io").BytesIO(archive_data)) as archive:
+            with zipfile.ZipFile(io.BytesIO(archive_data)) as archive:
                 for member in archive.infolist():
                     member_path = Path(member.filename)
                     if member_path.is_absolute() or ".." in member_path.parts:
@@ -378,7 +378,12 @@ class FreeDVRadeEncoder:
         except Exception as exc:
             self._set_error(f"FreeDV RADE waveform processing failed: {exc}")
 
-    def feed(self, samples: np.ndarray) -> None:
+    def feed(
+        self,
+        samples: np.ndarray,
+        *,
+        wait_for_space: bool = False,
+    ) -> None:
         source = np.asarray(samples, dtype=np.float32).reshape(-1)
         if source.size == 0:
             return
@@ -402,15 +407,27 @@ class FreeDVRadeEncoder:
                     -32767,
                     32767,
                 ).astype("<i2", copy=False)
-                try:
-                    self._input_queue.put(pcm.tobytes(), timeout=0.15)
-                except queue.Full as exc:
-                    message = (
-                        "FreeDV RADE cannot encode the incoming audio in real time. "
-                        "The computer may not have enough CPU capacity."
-                    )
-                    self._set_error(message)
-                    raise RuntimeError(message) from exc
+                if wait_for_space:
+                    while self._accepting and self._process.poll() is None:
+                        try:
+                            self._input_queue.put(pcm.tobytes(), timeout=0.25)
+                            break
+                        except queue.Full:
+                            continue
+                    else:
+                        raise RuntimeError(
+                            self.error or "The FreeDV RADE encoder stopped while queuing audio."
+                        )
+                else:
+                    try:
+                        self._input_queue.put_nowait(pcm.tobytes())
+                    except queue.Full as exc:
+                        message = (
+                            "FreeDV RADE cannot encode the incoming audio in real time. "
+                            "The computer may not have enough CPU capacity."
+                        )
+                        self._set_error(message)
+                        raise RuntimeError(message) from exc
 
     def finish(self, timeout: float = 12.0) -> None:
         with self._finish_lock:
