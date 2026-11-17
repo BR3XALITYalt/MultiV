@@ -4490,7 +4490,22 @@ def build_app() -> None:
 
             elif kind == "tx_error":
                 details = safe_error_text(str(event.get("text") or "Transmission failed."), 800)
+                traceback_text = str(event.get("traceback") or "").strip()
                 tx_status_var.set(f"Transmission error: {details}")
+                if traceback_text:
+                    print(
+                        "\\n[TXITPY transmission error]\\n"
+                        + traceback_text
+                        + "\\n",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                else:
+                    print(
+                        f"\\n[TXITPY transmission error] {details}\\n",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                 update_transmit_button()
 
             elif kind == "tx_audio_warning":
