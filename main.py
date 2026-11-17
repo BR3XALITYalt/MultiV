@@ -4494,7 +4494,7 @@ def build_app() -> None:
                 tx_status_var.set(f"Transmission error: {details}")
                 if traceback_text:
                     print(
-                        "\\n[TXITPY transmission error]\\n"
+                        "\n[TXITPY transmission error]\n"
                         + traceback_text
                         + "\\n",
                         file=sys.stderr,
@@ -4502,7 +4502,7 @@ def build_app() -> None:
                     )
                 else:
                     print(
-                        f"\\n[TXITPY transmission error] {details}\\n",
+                        f"\n[TXITPY transmission error] {details}\n",
                         file=sys.stderr,
                         flush=True,
                     )
