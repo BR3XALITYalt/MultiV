@@ -1081,10 +1081,13 @@ class TxityTransmitter:
             ),
         })
         control_wait_reported = False
+        secondary_status_signature = None
+        secondary_status_logged_at = 0.0
 
         def wait_for_control_connection() -> bool:
             nonlocal control_wait_reported
             while not self._stop_event.is_set():
+                drain_secondary_events()
                 unavailable = [
                     label for label, target_client, _target_config in control_endpoints
                     if not target_client.control_connected()
@@ -1170,6 +1173,7 @@ class TxityTransmitter:
             secondary_audio_socket = None
 
         def drain_secondary_events() -> None:
+            nonlocal secondary_status_signature, secondary_status_logged_at
             if secondary_client is None:
                 return
             while True:
@@ -1194,6 +1198,30 @@ class TxityTransmitter:
                         "kind": "tx_log",
                         "text": f"LSB control session server message: {str(payload)[:500]}",
                     })
+                elif kind == "status":
+                    status = event.get("data")
+                    if not isinstance(status, dict):
+                        continue
+                    signature = (
+                        status.get("ptt"),
+                        status.get("txStartUsable"),
+                        status.get("txBlockReason"),
+                        status.get("queuePosition"),
+                    )
+                    now = time.monotonic()
+                    if signature != secondary_status_signature or now - secondary_status_logged_at >= 5.0:
+                        secondary_status_signature = signature
+                        secondary_status_logged_at = now
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": (
+                                "LSB TXITY status: "
+                                f"ptt={status.get('ptt')!r}, "
+                                f"txStartUsable={status.get('txStartUsable')!r}, "
+                                f"txBlockReason={status.get('txBlockReason')!r}, "
+                                f"queuePosition={status.get('queuePosition')!r}."
+                            ),
+                        })
 
 
         try:
