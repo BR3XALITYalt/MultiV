@@ -2019,7 +2019,7 @@ class TxityTransmitter:
                         time.perf_counter(),
                         catch_up_after_delay=True,
                     )
-                elif audio_source == "playlist":
+                elif audio_source in {"playlist", "test_tone"}:
                     playlist_next_frame_deadline = next_audio_frame_deadline(
                         playlist_next_frame_deadline,
                         time.perf_counter(),
