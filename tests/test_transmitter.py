@@ -23,6 +23,7 @@ from transmitter import (
     playlist_frame_wait_seconds,
     build_audio_socket_url,
     build_transmit_config,
+    build_am_dev_pair_configs,
     apply_nfm_transport,
     nfm_transport_settings,
     parse_rf_frequency,
@@ -400,6 +401,37 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["_txitpyDrmAudioCodec"], "xHE-AAC")
         self.assertEqual(config["_txitpyDrmInterleaving"], "long")
 
+    def test_am_dev_builds_forced_overlapping_usb_and_lsb_carrier_sessions(self):
+        config = build_transmit_config(
+            station_name="Example Radio",
+            description="Pseudo-AM overlap experiment",
+            frequency="7.250 MHz",
+            mode="AM (DEV)",
+            station_dbm=40,
+            allow_overlap=False,
+            auth_token="test-token",
+        )
+
+        self.assertIn("AM (DEV)", SUPPORTED_MODES)
+        self.assertEqual(config["_txitpyMode"], "AM (DEV)")
+        self.assertEqual(config["mode"], "USB+C")
+        self.assertEqual(config["rfHz"], 7_250_000)
+        self.assertTrue(config["allowOverlapVisitors"])
+
+        usb_config, lsb_config = build_am_dev_pair_configs(config)
+        self.assertEqual(usb_config["mode"], "USB+C")
+        self.assertEqual(lsb_config["mode"], "LSB+C")
+        self.assertEqual(usb_config["rfHz"], lsb_config["rfHz"])
+        self.assertTrue(usb_config["allowOverlapVisitors"])
+        self.assertTrue(lsb_config["allowOverlapVisitors"])
+        self.assertNotEqual(usb_config["stationName"], lsb_config["stationName"])
+        self.assertLessEqual(len(usb_config["stationName"]), 48)
+        self.assertLessEqual(len(lsb_config["stationName"]), 48)
+
+    def test_am_dev_pair_builder_rejects_other_modes(self):
+        with self.assertRaisesRegex(ValueError, "AM \(DEV\)"):
+            build_am_dev_pair_configs({"mode": "AM", "rfHz": 7_250_000})
+
     def test_nfm_mode_uses_a_frequency_translated_ssb_transport(self):
         config = build_transmit_config(
             station_name="Example NFM",
@@ -455,6 +487,7 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["mode"], "DSB")
 
     def test_mode_bandwidth_defaults_match_txity_transmit_config(self):
+        self.assertEqual(mode_bandwidth_hz("AM (DEV)"), 12_000)
         self.assertEqual(mode_bandwidth_hz("DRM"), 12_000)
         self.assertEqual(mode_bandwidth_hz("NFM"), 9_000)
         self.assertEqual(mode_bandwidth_hz("AM"), 12_000)
