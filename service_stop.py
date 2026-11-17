@@ -9,6 +9,35 @@ from typing import Any
 WM_CLOSE = 0x0010
 WM_DESTROY = 0x0002
 WM_QUIT = 0x0012
+SW_HIDE = 0
+
+
+def hide_service_console(logger: Any) -> bool:
+    """Hide the NSSM-created console without detaching from its control events."""
+    if os.name != "nt":
+        return False
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        kernel32.GetConsoleWindow.argtypes = []
+        kernel32.GetConsoleWindow.restype = wintypes.HWND
+        user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.ShowWindow.restype = wintypes.BOOL
+
+        console_window = kernel32.GetConsoleWindow()
+        if not console_window:
+            return False
+
+        user32.ShowWindow(console_window, SW_HIDE)
+        logger.info("NSSM console hidden; service control events remain enabled.")
+        return True
+    except Exception as exc:
+        logger.warning("Could not hide the NSSM console: %s", exc)
+        return False
 
 
 def handle_service_stop_message(
