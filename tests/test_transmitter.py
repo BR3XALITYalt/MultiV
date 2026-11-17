@@ -24,7 +24,9 @@ from transmitter import (
     build_audio_socket_url,
     build_transmit_config,
     apply_nfm_transport,
+    apply_rade_transport,
     nfm_transport_settings,
+    rade_transport_settings,
     parse_rf_frequency,
     StreamingLinearResampler,
     find_frequency_overlaps,
@@ -497,9 +499,45 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["_txitpyMode"], "DRM")
         self.assertEqual(config["mode"], "DSB")
 
+    def test_rade_builds_a_centred_ssb_transport_configuration(self):
+        config = build_transmit_config(
+            station_name="Example RADE",
+            description="FreeDV RADE V1",
+            frequency="7.250 MHz",
+            mode="RADE",
+            station_dbm=40,
+            allow_overlap=False,
+            auth_token="test-token",
+        )
+
+        self.assertIn("RADE", SUPPORTED_MODES)
+        self.assertEqual(config["_txitpyMode"], "RADE")
+        self.assertEqual(config["mode"], "USB")
+        self.assertEqual(config["rfHz"], 7_248_500)
+        self.assertEqual(config["_txitpyRadeCenterHz"], 1_500)
+        self.assertEqual(config["_txitpyRadeChannelBandwidthHz"], 1_500)
+        self.assertEqual(config["ssbBandwidthHz"], 3_000)
+        self.assertFalse(config["agcEnabled"])
+        self.assertEqual(config["fadeMs"], 0)
+        self.assertEqual(config["micGainDb"], 0)
+        self.assertEqual(config["drive"], 0)
+
+    def test_rade_transport_centres_the_audio_at_room_edges(self):
+        self.assertEqual(rade_transport_settings("7.000 MHz"), ("LSB", 7_001_500))
+        self.assertEqual(rade_transport_settings("8.000 MHz"), ("USB", 7_998_500))
+
+        config = {"_txitpyMode": "RADE", "mode": "USB"}
+        apply_rade_transport(config, "7.000 MHz")
+        self.assertEqual(config["mode"], "LSB")
+        self.assertEqual(config["rfHz"], 7_001_500)
+
+        with self.assertRaises(ValueError):
+            rade_transport_settings("6.999 MHz")
+
     def test_mode_bandwidth_defaults_match_txity_transmit_config(self):
         self.assertEqual(mode_bandwidth_hz("DRM"), 12_000)
         self.assertEqual(mode_bandwidth_hz("NFM"), 9_000)
+        self.assertEqual(mode_bandwidth_hz("RADE"), 1_500)
         self.assertEqual(mode_bandwidth_hz("AM"), 12_000)
         self.assertEqual(mode_bandwidth_hz("DSB"), 12_000)
         self.assertEqual(mode_bandwidth_hz("USB"), 10_000)
