@@ -792,6 +792,7 @@ class TxityTransmitter:
             )
             if nfm_mode else None
         )
+        nfm_modulator_lock = threading.Lock()
         last_audio_frame_at = time.monotonic()
         last_capture_error_at = 0.0
         control_configured = False
@@ -805,6 +806,12 @@ class TxityTransmitter:
         audio_frames_sent = 0
         last_audio_progress_at = time.monotonic()
 
+        def modulate_nfm_samples(samples):
+            if nfm_modulator is None:
+                return samples
+            with nfm_modulator_lock:
+                return nfm_modulator.process(samples)
+
         def enqueue_pcm_samples(
             samples,
             *,
@@ -816,13 +823,13 @@ class TxityTransmitter:
 
             pcm = np.asarray(samples, dtype="<f4").reshape(-1)
             if pcm.size and nfm_modulator is not None:
-                pcm = nfm_modulator.process(pcm)
+                pcm = modulate_nfm_samples(pcm)
             if pcm.size:
                 carry.extend(pcm.tobytes())
             if flush and carry and len(carry) < FRAME_BYTES:
                 missing_samples = (FRAME_BYTES - len(carry)) // 4
                 if nfm_modulator is not None:
-                    padding = nfm_modulator.process(
+                    padding = modulate_nfm_samples(
                         np.zeros(missing_samples, dtype=np.float32)
                     )
                     carry.extend(padding.astype("<f4", copy=False).tobytes())
@@ -1525,7 +1532,7 @@ class TxityTransmitter:
                         time.monotonic(),
                     ):
                         if nfm_modulator is not None:
-                            queued_frame = nfm_modulator.process(
+                            queued_frame = modulate_nfm_samples(
                                 np.zeros(BATCH_SAMPLES, dtype=np.float32)
                             ).astype("<f4", copy=False).tobytes()
                         else:
