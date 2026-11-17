@@ -1,4 +1,4 @@
-"""Windows system tray support for TXITPY."""
+"""Windows system tray support for MultiV."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 
 def create_tray_image():
-    """Create a small TXITPY icon using the application's primary blue."""
+    """Create a small MultiV icon using the application's primary blue."""
     from PIL import Image, ImageDraw
 
     image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
@@ -43,19 +43,19 @@ def create_tray_icon(
 
     menu = pystray.Menu(
         pystray.MenuItem(
-            "Open TXITPY",
+            "Open MultiV",
             lambda _icon, _item: on_restore(),
             default=True,
         ),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(
-            "Quit TXITPY",
+            "Quit MultiV",
             lambda _icon, _item: on_quit(),
         ),
     )
     return pystray.Icon(
-        "TXITPY",
+        "MultiV",
         create_tray_image(),
-        title="TXITPY",
+        title="MultiV",
         menu=menu,
     )
