@@ -16,6 +16,7 @@ from drm_support import (
     DRM_PROGRAMME_TYPES,
     DRM_AUDIO_CODECS,
     DRM_INTERLEAVING_OPTIONS,
+    DRM_MSC_MODES,
     VISUAL_STUDIO_BUILD_TOOLS_LABEL,
     VISUAL_STUDIO_BUILD_TOOLS_URL,
     VISUAL_STUDIO_WORKLOAD,
@@ -190,7 +191,7 @@ class DRMConfigurationTests(unittest.TestCase):
 
         self.assertEqual(config["channel"]["mode"], "B")
         self.assertEqual(config["channel"]["occupancy"], 0)
-        self.assertEqual(config["channel"]["msc_mode"], "64-QAM")
+        self.assertEqual(config["channel"]["msc_mode"], "16-QAM")
         self.assertEqual(config["channel"]["sdc_mode"], "16-QAM")
         self.assertEqual(config["channel"]["interleaving"], "long")
         self.assertEqual(config["channel"]["protection_b"], 1)
@@ -208,6 +209,19 @@ class DRMConfigurationTests(unittest.TestCase):
             service["audio"]["input"]["url"],
             "http://127.0.0.1:12345/playlist.m3u",
         )
+
+    def test_can_select_64_qam_for_higher_capacity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = write_drm_station_config(
+                Path(folder) / "station.toml",
+                station_name="Example Radio",
+                input_device_name="default",
+                msc_mode="64-QAM",
+            )
+            config = tomllib.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(config["channel"]["msc_mode"], "64-QAM")
+        self.assertEqual(DRM_MSC_MODES, ("16-QAM", "64-QAM"))
 
     def test_writes_custom_drm_service_metadata(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -254,6 +268,7 @@ class DRMConfigurationTests(unittest.TestCase):
             {"service_id": "not-hex"},
             {"language": "Klingon"},
             {"programme_type": "Dubstep"},
+            {"msc_mode": "256-QAM"},
             {"iso_language": "english"},
             {"iso_country": "USA"},
         )
