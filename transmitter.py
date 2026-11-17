@@ -18,7 +18,6 @@ from urllib.parse import urlencode
 from audio_playlist import build_playlist_order, collect_audio_files
 from playlist_decoder import iter_playlist_audio_blocks
 from drm_support import LocalDRMPlaylistServer, ensure_drm_encoder, write_drm_station_config
-from drm_support import LocalDRMPlaylistServer, ensure_drm_encoder, write_drm_station_config
 
 
 BASE_URL = "https://txity.radiodiscussion.org"
