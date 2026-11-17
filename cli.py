@@ -534,6 +534,19 @@ def _handle_event(
                     shutdown_event.set()
             else:
                 shutdown_event.set()
+    elif kind == "tx_log":
+        logger.info("%s", safe_error_text(str(event.get("text") or ""), 800))
+    elif kind == "tx_playlist_track":
+        track_path = Path(str(event.get("path") or "")).name or "audio file"
+        track_path = safe_error_text(track_path, 200)
+        track_index = event.get("index")
+        track_count = event.get("count")
+        if isinstance(track_index, int) and isinstance(track_count, int):
+            logger.info("Playlist track %d/%d: %s", track_index, track_count, track_path)
+        else:
+            logger.info("Playlist track: %s", track_path)
+    elif kind == "tx_playlist_finished":
+        logger.info("Playlist playback completed.")
     elif kind == "tx_error":
         logger.error("Transmission failed: %s", safe_error_text(str(event.get("text") or ""), 800))
         state["exit_code"] = 1
