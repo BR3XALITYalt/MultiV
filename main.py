@@ -812,13 +812,22 @@ class TxityClient:
             name="txity-public-data",
         ).start()
 
-    def disconnect(self) -> None:
+    def disconnect(self, wait: float = 0.0) -> None:
         self.stop_event.set()
-        if self.ws is not None:
+        self.reconnect_event.set()
+
+        active_socket = self.ws
+        if active_socket is not None:
             try:
-                self.ws.close()
+                active_socket.close()
             except Exception:
                 pass
+
+        thread = self.ws_thread
+        timeout = max(0.0, float(wait))
+        if timeout and thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=timeout)
+
         self.events.put({"kind": "connection", "text": "Disconnected"})
 
     def refresh_stations(self) -> None:
