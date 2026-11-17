@@ -1,3 +1,4 @@
+import logging
 import tempfile
 import threading
 import unittest
@@ -166,7 +167,7 @@ class CommandLineTests(unittest.TestCase):
             "data": {"ptt": False, "txStartUsable": False, "txStartReason": 3},
         }
         common = {
-            "logger": __import__("logging").getLogger("test"),
+            "logger": logging.getLogger("test"),
             "transmitter": transmitter,
             "shutdown_event": shutdown_event,
             "state": state,
