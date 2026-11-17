@@ -2307,6 +2307,7 @@ def build_app() -> None:
             "status": tx_status_var.get(),
             "transmitting": transmitter.is_busy,
             "account": account_var.get(),
+            "notice": web_gui_status_var.get(),
         }
         with web_gui_state_lock:
             web_gui_state.clear()
