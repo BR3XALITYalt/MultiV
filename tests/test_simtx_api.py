@@ -168,8 +168,9 @@ class SimTxAccountClientTests(unittest.TestCase):
     def test_server_directory_uses_bearer_and_features(self) -> None:
         captured: dict[str, Any] = {}
 
-        def opener(request: Any, _timeout: float) -> FakeResponse:
+        def opener(request: Any, timeout: float) -> FakeResponse:
             captured["request"] = request
+            captured["timeout"] = timeout
             return FakeResponse({
                 "servers": [{
                     "serverId": "argon",
@@ -194,6 +195,7 @@ class SimTxAccountClientTests(unittest.TestCase):
 
         def opener(request: Any, _timeout: float) -> FakeResponse:
             captured["request"] = request
+            captured["timeout"] = timeout
             return FakeResponse({
                 "ticket": "stx_gt1_single_use",
                 "expiresAt": "2026-11-17T21:20:00Z",
