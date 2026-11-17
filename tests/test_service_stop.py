@@ -1,16 +1,23 @@
 import logging
 import threading
 import unittest
+from unittest.mock import patch
 
 from service_stop import (
     WM_CLOSE,
     WM_DESTROY,
     WM_QUIT,
     handle_service_stop_message,
+    hide_service_console,
 )
 
 
 class WindowsServiceStopTests(unittest.TestCase):
+    def test_console_hiding_is_skipped_off_windows(self):
+        logger = logging.getLogger("test.service-stop-console")
+        with patch("service_stop.os.name", "posix"):
+            self.assertFalse(hide_service_console(logger))
+
     def test_wm_close_requests_graceful_shutdown(self):
         shutdown_event = threading.Event()
         logger = logging.getLogger("test.service-stop")
