@@ -53,7 +53,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--auth-token-file",
         type=Path,
         metavar="PATH",
-        help="Read the TXITY session token from a UTF-8 text file (default: the saved AppData token).",
+        help="Read the TXITY session token from a UTF-8 text file; falls back to the saved AppData token if missing.",
     )
     parser.add_argument(
         "--auth-token-env",
@@ -424,8 +424,19 @@ def build_headless_plan(
 
 
 def _read_auth_token(args: argparse.Namespace) -> str:
-    token_file = args.auth_token_file.expanduser() if args.auth_token_file is not None else auth_token_path()
-    if args.auth_token_file is not None or token_file.is_file():
+    default_token_file = auth_token_path()
+    requested_token_file = (
+        args.auth_token_file.expanduser()
+        if args.auth_token_file is not None
+        else None
+    )
+    token_file = (
+        requested_token_file
+        if requested_token_file is not None and requested_token_file.is_file()
+        else default_token_file
+    )
+
+    if token_file.is_file():
         try:
             token = token_file.read_text(encoding="utf-8-sig").strip()
         except OSError as exc:
@@ -434,8 +445,10 @@ def _read_auth_token(args: argparse.Namespace) -> str:
     else:
         token = os.environ.get(args.auth_token_env, "").strip()
         source = (
-            f"the default token file {token_file} or environment variable {args.auth_token_env}"
+            f"the default token file {default_token_file} or environment variable {args.auth_token_env}"
         )
+        if requested_token_file is not None:
+            source = f"{source} (override file {requested_token_file} was not found)"
 
     if not is_auth_token(token):
         raise ValueError(
