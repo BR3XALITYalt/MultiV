@@ -60,9 +60,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--auth-token-env",
-        default="MultiV_DISCORD_AUTH_TOKEN",
+        default="TXITPY_DISCORD_AUTH_TOKEN",
         metavar="NAME",
-        help="Environment variable containing the session token (default: MultiV_DISCORD_AUTH_TOKEN).",
+        help="Environment variable containing the session token (default: TXITPY_DISCORD_AUTH_TOKEN).",
     )
     parser.add_argument("--station-name", help="Override the saved station name.")
     parser.add_argument("--description", help="Override the saved station description.")
