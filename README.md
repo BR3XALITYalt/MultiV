@@ -15,6 +15,44 @@ python main.py
 
 Sign in with Discord when TXITPY opens. TXITY must have secure Discord sign-in enabled.
 
+## Command-line and service mode
+
+Run `python main.py --help` to see all command-line options.
+
+`--no-gui` starts a transmission directly from the saved transmit settings. Options such as `--station-name`, `--frequency`, `--mode`, `--power`, `--audio-source`, `--audio-device`, and `--playlist` override individual saved values. Settings not overridden on the command line continue to come from the usual `transmit-settings.json` file.
+
+The Discord session token is not written to the settings file. Headless mode reads it from `TXITPY_DISCORD_AUTH_TOKEN` or from a file specified with `--auth-token-file`. Keep that file readable only by the Windows account running TXITPY and administrators. TXITPY does not print the token. The token must be current; replace it and restart the service when TXITY no longer accepts it.
+
+Examples:
+
+```powershell
+# List microphone and line-input devices
+python main.py --list-inputs
+
+# Start from saved settings without opening a window
+python main.py --no-gui --auth-token-file "C:\ProgramData\TXITPY\discord-token.txt"
+
+# Override the saved mode and use a playlist
+python main.py --no-gui --auth-token-file "C:\ProgramData\TXITPY\discord-token.txt" --mode DRM --audio-source playlist --playlist "D:\Radio\Playlist"
+```
+
+### NSSM on Windows
+
+First configure the station, mode, and audio settings in TXITPY's desktop app and save them. Put the current Discord session token in a protected text file, then install the service from an elevated terminal. Adjust the Python and TXITPY paths to match the machine:
+
+```powershell
+nssm install TXITPY "C:\Python312\python.exe"
+nssm set TXITPY AppDirectory "C:\TXITPY"
+nssm set TXITPY AppParameters "\"C:\TXITPY\main.py\" --no-gui --auth-token-file \"C:\ProgramData\TXITPY\discord-token.txt\" --log-file \"C:\ProgramData\TXITPY\logs\txitpy.log\""
+nssm set TXITPY AppExit Default Restart
+nssm set TXITPY Start SERVICE_AUTO_START
+nssm start TXITPY
+```
+
+Set the service's **Log on** account to the Windows user that owns the audio devices. Running under LocalSystem can make user audio devices unavailable. Desktop-audio loopback also requires a logged-in interactive audio session, so a playlist or microphone is generally more suitable for a background service. For a playlist that should run continuously, enable **Loop playlist** in the desktop app or pass `--loop`.
+
+If a custom settings file is used, add `--config "C:\ProgramData\TXITPY\transmit-settings.json"` to `AppParameters`. Use `--list-inputs` or `--list-loopback-devices` to inspect device IDs before choosing `--audio-device`.
+
 ## Transmit
 
 Open **Transmit** and enter your station name, frequency, and mode. Choose an audio source:
