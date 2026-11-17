@@ -460,6 +460,35 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["micGainDb"], 0)
         self.assertEqual(config["drive"], 0)
 
+    def test_nfm_transport_bandwidth_accepts_one_to_twenty_khz(self):
+        for bandwidth_hz in (1_000, 5_000, 12_000, 20_000):
+            with self.subTest(bandwidth_hz=bandwidth_hz):
+                config = build_transmit_config(
+                    station_name="Example NFM",
+                    description="NFM bandwidth test",
+                    frequency="7.250 MHz",
+                    mode="NFM",
+                    station_dbm=40,
+                    allow_overlap=False,
+                    auth_token="test-token",
+                    nfm_transport_bandwidth_hz=bandwidth_hz,
+                )
+                self.assertEqual(config["ssbBandwidthHz"], bandwidth_hz)
+
+        for bandwidth_hz in (999, 20_001):
+            with self.subTest(invalid_bandwidth_hz=bandwidth_hz):
+                with self.assertRaisesRegex(ValueError, "NFM transport bandwidth"):
+                    build_transmit_config(
+                        station_name="Example NFM",
+                        description="NFM bandwidth test",
+                        frequency="7.250 MHz",
+                        mode="NFM",
+                        station_dbm=40,
+                        allow_overlap=False,
+                        auth_token="test-token",
+                        nfm_transport_bandwidth_hz=bandwidth_hz,
+                    )
+
     def test_nfm_transport_handles_edges_of_the_available_room(self):
         self.assertEqual(nfm_transport_settings("7.000 MHz"), ("LSB", 7_006_000))
         self.assertEqual(nfm_transport_settings("8.000 MHz"), ("USB", 7_994_000))
