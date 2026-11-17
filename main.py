@@ -28,6 +28,7 @@ from audio_playlist import (
 from discord_auth import (
     DiscordAuthManager,
     clean_discord_user,
+    clear_auth_token,
     format_exception_details,
     is_auth_token,
     safe_error_text,
@@ -4044,7 +4045,8 @@ def build_app() -> None:
         description = (
             "TXITPY uses TXITY's official Discord sign-in flow. Your website session "
             "is kept in a separate browser profile and checked automatically when the "
-            "desktop app starts. The active session token remains in memory."
+            "desktop app starts. The TXITY session token is saved in the TXITPY AppData "
+            "folder so headless mode can use it."
         )
         make_label(
             card,
