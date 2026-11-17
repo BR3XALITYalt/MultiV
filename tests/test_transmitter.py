@@ -26,6 +26,7 @@ from transmitter import (
     parse_rf_frequency,
     StreamingLinearResampler,
     find_frequency_overlaps,
+    build_frequency_candidates,
     mode_bandwidth_hz,
 )
 
@@ -132,6 +133,25 @@ class TransmitterProtocolTests(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaises(ValueError):
                     parse_rf_frequency(value)
+
+    def test_builds_ordered_unique_frequency_fallback_candidates(self):
+        self.assertEqual(
+            build_frequency_candidates(
+                "7.250 MHz",
+                ["7250 kHz", "7.300 MHz", "", "7.350 MHz"],
+            ),
+            [
+                ("7.250 MHz", 7_250_000),
+                ("7.300 MHz", 7_300_000),
+                ("7.350 MHz", 7_350_000),
+            ],
+        )
+
+    def test_frequency_candidates_reject_invalid_fallbacks(self):
+        with self.assertRaises(ValueError):
+            build_frequency_candidates("7.250 MHz", ["not a frequency"])
+        with self.assertRaises(ValueError):
+            build_frequency_candidates("", ["7.300 MHz"])
 
     def test_builds_config_with_txity_current_config_fields(self):
         config = build_transmit_config(
