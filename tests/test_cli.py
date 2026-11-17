@@ -41,6 +41,22 @@ class CommandLineTests(unittest.TestCase):
                     "saved-token-for-headless-test",
                 )
 
+    def test_missing_service_token_override_falls_back_to_appdata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            token_file = Path(directory) / "TXITPY" / "token.txt"
+            token_file.parent.mkdir(parents=True)
+            token_file.write_text("saved-token-for-headless-test", encoding="utf-8")
+            args = self.parser.parse_args([
+                "--no-gui",
+                "--auth-token-file",
+                "C:/ProgramData/TXITPY/discord-token.txt",
+            ])
+            with patch("cli.auth_token_path", return_value=token_file):
+                self.assertEqual(
+                    _read_auth_token(args),
+                    "saved-token-for-headless-test",
+                )
+
     def test_saved_settings_are_used_when_no_cli_override_is_given(self):
         with tempfile.TemporaryDirectory() as directory:
             audio_file = Path(directory) / "radio.ogg"
