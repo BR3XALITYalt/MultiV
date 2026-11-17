@@ -25,7 +25,6 @@ from discord_auth import (
     is_auth_token,
     safe_error_text,
     write_diagnostic,
-    write_diagnostic_text,
 )
 from drm_support import (
     DRM_LANGUAGES,
@@ -49,24 +48,13 @@ from transmitter import (
 from web_gui import TxityWebGUI, create_password_record
 from station_directory import (
     Station,
-    StationPageParser,
     describe_media_url,
-    describe_status_socket_error,
-    discord_avatar_url,
     fetch_station_image,
-    fetch_text,
-    format_duration,
     format_frequency,
-    normalize_media_url,
-    parse_station_page_layout,
-    parse_stations,
-    parse_users_listing,
 )
 from txity_client import TxityClient
 
 BASE_URL = "https://txity.radiodiscussion.org"
-USER_AGENT = "TXITPY/0.1 (+https://github.com/BR3XALITYalt/TXITPY)"
-HTTP_TIMEOUT = 12
 
 
 def tx_settings_file() -> Path:
