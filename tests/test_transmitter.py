@@ -331,7 +331,7 @@ class TransmitterProtocolTests(unittest.TestCase):
     def test_audio_sources_are_limited_to_supported_inputs(self):
         self.assertIn("DRM", SUPPORTED_MODES)
         self.assertIn("NFM", SUPPORTED_MODES)
-        self.assertEqual(SUPPORTED_AUDIO_SOURCES, ("mic", "loopback", "playlist"))
+        self.assertEqual(SUPPORTED_AUDIO_SOURCES, ("mic", "loopback", "playlist", "test_tone"))
 
     def test_drm_mode_uses_one_dsb_transport_channel(self):
         self.assertIn("DRM", SUPPORTED_MODES)
