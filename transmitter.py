@@ -362,6 +362,7 @@ def build_transmit_config(
     presence_db: Any = 0,
     drive: Any = 0.015,
     ssb_bandwidth_hz: Any = 10_000,
+    nfm_transport_bandwidth_hz: Any = 12_000,
     ssb_low_cut_hz: Any = 325,
     ssb_high_cut_hz: Any = 0,
     am_bandwidth_hz: Any = 12_000,
@@ -412,6 +413,7 @@ def build_transmit_config(
         treble_value = float(treble_db)
         presence_value = float(presence_db)
         drive_value = float(drive)
+        nfm_transport_width = int(nfm_transport_bandwidth_hz)
         ssb_width = int(ssb_bandwidth_hz)
         ssb_low_cut = int(ssb_low_cut_hz)
         ssb_high_cut = int(ssb_high_cut_hz)
@@ -445,6 +447,8 @@ def build_transmit_config(
         raise ValueError("Presence must be between -1 and 1 dB.")
     if not 0 <= drive_value <= 0.025:
         raise ValueError("Compression drive must be between 0 and 0.025.")
+    if not 1_000 <= nfm_transport_width <= 20_000:
+        raise ValueError("NFM transport bandwidth must be between 1000 and 20000 Hz.")
     if not 2_400 <= ssb_width <= 10_000:
         raise ValueError("SSB bandwidth must be between 2400 and 10000 Hz.")
     if not 0 <= ssb_low_cut <= 2_000:
@@ -526,7 +530,7 @@ def build_transmit_config(
             "trebleDb": 0.0,
             "presenceDb": 0.0,
             "drive": 0.0,
-            "ssbBandwidthHz": 12_000,
+            "ssbBandwidthHz": nfm_transport_width,
             "ssbLowCutHz": 0,
             "ssbHighCutHz": 0,
         })
