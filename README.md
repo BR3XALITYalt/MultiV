@@ -67,7 +67,7 @@ Choose **CW** as the signal type. Enter a message and speed in the **CW message*
 
 ## Station profile and browser control
 
-Open **Settings** to set your station logo URL and station page details. TXITPY sends these values to TXITY as `stationLogoUrl` and `stationDetails`. Station page details support up to 1,200 characters.
+Open **Settings** to set your station logo and station page details. Paste an approved image URL into **Station logo URL**, or select **Upload image** to send a PNG, JPEG, WebP, or GIF file up to 5 MB to TXITY. TXITPY uses the signed-in Discord session for the upload and fills the URL field with the hosted image URL. TXITPY sends the logo URL and station details to TXITY as `stationLogoUrl` and `stationDetails`. Station page details support up to 1,200 characters.
 
 ### Browser control panel
 
