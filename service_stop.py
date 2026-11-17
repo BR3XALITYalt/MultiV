@@ -51,7 +51,7 @@ def handle_service_stop_message(
 
     if not shutdown_event.is_set():
         logger.info(
-            "Received Windows service shutdown message (0x%04X); stopping TXITPY.",
+            "Received Windows service shutdown message (0x%04X); stopping MultiV.",
             message,
         )
         shutdown_event.set()
@@ -217,7 +217,7 @@ class WindowsServiceStopWindow:
             hwnd = user32.CreateWindowExW(
                 0,
                 class_name,
-                "TXITPY service control",
+                "MultiV service control",
                 0,
                 0,
                 0,
@@ -236,7 +236,7 @@ class WindowsServiceStopWindow:
             self._hwnd = hwnd
             self._ready.set()
             self.logger.info(
-                "Hidden Windows service-stop window ready; NSSM can stop TXITPY without a console."
+                "Hidden Windows service-stop window ready; NSSM can stop MultiV without a console."
             )
 
             message = wintypes.MSG()
