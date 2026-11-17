@@ -19,7 +19,7 @@ Sign in with Discord when TXITPY opens. TXITY must have secure Discord sign-in e
 
 Run `python main.py --help` to see all command-line options.
 
-`--no-gui` starts a transmission directly from the saved transmit settings. Options such as `--station-name`, `--frequency`, `--mode`, `--power`, `--audio-source`, `--audio-device`, and `--playlist` override individual saved values. Settings not overridden on the command line continue to come from the usual `transmit-settings.json` file.
+`--no-gui` (also accepted as `--nogui`) starts a transmission directly from the saved transmit settings. Options such as `--station-name`, `--frequency`, `--mode`, `--power`, `--audio-source`, `--audio-device`, and `--playlist` override individual saved values. Settings not overridden on the command line continue to come from the usual `transmit-settings.json` file.
 
 The Discord session token is not written to the settings file. Headless mode reads it from `TXITPY_DISCORD_AUTH_TOKEN` or from a file specified with `--auth-token-file`. Keep that file readable only by the Windows account running TXITPY and administrators. TXITPY does not print the token. The token must be current; replace it and restart the service when TXITY no longer accepts it.
 
