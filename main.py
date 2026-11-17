@@ -4499,6 +4499,12 @@ def build_app() -> None:
 
             elif kind == "tx_state":
                 state = str(event.get("state") or "")
+                state_text = str(event.get("text") or state)
+                print(
+                    f"[TXITPY] Transmitter state: {state}. {state_text}",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 retry_after_stop = (
                     state == "stopped"
                     and isinstance(frequency_retry_context, dict)
@@ -4517,7 +4523,7 @@ def build_app() -> None:
                 if state == "stopped" and tx_terminal_server_message:
                     tx_status_var.set(tx_terminal_server_message)
                 else:
-                    tx_status_var.set(str(event.get("text") or state))
+                    tx_status_var.set(state_text)
                 if tx_audio_source_var.get() == "Audio playlist":
                     if state == "transmitting":
                         tx_playlist_status_var.set("Connected. Loading the first track...")
