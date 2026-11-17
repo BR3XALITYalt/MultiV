@@ -1,8 +1,9 @@
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
-from cli import build_argument_parser, build_headless_plan
+from cli import _handle_event, build_argument_parser, build_headless_plan
 
 
 class CommandLineTests(unittest.TestCase):
@@ -118,6 +119,118 @@ class CommandLineTests(unittest.TestCase):
                 ("7.300 MHz", 7_300_000),
             ],
         )
+
+    def test_headless_mode_retries_frequencies_after_server_sharing_denial(self):
+        class FakeTransmitter:
+            server_rejection_ready = True
+
+            def __init__(self):
+                self.is_busy = True
+                self.stop_calls = 0
+                self.starts = []
+
+            def stop(self):
+                self.stop_calls += 1
+                self.is_busy = False
+
+            def start(self, config, **options):
+                self.is_busy = True
+                self.starts.append((dict(config), options))
+
+        transmitter = FakeTransmitter()
+        shutdown_event = threading.Event()
+        state = {
+            "exit_code": 0,
+            "negative_reason": None,
+            "negative_count": 0,
+            "ptt_confirmed": False,
+            "frequency_index": 0,
+            "retry_pending": False,
+            "retry_candidate_index": 0,
+        }
+        plan = {
+            "config": {"rfHz": 7_250_000},
+            "base_config": {"rfHz": 7_250_000},
+            "frequency_candidates": [
+                ("7.250 MHz", 7_250_000),
+                ("7.300 MHz", 7_300_000),
+            ],
+            "input_device": None,
+            "audio_source": "mic",
+            "playlist_files": [],
+            "playlist_shuffle": False,
+            "playlist_loop": False,
+        }
+        denial = {
+            "kind": "status",
+            "data": {"ptt": False, "txStartUsable": False, "txStartReason": 3},
+        }
+        common = {
+            "logger": __import__("logging").getLogger("test"),
+            "transmitter": transmitter,
+            "shutdown_event": shutdown_event,
+            "state": state,
+            "plan": plan,
+        }
+
+        _handle_event(denial, **common)
+        self.assertEqual(state["negative_count"], 1)
+        _handle_event(denial, **common)
+        self.assertTrue(state["retry_pending"])
+        self.assertEqual(transmitter.stop_calls, 1)
+        self.assertFalse(shutdown_event.is_set())
+
+        transmitter.is_busy = False
+        _handle_event({"kind": "tx_state", "state": "stopped"}, **common)
+        self.assertFalse(state["retry_pending"])
+        self.assertEqual(state["frequency_index"], 1)
+        self.assertEqual(transmitter.starts[0][0]["rfHz"], 7_300_000)
+        self.assertFalse(shutdown_event.is_set())
+
+    def test_headless_mode_does_not_change_frequency_for_capacity_denial(self):
+        class FakeTransmitter:
+            server_rejection_ready = True
+            is_busy = True
+
+            def __init__(self):
+                self.stop_calls = 0
+
+            def stop(self):
+                self.stop_calls += 1
+
+        transmitter = FakeTransmitter()
+        shutdown_event = threading.Event()
+        state = {
+            "exit_code": 0,
+            "negative_reason": None,
+            "negative_count": 0,
+            "ptt_confirmed": False,
+            "frequency_index": 0,
+            "retry_pending": False,
+            "retry_candidate_index": 0,
+        }
+        plan = {
+            "frequency_candidates": [
+                ("7.250 MHz", 7_250_000),
+                ("7.300 MHz", 7_300_000),
+            ],
+        }
+        event = {
+            "kind": "status",
+            "data": {"ptt": False, "txStartUsable": False, "txStartReason": 2},
+        }
+        common = {
+            "logger": __import__("logging").getLogger("test"),
+            "transmitter": transmitter,
+            "shutdown_event": shutdown_event,
+            "state": state,
+            "plan": plan,
+        }
+        _handle_event(event, **common)
+        _handle_event(event, **common)
+        self.assertFalse(state["retry_pending"])
+        self.assertTrue(shutdown_event.is_set())
+        self.assertEqual(transmitter.stop_calls, 1)
 
     def test_device_can_be_selected_by_name_or_numeric_id(self):
         devices = [(2, "USB Audio Codec"), (5, "Built-in Microphone")]
