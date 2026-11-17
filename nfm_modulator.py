@@ -10,11 +10,11 @@ import numpy as np
 SAMPLE_RATE_HZ = 48_000
 NFM_IF_HZ = 5_000
 NFM_DEVIATION_HZ = 2_000
-NFM_AUDIO_LOW_HZ = 250
+NFM_AUDIO_LOW_HZ = 30
 NFM_AUDIO_HIGH_HZ = 2_500
 NFM_CHANNEL_BANDWIDTH_HZ = 9_000
 NFM_OUTPUT_LEVEL = 0.70
-NFM_BASE_INPUT_GAIN = 4.0
+NFM_BASE_INPUT_GAIN = 1.0
 
 
 class StreamingNFMModulator:
@@ -94,7 +94,14 @@ class StreamingNFMModulator:
         self._previous_high_pass = previous_high_pass
         self._previous_low_pass = previous_low_pass
 
-        np.clip(voice, -1.0, 1.0, out=voice)
+        # Preserve the linear region, then smoothly compress peaks toward +/-1.
+        magnitude = np.abs(voice)
+        knee = 0.8
+        limit_range = 1.0 - knee
+        softened = knee + limit_range * np.tanh(
+            np.maximum(magnitude - knee, 0.0) / limit_range
+        )
+        voice = np.sign(voice) * np.where(magnitude <= knee, magnitude, softened)
 
         phase_steps = (
             2.0 * math.pi
