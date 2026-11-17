@@ -189,7 +189,7 @@ TXITY_RF_ROOM_MAX_HZ = 8_000_000
 
 
 def nfm_transport_settings(target_frequency_hz: Any) -> tuple[str, int]:
-    """Place a 5 kHz NFM IF at the requested channel center using TXITY SSB."""
+    """Place a 6 kHz NFM IF at the requested channel center using TXITY SSB."""
     target_hz = parse_rf_frequency(target_frequency_hz)
     if not TXITY_RF_ROOM_MIN_HZ <= target_hz <= TXITY_RF_ROOM_MAX_HZ:
         raise ValueError("NFM is currently available inside TXITY's 7.000-8.000 MHz room.")
@@ -202,7 +202,7 @@ def nfm_transport_settings(target_frequency_hz: Any) -> tuple[str, int]:
     if TXITY_RF_ROOM_MIN_HZ <= lower_carrier_hz <= TXITY_RF_ROOM_MAX_HZ:
         return "LSB", lower_carrier_hz
 
-    raise ValueError("NFM needs 5 kHz of tuning room around the requested frequency.")
+    raise ValueError("NFM needs 6 kHz of tuning room around the requested frequency.")
 
 
 def apply_nfm_transport(
@@ -526,7 +526,7 @@ def build_transmit_config(
             "trebleDb": 0.0,
             "presenceDb": 0.0,
             "drive": 0.0,
-            "ssbBandwidthHz": 10_000,
+            "ssbBandwidthHz": 12_000,
             "ssbLowCutHz": 0,
             "ssbHighCutHz": 0,
         })
