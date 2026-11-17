@@ -21,6 +21,10 @@ class CommandLineTests(unittest.TestCase):
             "--no-loop",
             "--no-shuffle",
             "--auth-token-file", "C:/ProgramData/TXITPY/token.txt",
+            "--frequency", "7 MHz",
+            "--frequency-fallback", "7.2 MHz",
+            "--frequency-fallback", "7.25 MHz",
+            "--frequency-fallback", "7.5 MHz",
         ])
         self.assertTrue(args.no_gui)
         self.assertEqual(args.mode, "DRM")
@@ -28,6 +32,8 @@ class CommandLineTests(unittest.TestCase):
         self.assertFalse(args.loop)
         self.assertFalse(args.shuffle)
         self.assertEqual(args.auth_token_file, Path("C:/ProgramData/TXITPY/token.txt"))
+        self.assertEqual(args.frequency, "7 MHz")
+        self.assertEqual(args.frequency_fallback, ["7.2 MHz", "7.25 MHz", "7.5 MHz"])
 
     def test_headless_reads_saved_appdata_token_by_default(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -110,6 +116,33 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(plan["config"]["stationDbm"], 30)
         self.assertFalse(plan["config"]["allowOverlapVisitors"])
         self.assertEqual(plan["audio_source"], "mic")
+
+    def test_cli_frequency_and_fallback_arguments_preserve_retry_order(self):
+        args = self.parser.parse_args([
+            "--no-gui",
+            "--frequency", "7 MHz",
+            "--frequency-fallback", "7.2 MHz",
+            "--frequency-fallback", "7.25 MHz",
+            "--frequency-fallback", "7.5 MHz",
+        ])
+        plan = build_headless_plan(
+            {
+                "station_name": "Frequency Test",
+                "frequency": "14.200 MHz",
+                "frequency_fallbacks": ["14.300 MHz"],
+            },
+            args,
+            "test-token",
+        )
+        self.assertEqual(
+            plan["frequency_candidates"],
+            [
+                ("7 MHz", 7_000_000),
+                ("7.2 MHz", 7_200_000),
+                ("7.25 MHz", 7_250_000),
+                ("7.5 MHz", 7_500_000),
+            ],
+        )
 
     def test_saved_frequency_fallbacks_are_used_in_headless_mode(self):
         args = self.parser.parse_args(["--no-gui"])
