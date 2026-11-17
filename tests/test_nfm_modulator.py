@@ -7,6 +7,8 @@ from nfm_modulator import (
     NFM_OUTPUT_LEVEL,
     SAMPLE_RATE_HZ,
     StreamingNFMModulator,
+    NFM_AUDIO_LOW_HZ,
+    soft_clip,
 )
 
 
@@ -50,6 +52,20 @@ class StreamingNFMModulatorTests(unittest.TestCase):
         self.assertEqual(output.dtype, np.float32)
         self.assertTrue(np.isfinite(output).all())
         self.assertLessEqual(float(np.max(np.abs(output))), NFM_OUTPUT_LEVEL + 1e-6)
+
+    def test_audio_high_pass_cutoff_preserves_deep_bass(self):
+        self.assertEqual(NFM_AUDIO_LOW_HZ, 30)
+
+    def test_soft_limiter_preserves_quiet_audio_and_rounds_peaks(self):
+        source = np.array([-2.0, -0.4, 0.0, 0.4, 2.0], dtype=np.float64)
+        output = soft_clip(source)
+
+        np.testing.assert_array_equal(output[1:4], source[1:4])
+        self.assertLess(output[0], -0.8)
+        self.assertGreater(output[0], -1.0)
+        self.assertGreater(output[-1], 0.8)
+        self.assertLess(output[-1], 1.0)
+        self.assertTrue(np.all(np.diff(output) > 0))
 
     def test_empty_blocks_do_not_change_modulator_state(self):
         source = np.ones(512, dtype=np.float32) * 0.1
