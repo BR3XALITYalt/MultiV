@@ -37,6 +37,7 @@ from drm_support import (
 from transmitter import (
     TxityTransmitter,
     apply_nfm_transport,
+    apply_rade_transport,
     build_frequency_candidates,
     build_transmit_config,
     find_frequency_overlaps,
@@ -1340,6 +1341,7 @@ def build_app() -> None:
                 [variable.get() for variable in tx_frequency_fallback_vars],
             )
             apply_nfm_transport(config, candidates[0][1])
+            apply_rade_transport(config, candidates[0][1])
 
             frequency_retry_context = {
                 "base_config": dict(config),
@@ -1548,6 +1550,7 @@ def build_app() -> None:
         display_text, frequency_hz = candidate
         retry_config = dict(context["base_config"])
         apply_nfm_transport(retry_config, frequency_hz)
+        apply_rade_transport(retry_config, frequency_hz)
         context["current_index"] = int(context["next_index"]) - 1
 
         tx_negative_status_reason = None
@@ -2020,7 +2023,7 @@ def build_app() -> None:
         mode_picker = ttk.Combobox(
             mode_frame,
             textvariable=tx_mode_display_var,
-            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "DRM [EXPERIMENTAL]", "CW"),
+            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "RADE", "DRM [EXPERIMENTAL]", "CW"),
             state="readonly",
             height=8,
         )
@@ -2049,6 +2052,10 @@ def build_app() -> None:
                     "NFM - software-generated narrow FM with 2.5 kHz peak deviation, a 30-2,000 Hz audio band, "
                     "and a 5 kHz IF. TXITPY shifts the USB reference down 1 kHz and the carrier reference up "
                     "1 kHz to keep the entered channel center fixed. Estimated occupied bandwidth: 9 kHz."
+                ),
+                "RADE": (
+                    "FreeDV RADE V1 - neural digital voice over TXITY's USB or LSB audio transport. "
+                    "Uses a 1.5 kHz audio centre and channel. The first start downloads a verified Windows x64 encoder."
                 ),
                 "DRM": "DRM [EXPERIMENTAL] - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Use a microphone or OGG, MP3, or FLAC playlists.",
                 "CW": "CW - carrier only. TXITPY sends the configured CW message instead of microphone or desktop audio.",
