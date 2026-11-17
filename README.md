@@ -124,7 +124,7 @@ Run `python main.py --help` to see all command-line options.
 
 Use `--no-gui` (or `--nogui`) to start a transmission from saved settings without opening the desktop window. Options such as `--station-name`, `--frequency`, `--mode`, `--power`, `--audio-source`, `--audio-device`, and `--playlist` override saved values.
 
-The headless client reads the saved token on startup. Use `--auth-token-file` to choose another token file, or set `MultiV_DISCORD_AUTH_TOKEN` to provide the token through an environment variable.
+The headless client reads the saved token on startup. Use `--auth-token-file` to choose another token file, or set `TXITPY_DISCORD_AUTH_TOKEN` to provide the token through an environment variable.
 
 Examples:
 
