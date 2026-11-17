@@ -1024,12 +1024,12 @@ class TxityTransmitter:
                 if audio_source == "playlist":
                     supported = [
                         item for item in playlist_files
-                        if Path(item).suffix.casefold() in {".ogg", ".opus", ".mp3", ".flac"}
+                        if Path(item).suffix.casefold() in {".ogg", ".mp3", ".flac"}
                     ]
                     if len(supported) != len(playlist_files):
                         self.events.put({
                             "kind": "tx_log",
-                            "text": "DRM playlists skip WAV, AIFF, and M4A files. OGG/Vorbis, Opus, MP3, and FLAC are supported.",
+                            "text": "DRM playlists skip WAV and AIFF files. OGG, MP3, and FLAC are supported.",
                         })
                     drm_playlist_server = LocalDRMPlaylistServer(
                         supported,
