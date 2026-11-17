@@ -23,7 +23,7 @@ from audio_playlist import build_playlist_order
 DECDRM_REPOSITORY = "https://github.com/CasualArclamp/DecDRM.git"
 DECDRM_COMMIT = "05845c9a754309b86d4985b25b1c3a787b988104"
 DECDRM_VERSION = "0.7.1"
-DRM_PLAYLIST_EXTENSIONS = frozenset({".flac", ".mp3", ".ogg"})
+DRM_PLAYLIST_EXTENSIONS = frozenset({".flac", ".mp3", ".ogg", ".opus"})
 DRM_AUDIO_CODECS = ("xHE-AAC", "HE-AAC")
 DRM_INTERLEAVING_OPTIONS = ("long", "short")
 DRM_MSC_MODES = ("16-QAM", "64-QAM")
@@ -892,7 +892,7 @@ def write_drm_station_config(
 
 
 class LocalDRMPlaylistServer:
-    """Serve local OGG, MP3, and FLAC tracks to DecDRM without preloading them."""
+    """Serve local OGG, Opus, MP3, and FLAC tracks to DecDRM without preloading them."""
 
     def __init__(
         self,
@@ -908,7 +908,7 @@ class LocalDRMPlaylistServer:
             if Path(item).suffix.casefold() in DRM_PLAYLIST_EXTENSIONS and Path(item).is_file()
         ]
         if not self.files:
-            raise ValueError("DRM playlists need at least one OGG, MP3, or FLAC file.")
+            raise ValueError("DRM playlists need at least one OGG/Vorbis, Ogg Opus, MP3, or FLAC file.")
 
         self.shuffle = bool(shuffle)
         self.loop = bool(loop)
@@ -984,6 +984,7 @@ class LocalDRMPlaylistServer:
 
                 content_type = {
                     ".ogg": "audio/ogg",
+                    ".opus": "audio/opus",
                     ".mp3": "audio/mpeg",
                     ".flac": "audio/flac",
                 }.get(path.suffix.casefold(), "application/octet-stream")
