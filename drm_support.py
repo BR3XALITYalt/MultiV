@@ -1,4 +1,4 @@
-"""DRM30 encoder setup and bounded local playlist input for TXITPY."""
+"""DRM30 encoder setup and bounded local playlist input for MultiV."""
 
 from __future__ import annotations
 
@@ -284,7 +284,7 @@ def _download_visual_studio_build_tools(
         on_log("Downloading Microsoft's Visual Studio C++ Build Tools installer.")
     request = Request(
         VISUAL_STUDIO_BUILD_TOOLS_URL,
-        headers={"User-Agent": "TXITPY/0.1"},
+        headers={"User-Agent": "MultiV/0.1"},
     )
     with urlopen(request, timeout=90) as response:
         data = response.read(128 * 1024 * 1024 + 1)
@@ -388,7 +388,7 @@ def _install_visual_studio_cpp_tools(
         )
     if not _visual_studio_cpp_tools_ready():
         raise RuntimeError(
-            "The Visual Studio Installer finished, but TXITPY still cannot find the MSVC x64 C++ toolchain. "
+            "The Visual Studio Installer finished, but MultiV still cannot find the MSVC x64 C++ toolchain. "
             "Check that the Desktop development with C++ workload was installed."
         )
     if on_log:
@@ -424,7 +424,7 @@ def drm_setup_status() -> dict[str, object]:
         if not decdrm_ready:
             missing.append(f"DecDRM {DECDRM_VERSION}")
         if not missing:
-            missing.append("the TXITPY DRM encoder build")
+            missing.append("the MultiV DRM encoder build")
     return {
         "ready": encoder_ready,
         "encoder_path": str(encoder) if encoder_ready else "",
@@ -448,8 +448,8 @@ def _rustup_windows_target() -> str:
 def _download_verified_rustup_installer(on_log: Callable[[str], None] | None = None) -> Path:
     if os.name != "nt":
         raise RuntimeError(
-            "TXITPY can install Rust on Windows. "
-            "Install Rust 1.88 or newer from https://rust-lang.org/tools/install, then reopen TXITPY."
+            "MultiV can install Rust on Windows. "
+            "Install Rust 1.88 or newer from https://rust-lang.org/tools/install, then reopen MultiV."
         )
     target = _rustup_windows_target()
     url = f"{RUSTUP_DOWNLOAD_BASE}/{target}/rustup-init.exe"
@@ -459,13 +459,13 @@ def _download_verified_rustup_installer(on_log: Callable[[str], None] | None = N
 
     if on_log:
         on_log("Downloading the official Rust installer.")
-    request = Request(url, headers={"User-Agent": "TXITPY/0.1"})
+    request = Request(url, headers={"User-Agent": "MultiV/0.1"})
     with urlopen(request, timeout=45) as response:
         installer_data = response.read(32 * 1024 * 1024 + 1)
     if not installer_data or len(installer_data) > 32 * 1024 * 1024:
         raise RuntimeError("The downloaded Rust installer was empty or unexpectedly large.")
 
-    checksum_request = Request(url + ".sha256", headers={"User-Agent": "TXITPY/0.1"})
+    checksum_request = Request(url + ".sha256", headers={"User-Agent": "MultiV/0.1"})
     with urlopen(checksum_request, timeout=30) as response:
         checksum_text = response.read(4_096).decode("ascii", errors="replace")
     expected_hash = checksum_text.strip().split()[0].casefold() if checksum_text.strip() else ""
@@ -598,7 +598,7 @@ def _run_command(
 
 
 def _patch_decdrm_output_validation(plan_file: Path) -> bool:
-    """Allow TXITPY to consume returned samples without an extra output sink."""
+    """Allow MultiV to consume returned samples without an extra output sink."""
     plan_source = plan_file.read_text(encoding="utf-8")
     newline = chr(10)
     output_check = (
@@ -615,7 +615,7 @@ def _patch_decdrm_output_validation(plan_file: Path) -> bool:
         return False
     raise RuntimeError(
         "The pinned DecDRM source did not match the expected output validation code. "
-        "TXITPY cannot safely prepare its in-memory output mode."
+        "MultiV cannot safely prepare its in-memory output mode."
     )
 
 
@@ -710,7 +710,7 @@ def ensure_drm_encoder(on_log: Callable[[str], None] | None = None) -> Path:
     (package_dir / "src").mkdir(parents=True, exist_ok=True)
     local_bridge_source = Path(__file__).resolve().parent / "drm_encoder" / "src" / "main.rs"
     if not local_bridge_source.is_file():
-        raise RuntimeError("The TXITPY DRM encoder source file is missing.")
+        raise RuntimeError("The MultiV DRM encoder source file is missing.")
 
     manifest = '''[package]
 name = "txitpy-drm-bridge"
@@ -796,8 +796,8 @@ def write_drm_station_config(
         raise ValueError("Choose exactly one DRM audio input: microphone or playlist.")
 
     raw_label = service_label if service_label is not None and str(service_label).strip() else station_name
-    label = "".join(character for character in str(raw_label or "TXITPY") if character.isprintable())
-    label = label.strip()[:16] or "TXITPY"
+    label = "".join(character for character in str(raw_label or "MultiV") if character.isprintable())
+    label = label.strip()[:16] or "MultiV"
 
     service_id_text = str(service_id or "").strip()
     if service_id_text.lower().startswith("0x"):
