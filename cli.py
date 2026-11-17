@@ -53,7 +53,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--auth-token-file",
         type=Path,
         metavar="PATH",
-        help="Read the TXITY session token from a UTF-8 text file; falls back to the saved AppData token if missing.",
+        help="Read the TXITY session token from a UTF-8 text file; falls back to the shared saved token if missing.",
     )
     parser.add_argument(
         "--auth-token-env",
