@@ -27,6 +27,14 @@ from nfm_modulator import (
     NFM_IF_HZ,
     StreamingNFMModulator,
 )
+from freedv_rade import (
+    FreeDVRadeEncoder,
+    RADE_AUDIO_CENTER_HZ,
+    RADE_AUDIO_QUEUE_FRAMES,
+    RADE_CHANNEL_BANDWIDTH_HZ,
+    RADE_PREROLL_FRAMES,
+    prepare_rade_encoder,
+)
 
 
 BASE_URL = "https://txity.radiodiscussion.org"
@@ -134,12 +142,13 @@ def should_send_live_audio_silence(last_audio_at: float, now: float) -> bool:
 
 
 PTT_CONFIRMATION_GRACE_SECONDS = 4.0
-SUPPORTED_MODES = ("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "DRM", "CW")
+SUPPORTED_MODES = ("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "RADE", "DRM", "CW")
 DEFAULT_MODE_BANDWIDTH_HZ = {
     "AM": 12_000,
     "DSB": 12_000,
     "DRM": 12_000,
     "NFM": NFM_CHANNEL_BANDWIDTH_HZ,
+    "RADE": RADE_CHANNEL_BANDWIDTH_HZ,
     "USB": 10_000,
     "LSB": 10_000,
     "USB+C": 10_000,
@@ -217,6 +226,36 @@ def apply_nfm_transport(
         config["_txitpyNfmSideband"] = sideband
     else:
         config["rfHz"] = parse_rf_frequency(target_frequency_hz)
+    return config
+
+
+def rade_transport_settings(target_frequency_hz: Any) -> tuple[str, int]:
+    """Place the RADE audio centre at the requested channel centre."""
+    target_hz = parse_rf_frequency(target_frequency_hz)
+    if not TXITY_RF_ROOM_MIN_HZ <= target_hz <= TXITY_RF_ROOM_MAX_HZ:
+        raise ValueError("FreeDV RADE runs only in TXITY's 7.000-8.000 MHz room.")
+
+    upper_carrier_hz = target_hz - RADE_AUDIO_CENTER_HZ
+    if TXITY_RF_ROOM_MIN_HZ <= upper_carrier_hz <= TXITY_RF_ROOM_MAX_HZ:
+        return "USB", upper_carrier_hz
+
+    lower_carrier_hz = target_hz + RADE_AUDIO_CENTER_HZ
+    if TXITY_RF_ROOM_MIN_HZ <= lower_carrier_hz <= TXITY_RF_ROOM_MAX_HZ:
+        return "LSB", lower_carrier_hz
+
+    raise ValueError("FreeDV RADE needs 1.5 kHz of tuning room around the requested channel centre.")
+
+
+def apply_rade_transport(
+    config: dict[str, Any],
+    target_frequency_hz: Any,
+) -> dict[str, Any]:
+    """Apply the requested channel centre to the RADE SSB audio transport."""
+    if str(config.get("_txitpyMode") or "").strip().upper() == "RADE":
+        sideband, carrier_hz = rade_transport_settings(target_frequency_hz)
+        config["mode"] = sideband
+        config["rfHz"] = carrier_hz
+        config["_txitpyRadeSideband"] = sideband
     return config
 
 
@@ -398,6 +437,8 @@ def build_transmit_config(
     server_frequency_hz = parse_rf_frequency(frequency)
     if selected_mode == "NFM":
         server_mode, server_frequency_hz = nfm_transport_settings(server_frequency_hz)
+    elif selected_mode == "RADE":
+        server_mode, server_frequency_hz = rade_transport_settings(server_frequency_hz)
 
     try:
         power = float(station_dbm)
@@ -509,6 +550,22 @@ def build_transmit_config(
             "_txitpyDrmAudioCodec": str(drm_audio_codec or "xHE-AAC").strip(),
             "_txitpyDrmMscMode": str(drm_msc_mode or "16-QAM").strip().upper(),
             "_txitpyDrmInterleaving": str(drm_interleaving or "long").strip().casefold(),
+        })
+    elif selected_mode == "RADE":
+        configuration.update({
+            "_txitpyMode": "RADE",
+            "_txitpyRadeCenterHz": RADE_AUDIO_CENTER_HZ,
+            "_txitpyRadeChannelBandwidthHz": RADE_CHANNEL_BANDWIDTH_HZ,
+            "fadeMs": 0,
+            "agcEnabled": False,
+            "micGainDb": 0.0,
+            "bassDb": 0.0,
+            "trebleDb": 0.0,
+            "presenceDb": 0.0,
+            "drive": 0.0,
+            "ssbBandwidthHz": 3_000,
+            "ssbLowCutHz": 0,
+            "ssbHighCutHz": 0,
         })
     elif selected_mode == "NFM":
         configuration.update({
@@ -707,6 +764,7 @@ class TxityTransmitter:
         if selected_source not in SUPPORTED_AUDIO_SOURCES:
             raise ValueError("Choose microphone input, desktop audio loopback, or an audio playlist.")
         drm_mode = str(config.get("_txitpyMode") or "").upper() == "DRM"
+        rade_mode = str(config.get("_txitpyMode") or "").upper() == "RADE"
         if drm_mode and selected_source == "loopback":
             raise ValueError("DRM mode supports microphone and playlist inputs. It does not support desktop audio loopback.")
         selected_playlist = collect_audio_files(playlist_files or [])
@@ -720,6 +778,7 @@ class TxityTransmitter:
             queue_frames = (
                 PLAYLIST_AUDIO_QUEUE_FRAMES
                 if selected_source == "playlist" or drm_mode
+                else RADE_AUDIO_QUEUE_FRAMES if rade_mode
                 else AUDIO_QUEUE_FRAMES
             )
             self._audio_queue = queue.Queue(maxsize=queue_frames)
@@ -777,6 +836,7 @@ class TxityTransmitter:
         mode = str(config.get("mode", "AM")).upper()
         drm_mode = str(config.get("_txitpyMode") or "").upper() == "DRM"
         nfm_mode = str(config.get("_txitpyMode") or "").upper() == "NFM"
+        rade_mode = str(config.get("_txitpyMode") or "").upper() == "RADE"
         needs_audio = mode != "CW"
         audio_socket = None
         input_stream = None
@@ -815,6 +875,10 @@ class TxityTransmitter:
             if nfm_mode else None
         )
         nfm_modulator_lock = threading.Lock()
+        rade_encoder: FreeDVRadeEncoder | None = None
+        rade_finalized = False
+        rade_playlist_info: tuple[str, int, int] | None = None
+        rade_playlist_info_lock = threading.Lock()
         last_audio_frame_at = time.monotonic()
         last_capture_error_at = 0.0
         control_configured = False
@@ -834,7 +898,7 @@ class TxityTransmitter:
             with nfm_modulator_lock:
                 return nfm_modulator.process(samples)
 
-        def enqueue_pcm_samples(
+        def enqueue_transport_audio_samples(
             samples,
             *,
             wait_for_space: bool = False,
@@ -844,33 +908,26 @@ class TxityTransmitter:
             import numpy as np
 
             pcm = np.asarray(samples, dtype="<f4").reshape(-1)
-            if pcm.size and nfm_modulator is not None:
-                pcm = modulate_nfm_samples(pcm)
             if pcm.size:
                 carry.extend(pcm.tobytes())
             if flush and carry and len(carry) < FRAME_BYTES:
-                missing_samples = (FRAME_BYTES - len(carry)) // 4
-                if nfm_modulator is not None:
-                    padding = modulate_nfm_samples(
-                        np.zeros(missing_samples, dtype=np.float32)
-                    )
-                    carry.extend(padding.astype("<f4", copy=False).tobytes())
-                else:
-                    carry.extend(bytes(FRAME_BYTES - len(carry)))
+                carry.extend(bytes(FRAME_BYTES - len(carry)))
 
             while len(carry) >= FRAME_BYTES:
                 frame = bytes(carry[:FRAME_BYTES])
                 del carry[:FRAME_BYTES]
-                queued_frame = (frame, playlist_info) if playlist_info is not None else frame
-                if wait_for_space:
+                queued_frame = (
+                    (frame, playlist_info)
+                    if audio_source == "playlist"
+                    else frame
+                )
+                if wait_for_space and not self._stop_event.is_set():
                     while not self._stop_event.is_set():
                         try:
                             audio_queue.put(queued_frame, timeout=0.1)
                             break
                         except queue.Full:
                             continue
-                    else:
-                        return
                     continue
 
                 try:
@@ -884,6 +941,46 @@ class TxityTransmitter:
                         audio_queue.put_nowait(queued_frame)
                     except queue.Full:
                         pass
+
+        def enqueue_rade_output(samples) -> None:
+            with rade_playlist_info_lock:
+                playlist_info = rade_playlist_info
+            enqueue_transport_audio_samples(
+                samples,
+                wait_for_space=(
+                    audio_source == "playlist"
+                    and not self._stop_event.is_set()
+                ),
+                playlist_info=playlist_info,
+            )
+
+        def enqueue_pcm_samples(
+            samples,
+            *,
+            wait_for_space: bool = False,
+            flush: bool = False,
+            playlist_info: tuple[str, int, int] | None = None,
+        ) -> None:
+            nonlocal rade_playlist_info
+            import numpy as np
+
+            pcm = np.asarray(samples, dtype=np.float32).reshape(-1)
+            if rade_encoder is not None:
+                if playlist_info is not None:
+                    with rade_playlist_info_lock:
+                        rade_playlist_info = playlist_info
+                if pcm.size:
+                    rade_encoder.feed(pcm, wait_for_space=wait_for_space)
+                return
+
+            if pcm.size and nfm_modulator is not None:
+                pcm = modulate_nfm_samples(pcm)
+            enqueue_transport_audio_samples(
+                pcm,
+                wait_for_space=wait_for_space,
+                flush=flush,
+                playlist_info=playlist_info,
+            )
 
         def report_audio_warning(status: Any) -> None:
             nonlocal last_callback_warning
@@ -1118,6 +1215,28 @@ class TxityTransmitter:
 
             drm_config_path: Path | None = None
             encoder_path: Path | None = None
+            if rade_mode:
+                self.events.put({
+                    "kind": "tx_log",
+                    "text": "Preparing FreeDV RADE V1 for the selected TXITY sideband channel.",
+                })
+                rade_executable = prepare_rade_encoder(
+                    on_log=lambda message: self.events.put({
+                        "kind": "tx_log",
+                        "text": str(message)[:500],
+                    })
+                )
+                rade_encoder = FreeDVRadeEncoder(
+                    rade_executable,
+                    on_audio=enqueue_rade_output,
+                )
+                self.events.put({
+                    "kind": "tx_log",
+                    "text": (
+                        f"FreeDV RADE V1 encoder ready: {RADE_AUDIO_CENTER_HZ} Hz audio centre, "
+                        f"{RADE_CHANNEL_BANDWIDTH_HZ} Hz channel bandwidth."
+                    ),
+                })
             if nfm_mode:
                 sideband = str(config.get("_txitpyNfmSideband") or mode)
                 self.events.put({
@@ -1273,16 +1392,20 @@ class TxityTransmitter:
                 playlist_thread = start_playlist_worker()
                 self.events.put({
                     "kind": "tx_log",
-                    "text": "Buffering a few seconds of playlist audio before starting transmission.",
+                    "text": (
+                        "Buffering FreeDV RADE output before starting transmission."
+                        if rade_mode
+                        else "Buffering a few seconds of playlist audio before starting transmission."
+                    ),
                 })
+                required_frames = RADE_PREROLL_FRAMES if rade_mode else PLAYLIST_PREROLL_FRAMES
                 buffer_deadline = time.monotonic() + 12.0
                 while not self._stop_event.is_set():
                     if audio_thread_error:
                         raise RuntimeError(audio_thread_error[0])
-                    if (
-                        audio_queue.qsize() >= PLAYLIST_PREROLL_FRAMES
-                        or audio_finished.is_set()
-                    ):
+                    if rade_encoder is not None and rade_encoder.error:
+                        raise RuntimeError(rade_encoder.error)
+                    if audio_queue.qsize() >= required_frames or audio_finished.is_set():
                         break
                     if time.monotonic() >= buffer_deadline:
                         raise TimeoutError(
@@ -1292,6 +1415,16 @@ class TxityTransmitter:
 
                 if self._stop_event.is_set():
                     return
+                if rade_mode and audio_finished.is_set() and rade_encoder is not None:
+                    rade_encoder.finish()
+                    rade_finalized = True
+                    if rade_encoder.error:
+                        raise RuntimeError(rade_encoder.error)
+                    enqueue_transport_audio_samples(
+                        [],
+                        flush=True,
+                        playlist_info=rade_playlist_info,
+                    )
                 if audio_queue.empty():
                     raise RuntimeError("The playlist did not produce any playable audio samples.")
                 self.events.put({
@@ -1299,6 +1432,33 @@ class TxityTransmitter:
                     "text": (
                         f"Playlist buffer ready: {audio_queue.qsize()} audio frames "
                         f"({audio_queue.qsize() * AUDIO_FRAME_INTERVAL_SECONDS:.2f} seconds)."
+                    ),
+                })
+
+            if rade_mode and audio_source != "playlist":
+                self.events.put({
+                    "kind": "tx_log",
+                    "text": "Buffering the FreeDV RADE signal before keying TXITY.",
+                })
+                buffer_deadline = time.monotonic() + 12.0
+                while not self._stop_event.is_set():
+                    if audio_capture_error:
+                        raise RuntimeError(audio_capture_error[-1])
+                    if rade_encoder is not None and rade_encoder.error:
+                        raise RuntimeError(rade_encoder.error)
+                    if audio_queue.qsize() >= RADE_PREROLL_FRAMES:
+                        break
+                    if time.monotonic() >= buffer_deadline:
+                        raise TimeoutError(
+                            "FreeDV RADE did not produce enough audio to start the transmission within 12 seconds."
+                        )
+                    self._stop_event.wait(0.02)
+                if self._stop_event.is_set():
+                    return
+                self.events.put({
+                    "kind": "tx_log",
+                    "text": (
+                        f"FreeDV RADE signal buffer ready: {audio_queue.qsize()} audio frames."
                     ),
                 })
 
@@ -1519,6 +1679,8 @@ class TxityTransmitter:
                         drm_playlist_stop_requested = True
                 if audio_capture_error:
                     details = audio_capture_error.pop()
+                    if rade_mode:
+                        raise RuntimeError(details)
                     now = time.monotonic()
                     if now - last_capture_error_at >= 5.0:
                         self.events.put({
@@ -1559,12 +1721,34 @@ class TxityTransmitter:
                     if audio_source == "playlist" and audio_finished.is_set():
                         if audio_thread_error:
                             raise RuntimeError(audio_thread_error[0])
+                        if rade_mode and not rade_finalized and rade_encoder is not None:
+                            rade_encoder.finish()
+                            rade_finalized = True
+                            if rade_encoder.error:
+                                raise RuntimeError(rade_encoder.error)
+                            enqueue_transport_audio_samples(
+                                [],
+                                flush=True,
+                                playlist_info=rade_playlist_info,
+                            )
+                            continue
                         playlist_reached_end = True
                         break
                     if audio_source == "playlist":
                         if not playlist_underrun_active:
                             playlist_underruns += 1
                             playlist_underrun_active = True
+                        continue
+                    if rade_mode:
+                        now = time.monotonic()
+                        if should_send_live_audio_silence(last_audio_frame_at, now):
+                            if rade_encoder is None:
+                                raise RuntimeError("The FreeDV RADE encoder is unavailable.")
+                            rade_encoder.feed(
+                                np.zeros(BATCH_SAMPLES, dtype=np.float32),
+                                wait_for_space=False,
+                            )
+                            last_audio_frame_at = now
                         continue
                     if should_send_live_audio_silence(
                         last_audio_frame_at,
@@ -1581,7 +1765,13 @@ class TxityTransmitter:
                         continue
 
                 if audio_source == "playlist" and not drm_mode:
-                    frame, playlist_info = queued_frame
+                    if rade_mode:
+                        if isinstance(queued_frame, tuple):
+                            frame, playlist_info = queued_frame
+                        else:
+                            frame, playlist_info = queued_frame, None
+                    else:
+                        frame, playlist_info = queued_frame
                     playlist_underrun_active = False
                     if playlist_info != playlist_current_track:
                         playlist_current_track = playlist_info
@@ -1639,7 +1829,11 @@ class TxityTransmitter:
                 if audio_frames_sent == 1:
                     self.events.put({
                         "kind": "tx_log",
-                        "text": f"First audio frame sent to TXITY ({len(frame)} bytes).",
+                        "text": (
+                            f"First FreeDV RADE audio frame sent to TXITY ({len(frame)} bytes)."
+                            if rade_mode
+                            else f"First audio frame sent to TXITY ({len(frame)} bytes)."
+                        ),
                     })
                     last_audio_progress_at = progress_now
                 elif progress_now - last_audio_progress_at >= 30.0:
