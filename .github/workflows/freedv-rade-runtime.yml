@@ -52,7 +52,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           cp rade_c/build-win/src/freedv_rade_tx.exe dist/
-          rade_library="$(find rade_c/build-win/src -maxdepth 1 -type f \\( -iname 'rade.dll' -o -iname 'librade.dll' \\) -print -quit)"
+          rade_library="$(find rade_c/build-win/src -maxdepth 1 -type f \( -iname 'rade.dll' -o -iname 'librade.dll' \) -print -quit)"
           if [ -z "$rade_library" ]; then
             echo "Could not locate the RADE shared library."
             exit 1
