@@ -1141,6 +1141,13 @@ class TxityTransmitter:
                     })
                     return connection
                 except Exception as exc:
+                    if secondary_client is not None:
+                        raise RuntimeError(
+                            f"AM (DEV) {label} audio WebSocket connection failed: "
+                            f"{_safe_error(exc)}. The paired startup is aborting rather "
+                            "than retrying one side indefinitely. Check whether TXITY "
+                            "accepted the second session and its overlapping frequency."
+                        ) from exc
                     attempt += 1
                     delay = reconnect_delay(attempt)
                     self.events.put({
