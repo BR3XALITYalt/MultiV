@@ -16,6 +16,8 @@ from typing import Any
 from urllib.parse import urlencode
 
 from audio_playlist import build_playlist_order, collect_audio_files
+from playlist_decoder import iter_playlist_audio_blocks
+from drm_support import LocalDRMPlaylistServer, ensure_drm_encoder, write_drm_station_config
 from drm_support import LocalDRMPlaylistServer, ensure_drm_encoder, write_drm_station_config
 
 
@@ -821,38 +823,47 @@ class TxityTransmitter:
                         for index, file_path in enumerate(order, start=1):
                             if self._stop_event.is_set():
                                 break
-                            with soundfile.SoundFile(file_path) as source:
-                                source_rate = int(source.samplerate)
-                                if source_rate <= 0 or source.channels <= 0:
-                                    raise RuntimeError(
-                                        f"Audio file has an invalid format: {file_path}"
+                            playlist_info = (file_path, index, len(order))
+                            source_rate = 0
+                            resampler = None
+                            for block_rate, block in iter_playlist_audio_blocks(
+                                file_path,
+                                PLAYLIST_READ_FRAMES,
+                            ):
+                                if self._stop_event.is_set():
+                                    break
+                                if resampler is None or block_rate != source_rate:
+                                    if resampler is not None:
+                                        enqueue_pcm_samples(
+                                            [],
+                                            wait_for_space=True,
+                                            flush=True,
+                                            playlist_info=playlist_info,
+                                        )
+                                    source_rate = block_rate
+                                    resampler = StreamingLinearResampler(
+                                        source_rate,
+                                        SAMPLE_RATE_HZ,
                                     )
-                                playlist_info = (file_path, index, len(order))
-                                resampler = StreamingLinearResampler(
-                                    source_rate,
-                                    SAMPLE_RATE_HZ,
+
+                                mono = block.mean(axis=1, dtype=np.float32)
+                                enqueue_pcm_samples(
+                                    resampler.process(mono),
+                                    wait_for_space=True,
+                                    playlist_info=playlist_info,
                                 )
-                                while not self._stop_event.is_set():
-                                    block = source.read(
-                                        PLAYLIST_READ_FRAMES,
-                                        dtype="float32",
-                                        always_2d=True,
+
+                            if not self._stop_event.is_set():
+                                if resampler is None:
+                                    raise RuntimeError(
+                                        f"Audio file contains no playable samples: {file_path}"
                                     )
-                                    if block.size == 0:
-                                        break
-                                    mono = block.mean(axis=1, dtype=np.float32)
-                                    enqueue_pcm_samples(
-                                        resampler.process(mono),
-                                        wait_for_space=True,
-                                        playlist_info=playlist_info,
-                                    )
-                                if not self._stop_event.is_set():
-                                    enqueue_pcm_samples(
-                                        [],
-                                        wait_for_space=True,
-                                        flush=True,
-                                        playlist_info=playlist_info,
-                                    )
+                                enqueue_pcm_samples(
+                                    [],
+                                    wait_for_space=True,
+                                    flush=True,
+                                    playlist_info=playlist_info,
+                                )
                             previous_file = file_path
 
                         if self._stop_event.is_set() or not playlist_loop:
@@ -1013,12 +1024,12 @@ class TxityTransmitter:
                 if audio_source == "playlist":
                     supported = [
                         item for item in playlist_files
-                        if Path(item).suffix.casefold() in {".ogg", ".mp3", ".flac"}
+                        if Path(item).suffix.casefold() in {".ogg", ".opus", ".mp3", ".flac"}
                     ]
                     if len(supported) != len(playlist_files):
                         self.events.put({
                             "kind": "tx_log",
-                            "text": "DRM playlists skip WAV and AIFF files. OGG, MP3, and FLAC are supported.",
+                            "text": "DRM playlists skip WAV, AIFF, and M4A files. OGG/Vorbis, Opus, MP3, and FLAC are supported.",
                         })
                     drm_playlist_server = LocalDRMPlaylistServer(
                         supported,
