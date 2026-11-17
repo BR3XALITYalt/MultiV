@@ -731,6 +731,7 @@ class TxityTransmitter:
                     try:
                         audio_queue.put_nowait(queued_frame)
                     except queue.Full:
+                        pass
 
         def report_audio_warning(status: Any) -> None:
             nonlocal last_callback_warning
