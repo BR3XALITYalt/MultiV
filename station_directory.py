@@ -14,7 +14,7 @@ from discord_auth import safe_error_text
 from transmitter import parse_rf_frequency
 
 BASE_URL = "https://txity.radiodiscussion.org"
-USER_AGENT = "TXITPY/0.1 (+https://github.com/BR3XALITYalt/TXITPY)"
+USER_AGENT = "MultiV/0.1 (+https://github.com/BR3XALITYalt/TXITPY)"
 HTTP_TIMEOUT = 12
 MAX_STATION_IMAGE_BYTES = 5 * 1024 * 1024
 
