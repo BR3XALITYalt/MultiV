@@ -1,0 +1,141 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+from cli import build_argument_parser, build_headless_plan
+
+
+class CommandLineTests(unittest.TestCase):
+    def setUp(self):
+        self.parser = build_argument_parser()
+
+    def test_parser_accepts_headless_service_options(self):
+        args = self.parser.parse_args([
+            "--no-gui",
+            "--mode", "drm",
+            "--audio-source", "playlist",
+            "--playlist", "D:/Radio/One.ogg",
+            "--no-loop",
+            "--no-shuffle",
+            "--auth-token-file", "C:/ProgramData/TXITPY/token.txt",
+        ])
+        self.assertTrue(args.no_gui)
+        self.assertEqual(args.mode, "DRM")
+        self.assertEqual(args.audio_source, "playlist")
+        self.assertFalse(args.loop)
+        self.assertFalse(args.shuffle)
+        self.assertEqual(args.auth_token_file, Path("C:/ProgramData/TXITPY/token.txt"))
+
+    def test_saved_settings_are_used_when_no_cli_override_is_given(self):
+        with tempfile.TemporaryDirectory() as directory:
+            audio_file = Path(directory) / "radio.ogg"
+            audio_file.write_bytes(b"not decoded during planning")
+            settings = {
+                "station_name": "Example Radio",
+                "frequency": "7.250 MHz",
+                "mode": "AM",
+                "audio_source": "Audio playlist",
+                "playlist_sources": [str(audio_file)],
+                "playlist_loop": True,
+                "allow_overlap": True,
+                "station_dbm": "42",
+            }
+            args = self.parser.parse_args(["--no-gui"])
+            plan = build_headless_plan(settings, args, "test-token")
+
+        self.assertEqual(plan["config"]["stationName"], "Example Radio")
+        self.assertEqual(plan["config"]["rfHz"], 7_250_000)
+        self.assertEqual(plan["config"]["stationDbm"], 42)
+        self.assertEqual(plan["audio_source"], "playlist")
+        self.assertTrue(plan["playlist_loop"])
+        self.assertTrue(plan["config"]["allowOverlapVisitors"])
+        self.assertEqual(len(plan["playlist_files"]), 1)
+
+    def test_cli_values_override_saved_settings(self):
+        args = self.parser.parse_args([
+            "--no-gui",
+            "--station-name", "CLI Radio",
+            "--frequency", "14.200 MHz",
+            "--mode", "USB",
+            "--power", "30",
+            "--audio-source", "mic",
+            "--no-allow-overlap",
+        ])
+        plan = build_headless_plan({
+            "station_name": "Saved Radio",
+            "frequency": "7.250 MHz",
+            "mode": "AM",
+            "station_dbm": "50",
+            "allow_overlap": True,
+        }, args, "test-token")
+
+        self.assertEqual(plan["config"]["stationName"], "CLI Radio")
+        self.assertEqual(plan["config"]["rfHz"], 14_200_000)
+        self.assertEqual(plan["config"]["mode"], "USB")
+        self.assertEqual(plan["config"]["stationDbm"], 30)
+        self.assertFalse(plan["config"]["allowOverlapVisitors"])
+        self.assertEqual(plan["audio_source"], "mic")
+
+    def test_device_can_be_selected_by_name_or_numeric_id(self):
+        devices = [(2, "USB Audio Codec"), (5, "Built-in Microphone")]
+        args = self.parser.parse_args([
+            "--no-gui",
+            "--audio-source", "mic",
+            "--audio-device", "USB Audio",
+        ])
+        plan = build_headless_plan(
+            {"station_name": "Device Test", "audio_device": "System default"},
+            args,
+            "test-token",
+            input_devices=devices,
+        )
+        self.assertEqual(plan["input_device"], 2)
+        self.assertEqual(plan["audio_device_name"], "USB Audio Codec")
+
+        args = self.parser.parse_args([
+            "--no-gui",
+            "--audio-source", "mic",
+            "--audio-device", "5",
+        ])
+        plan = build_headless_plan(
+            {"station_name": "Device Test"},
+            args,
+            "test-token",
+            input_devices=devices,
+        )
+        self.assertEqual(plan["input_device"], 5)
+
+    def test_loopback_defaults_to_the_default_windows_output(self):
+        args = self.parser.parse_args([
+            "--no-gui",
+            "--audio-source", "loopback",
+        ])
+        plan = build_headless_plan(
+            {"station_name": "Loopback Test"},
+            args,
+            "test-token",
+            loopback_devices=[
+                (7, "7: Other Output"),
+                (9, "9: Main Speakers (Default output)"),
+            ],
+        )
+        self.assertEqual(plan["input_device"], 9)
+        self.assertIn("Default output", plan["audio_device_name"])
+
+    def test_drm_rejects_loopback_input(self):
+        args = self.parser.parse_args([
+            "--no-gui",
+            "--mode", "DRM",
+            "--audio-source", "loopback",
+        ])
+        with self.assertRaisesRegex(ValueError, "DRM mode supports"):
+            build_headless_plan(
+                {"station_name": "DRM Test"},
+                args,
+                "test-token",
+                loopback_devices=[(0, "0: Main Speakers (Default output)")],
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()
