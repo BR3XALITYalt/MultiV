@@ -18,6 +18,14 @@ from urllib.parse import urlencode
 from audio_playlist import build_playlist_order, collect_audio_files
 from playlist_decoder import iter_playlist_audio_blocks
 from drm_support import LocalDRMPlaylistServer, ensure_drm_encoder, write_drm_station_config
+from nfm_modulator import (
+    NFM_AUDIO_HIGH_HZ,
+    NFM_AUDIO_LOW_HZ,
+    NFM_CHANNEL_BANDWIDTH_HZ,
+    NFM_DEVIATION_HZ,
+    NFM_IF_HZ,
+    StreamingNFMModulator,
+)
 
 
 BASE_URL = "https://txity.radiodiscussion.org"
@@ -125,11 +133,12 @@ def should_send_live_audio_silence(last_audio_at: float, now: float) -> bool:
 
 
 PTT_CONFIRMATION_GRACE_SECONDS = 4.0
-SUPPORTED_MODES = ("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "DRM", "CW")
+SUPPORTED_MODES = ("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "DRM", "CW")
 DEFAULT_MODE_BANDWIDTH_HZ = {
     "AM": 12_000,
     "DSB": 12_000,
     "DRM": 12_000,
+    "NFM": NFM_CHANNEL_BANDWIDTH_HZ,
     "USB": 10_000,
     "LSB": 10_000,
     "USB+C": 10_000,
@@ -174,6 +183,42 @@ def parse_rf_frequency(value: Any) -> int:
     return frequency
 
 
+TXITY_RF_ROOM_MIN_HZ = 7_000_000
+TXITY_RF_ROOM_MAX_HZ = 8_000_000
+
+
+def nfm_transport_settings(target_frequency_hz: Any) -> tuple[str, int]:
+    """Place a 5 kHz NFM IF at the requested channel center using TXITY SSB."""
+    target_hz = parse_rf_frequency(target_frequency_hz)
+    if not TXITY_RF_ROOM_MIN_HZ <= target_hz <= TXITY_RF_ROOM_MAX_HZ:
+        raise ValueError("NFM is currently available inside TXITY's 7.000-8.000 MHz room.")
+
+    upper_carrier_hz = target_hz - NFM_IF_HZ
+    if TXITY_RF_ROOM_MIN_HZ <= upper_carrier_hz <= TXITY_RF_ROOM_MAX_HZ:
+        return "USB", upper_carrier_hz
+
+    lower_carrier_hz = target_hz + NFM_IF_HZ
+    if TXITY_RF_ROOM_MIN_HZ <= lower_carrier_hz <= TXITY_RF_ROOM_MAX_HZ:
+        return "LSB", lower_carrier_hz
+
+    raise ValueError("NFM needs 5 kHz of tuning room around the requested frequency.")
+
+
+def apply_nfm_transport(
+    config: dict[str, Any],
+    target_frequency_hz: Any,
+) -> dict[str, Any]:
+    """Apply a selected RF channel center to the underlying TXITY transport."""
+    if str(config.get("_txitpyMode") or "").strip().upper() == "NFM":
+        sideband, carrier_hz = nfm_transport_settings(target_frequency_hz)
+        config["mode"] = sideband
+        config["rfHz"] = carrier_hz
+        config["_txitpyNfmSideband"] = sideband
+    else:
+        config["rfHz"] = parse_rf_frequency(target_frequency_hz)
+    return config
+
+
 def build_frequency_candidates(
     primary_frequency: Any,
     fallback_frequencies: list[Any] | tuple[Any, ...] | None = None,
@@ -205,6 +250,8 @@ def mode_bandwidth_hz(mode: Any, station: dict[str, Any] | None = None) -> int:
     """Return a TXITY channel-width estimate, preferring station-reported values."""
     station = station if isinstance(station, dict) else {}
     mode_name = str(mode or "AM").strip().upper()
+    if mode_name == "DRM [EXPERIMENTAL]":
+        mode_name = "DRM"
     field_names = ["bandwidthHz", "occupiedBandwidthHz", "rfBandwidthHz"]
     if mode_name in {"AM", "DSB", "DRM"}:
         field_names.append("amBandwidthHz")
@@ -338,9 +385,14 @@ def build_transmit_config(
         raise ValueError("Sign in with Discord before starting transmission.")
 
     selected_mode = str(mode or "AM").strip().upper()
+    if selected_mode == "DRM [EXPERIMENTAL]":
+        selected_mode = "DRM"
     if selected_mode not in SUPPORTED_MODES:
         raise ValueError(f"Unsupported transmission mode: {selected_mode}.")
     server_mode = "DSB" if selected_mode == "DRM" else selected_mode
+    server_frequency_hz = parse_rf_frequency(frequency)
+    if selected_mode == "NFM":
+        server_mode, server_frequency_hz = nfm_transport_settings(server_frequency_hz)
 
     try:
         power = float(station_dbm)
@@ -399,7 +451,7 @@ def build_transmit_config(
     short_description = str(description or "").strip()[:180]
     configuration = {
         "type": "config",
-        "rfHz": parse_rf_frequency(frequency),
+        "rfHz": server_frequency_hz,
         "stationName": name,
         "stationDescription": short_description,
         "stationShortDescription": short_description,
@@ -449,6 +501,26 @@ def build_transmit_config(
             "_txitpyDrmAudioCodec": str(drm_audio_codec or "xHE-AAC").strip(),
             "_txitpyDrmMscMode": str(drm_msc_mode or "16-QAM").strip().upper(),
             "_txitpyDrmInterleaving": str(drm_interleaving or "long").strip().casefold(),
+        })
+    elif selected_mode == "NFM":
+        configuration.update({
+            "_txitpyMode": "NFM",
+            "_txitpyNfmIfHz": NFM_IF_HZ,
+            "_txitpyNfmDeviationHz": NFM_DEVIATION_HZ,
+            "_txitpyNfmInputLowCutHz": NFM_AUDIO_LOW_HZ,
+            "_txitpyNfmInputHighCutHz": NFM_AUDIO_HIGH_HZ,
+            "_txitpyNfmInputGainDb": mic_gain_value,
+            "_txitpyNfmSideband": server_mode,
+            "fadeMs": 0,
+            "agcEnabled": False,
+            "micGainDb": 0.0,
+            "bassDb": 0.0,
+            "trebleDb": 0.0,
+            "presenceDb": 0.0,
+            "drive": 0.0,
+            "ssbBandwidthHz": 10_000,
+            "ssbLowCutHz": 0,
+            "ssbHighCutHz": 0,
         })
     return configuration
 
@@ -681,6 +753,7 @@ class TxityTransmitter:
         system_awake_handle = begin_windows_system_awake()
         mode = str(config.get("mode", "AM")).upper()
         drm_mode = str(config.get("_txitpyMode") or "").upper() == "DRM"
+        nfm_mode = str(config.get("_txitpyMode") or "").upper() == "NFM"
         needs_audio = mode != "CW"
         audio_socket = None
         input_stream = None
@@ -708,6 +781,16 @@ class TxityTransmitter:
         audio_thread_error: list[str] = []
         audio_capture_error: list[str] = []
         audio_queue = self._audio_queue
+        nfm_modulator = (
+            StreamingNFMModulator(
+                if_hz=int(config.get("_txitpyNfmIfHz", NFM_IF_HZ)),
+                deviation_hz=int(config.get("_txitpyNfmDeviationHz", NFM_DEVIATION_HZ)),
+                low_cut_hz=int(config.get("_txitpyNfmInputLowCutHz", NFM_AUDIO_LOW_HZ)),
+                high_cut_hz=int(config.get("_txitpyNfmInputHighCutHz", NFM_AUDIO_HIGH_HZ)),
+                input_gain_db=float(config.get("_txitpyNfmInputGainDb", 0.0)),
+            )
+            if nfm_mode else None
+        )
         last_audio_frame_at = time.monotonic()
         last_capture_error_at = 0.0
         control_configured = False
@@ -731,10 +814,19 @@ class TxityTransmitter:
             import numpy as np
 
             pcm = np.asarray(samples, dtype="<f4").reshape(-1)
+            if pcm.size and nfm_modulator is not None:
+                pcm = nfm_modulator.process(pcm)
             if pcm.size:
                 carry.extend(pcm.tobytes())
             if flush and carry and len(carry) < FRAME_BYTES:
-                carry.extend(bytes(FRAME_BYTES - len(carry)))
+                missing_samples = (FRAME_BYTES - len(carry)) // 4
+                if nfm_modulator is not None:
+                    padding = nfm_modulator.process(
+                        np.zeros(missing_samples, dtype=np.float32)
+                    )
+                    carry.extend(padding.astype("<f4", copy=False).tobytes())
+                else:
+                    carry.extend(bytes(FRAME_BYTES - len(carry)))
 
             while len(carry) >= FRAME_BYTES:
                 frame = bytes(carry[:FRAME_BYTES])
@@ -995,6 +1087,16 @@ class TxityTransmitter:
 
             drm_config_path: Path | None = None
             encoder_path: Path | None = None
+            if nfm_mode:
+                sideband = str(config.get("_txitpyNfmSideband") or mode)
+                self.events.put({
+                    "kind": "tx_log",
+                    "text": (
+                        f"Software NFM active: {NFM_DEVIATION_HZ} Hz peak deviation, "
+                        f"{NFM_AUDIO_LOW_HZ}-{NFM_AUDIO_HIGH_HZ} Hz voice band, "
+                        f"{NFM_IF_HZ} Hz IF via {sideband} transport."
+                    ),
+                })
             if drm_mode:
                 self.events.put({
                     "kind": "tx_log",
@@ -1421,7 +1523,12 @@ class TxityTransmitter:
                         last_audio_frame_at,
                         time.monotonic(),
                     ):
-                        queued_frame = bytes(FRAME_BYTES)
+                        if nfm_modulator is not None:
+                            queued_frame = nfm_modulator.process(
+                                np.zeros(BATCH_SAMPLES, dtype=np.float32)
+                            ).astype("<f4", copy=False).tobytes()
+                        else:
+                            queued_frame = bytes(FRAME_BYTES)
                         using_silence_frame = True
                     else:
                         continue
