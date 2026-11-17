@@ -1526,8 +1526,10 @@ def build_app() -> None:
                 label.image = photo
                 applied += 1
             except Exception as exc:
+                pass
 
         if waiting and not applied:
+            pass
 
     def bind_station_card(
         widget: tk.Widget,
@@ -1615,6 +1617,7 @@ def build_app() -> None:
             try:
                 tray_icon.stop()
             except Exception as exc:
+                pass
         transmitter.stop(wait=1.0)
         client.disconnect()
         save_tx_settings_now()
@@ -1627,6 +1630,7 @@ def build_app() -> None:
                 try:
                     tray_icon.visible = False
                 except Exception as exc:
+                    pass
             try:
                 root.deiconify()
                 root.state("normal")
@@ -2341,10 +2345,14 @@ def build_app() -> None:
                     description = str(station.get("description") or "").strip()
                     source = str(station.get("description_source") or "none")
                     if description:
+                        pass
                     else:
+                        pass
                     profile_details = str(station.get("details_text") or "").strip()
                     if profile_details:
+                        pass
                     else:
+                        pass
                 update_station_tree()
 
             elif kind == "station_image":
