@@ -125,9 +125,12 @@ def is_auth_token(value: Any) -> bool:
 
 
 def auth_token_path() -> Path:
-    """Return the per-user TXITY session token path."""
+    """Return the shared machine-wide TXITY session token path on Windows."""
     if os.name == "nt":
-        base = Path(os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming"))
+        base = Path(
+            os.environ.get("PROGRAMDATA")
+            or (Path(os.environ.get("SystemDrive", "C:")) / "ProgramData")
+        )
     else:
         base = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
     return base / "TXITPY" / "token.txt"
