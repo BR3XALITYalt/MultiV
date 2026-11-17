@@ -51,27 +51,22 @@ def playlist_frame_wait_seconds(next_frame_deadline: float | None, now: float) -
     return max(0.0, next_frame_deadline - now)
 
 
-def next_playlist_frame_deadline(
+def next_audio_frame_deadline(
     current_deadline: float | None,
     now: float,
+    *,
+    catch_up_after_delay: bool = False,
 ) -> float:
-    """Advance the absolute playback clock without accumulating scheduler drift."""
+    """Advance the audio clock without accumulating scheduler drift."""
     if current_deadline is None:
         return now + AUDIO_FRAME_INTERVAL_SECONDS
+
     next_deadline = current_deadline + AUDIO_FRAME_INTERVAL_SECONDS
     if now >= next_deadline:
-        return now + AUDIO_FRAME_INTERVAL_SECONDS
+        # Playlist playback skips a missed slot. DRM immediately sends its
+        # next queued block, then resumes the normal sample clock.
+        return now if catch_up_after_delay else now + AUDIO_FRAME_INTERVAL_SECONDS
     return next_deadline
-
-
-def next_drm_frame_deadline(current_deadline: float | None, now: float) -> float:
-    """Keep DRM packet pacing on its sample clock after a late send."""
-    if current_deadline is None:
-        return now + AUDIO_FRAME_INTERVAL_SECONDS
-    next_deadline = current_deadline + AUDIO_FRAME_INTERVAL_SECONDS
-    # A late packet has already consumed its missed slot. Do not add another
-    # full packet interval before sending the next queued audio block.
-    return now if now >= next_deadline else next_deadline
 
 
 def begin_windows_audio_timer_resolution():
@@ -140,7 +135,7 @@ DEFAULT_MODE_BANDWIDTH_HZ = {
     "LSB+C": 10_000,
     "CW": 500,
 }
-SUPPORTED_AUDIO_SOURCES = ("mic", "loopback", "playlist", "tone")
+SUPPORTED_AUDIO_SOURCES = ("mic", "loopback", "playlist")
 
 
 def parse_rf_frequency(value: Any) -> int:
@@ -197,35 +192,6 @@ def mode_bandwidth_hz(mode: Any, station: dict[str, Any] | None = None) -> int:
                 return int(round(candidate))
     return DEFAULT_MODE_BANDWIDTH_HZ.get(mode_name, DEFAULT_MODE_BANDWIDTH_HZ["AM"])
 
-
-def tx_status_diagnostic_snapshot(
-    data: Any,
-    *,
-    request_frequency_hz: int | None = None,
-    request_mode: str | None = None,
-    allow_overlap: bool | None = None,
-) -> dict[str, Any]:
-    """Keep only status fields needed to diagnose a TXITY PTT decision."""
-    if not isinstance(data, dict):
-        return {}
-
-    fields = (
-        "ptt",
-        "queuePosition",
-        "txStartUsable",
-        "txStartReason",
-        "txBlockReason",
-        "bandMinHz",
-        "bandMaxHz",
-    )
-    snapshot = {key: data[key] for key in fields if key in data}
-    if request_frequency_hz is not None:
-        snapshot["requestRfHz"] = int(request_frequency_hz)
-    if request_mode:
-        snapshot["requestMode"] = str(request_mode).strip().upper()
-    if allow_overlap is not None:
-        snapshot["requestAllowOverlapVisitors"] = bool(allow_overlap)
-    return snapshot
 
 
 def find_frequency_overlaps(
@@ -617,12 +583,10 @@ class TxityTransmitter:
     ) -> None:
         selected_source = str(audio_source or "mic").casefold()
         if selected_source not in SUPPORTED_AUDIO_SOURCES:
-            raise ValueError("Choose microphone input, desktop audio loopback, an audio playlist, or the DRM test tone.")
+            raise ValueError("Choose microphone input, desktop audio loopback, or an audio playlist.")
         drm_mode = str(config.get("_txitpyMode") or "").upper() == "DRM"
         if drm_mode and selected_source == "loopback":
-            raise ValueError("DRM mode currently supports microphone, playlist, and test-tone inputs, not desktop audio loopback.")
-        if selected_source == "tone" and not drm_mode:
-            raise ValueError("The 1 kHz test tone is available only in DRM mode.")
+            raise ValueError("DRM mode currently supports microphone and playlist inputs, not desktop audio loopback.")
         selected_playlist = collect_audio_files(playlist_files or [])
         if selected_source == "playlist" and not selected_playlist:
             raise ValueError("Add at least one supported audio file to the playlist.")
@@ -716,24 +680,8 @@ class TxityTransmitter:
         audio_thread_error: list[str] = []
         audio_capture_error: list[str] = []
         audio_queue = self._audio_queue
-        send_count = 0
-        drop_count = 0
-        last_metrics_at = time.monotonic()
         last_audio_frame_at = time.monotonic()
         last_capture_error_at = 0.0
-        drm_queue_underruns = 0
-        drm_queue_underrun_since: float | None = None
-        drm_queue_min_frames = audio_queue.maxsize
-        drm_low_queue_active = False
-        drm_send_slow_count = 0
-        drm_send_max_ms = 0.0
-        drm_send_reconnects = 0
-        drm_send_interval_count = 0
-        drm_send_interval_total_ms = 0.0
-        drm_send_interval_max_ms = 0.0
-        drm_last_send_at: float | None = None
-        last_drm_transport_report = time.monotonic()
-        last_slow_send_log_at = 0.0
         control_configured = False
         control_disconnect_reported = False
         last_control_generation: int | None = None
@@ -750,7 +698,6 @@ class TxityTransmitter:
             flush: bool = False,
             playlist_info: tuple[str, int, int] | None = None,
         ) -> None:
-            nonlocal drop_count
             import numpy as np
 
             pcm = np.asarray(samples, dtype="<f4").reshape(-1)
@@ -783,9 +730,7 @@ class TxityTransmitter:
                         pass
                     try:
                         audio_queue.put_nowait(queued_frame)
-                        drop_count += 1
                     except queue.Full:
-                        drop_count += 1
 
         def report_audio_warning(status: Any) -> None:
             nonlocal last_callback_warning
@@ -1019,9 +964,7 @@ class TxityTransmitter:
                     raise RuntimeError(
                         "DRM mode currently supports microphone and playlist inputs, not desktop audio loopback."
                     )
-                encoder_path = ensure_drm_encoder(
-                    on_log=lambda line: self.events.put({"kind": "tx_log", "text": line})
-                )
+                encoder_path = ensure_drm_encoder()
                 drm_temp_dir = tempfile.TemporaryDirectory(prefix="txitpy-drm-")
                 drm_temp_path = Path(drm_temp_dir.name)
                 drm_stop_path = drm_temp_path / "stop"
@@ -1062,18 +1005,6 @@ class TxityTransmitter:
                         drm_temp_path / "station.toml",
                         station_name=config.get("stationName", "TXITPY"),
                         playlist_url=drm_playlist_server.url,
-                        **drm_metadata,
-                    )
-                elif audio_source == "tone":
-                    self.events.put({
-                        "kind": "tx_log",
-                        "text": "Using DecDRM's built-in 1 kHz test tone at -12.041 dBFS.",
-                    })
-                    drm_config_path = write_drm_station_config(
-                        drm_temp_path / "station.toml",
-                        station_name=config.get("stationName", "TXITPY"),
-                        tone_hz=1_000.0,
-                        tone_level_dbfs=-12.041,
                         **drm_metadata,
                     )
                 else:
@@ -1254,7 +1185,6 @@ class TxityTransmitter:
                             drm_stderr_lines.append(line[:500])
                             if len(drm_stderr_lines) > 40:
                                 del drm_stderr_lines[:-40]
-                            self.events.put({"kind": "tx_log", "text": line[:500]})
 
                 drm_reader_thread = threading.Thread(
                     target=read_drm_stdout,
@@ -1429,17 +1359,6 @@ class TxityTransmitter:
                         )
                 except queue.Empty:
                     if drm_mode:
-                        drm_queue_min_frames = 0
-                        if drm_queue_underrun_since is None:
-                            drm_queue_underruns += 1
-                            drm_queue_underrun_since = time.monotonic()
-                            self.events.put({
-                                "kind": "tx_log",
-                                "text": (
-                                    "DRM transport underrun: the encoder queue supplied no "
-                                    "complete audio block within 50 ms."
-                                ),
-                            })
                         if drm_reader_finished.is_set():
                             if audio_thread_error:
                                 raise RuntimeError(audio_thread_error[0])
@@ -1466,38 +1385,6 @@ class TxityTransmitter:
                         using_silence_frame = True
                     else:
                         continue
-
-                if drm_mode:
-                    queue_depth = audio_queue.qsize()
-                    drm_queue_min_frames = min(drm_queue_min_frames, queue_depth)
-                    if drm_queue_underrun_since is not None:
-                        stalled_ms = (time.monotonic() - drm_queue_underrun_since) * 1000.0
-                        self.events.put({
-                            "kind": "tx_log",
-                            "text": (
-                                f"DRM transport recovered after {stalled_ms:.0f} ms; "
-                                f"{queue_depth} audio blocks are queued."
-                            ),
-                        })
-                        drm_queue_underrun_since = None
-                    if not drm_low_queue_active and queue_depth < 24:
-                        drm_low_queue_active = True
-                        self.events.put({
-                            "kind": "tx_log",
-                            "text": (
-                                f"DRM transport buffer is low: {queue_depth} blocks "
-                                f"({queue_depth * AUDIO_FRAME_INTERVAL_SECONDS:.2f} s)."
-                            ),
-                        })
-                    elif drm_low_queue_active and queue_depth >= 48:
-                        drm_low_queue_active = False
-                        self.events.put({
-                            "kind": "tx_log",
-                            "text": (
-                                f"DRM transport buffer recovered: {queue_depth} blocks "
-                                f"({queue_depth * AUDIO_FRAME_INTERVAL_SECONDS:.2f} s)."
-                            ),
-                        })
 
                 if audio_source == "playlist" and not drm_mode:
                     frame, playlist_info = queued_frame
@@ -1532,28 +1419,11 @@ class TxityTransmitter:
                     if self._stop_event.is_set():
                         break
 
-                send_started = time.perf_counter()
                 try:
                     audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
-                    send_elapsed_ms = (time.perf_counter() - send_started) * 1000.0
-                    if drm_mode:
-                        drm_send_max_ms = max(drm_send_max_ms, send_elapsed_ms)
-                        if send_elapsed_ms >= 20.0:
-                            drm_send_slow_count += 1
-                            if time.monotonic() - last_slow_send_log_at >= 5.0:
-                                last_slow_send_log_at = time.monotonic()
-                                self.events.put({
-                                    "kind": "tx_log",
-                                    "text": (
-                                        f"DRM WebSocket send took {send_elapsed_ms:.1f} ms; "
-                                        "the normal audio block interval is 10.7 ms."
-                                    ),
-                                })
                 except Exception as exc:
                     if self._stop_event.is_set():
                         break
-                    if drm_mode:
-                        drm_send_reconnects += 1
                     pending_frame = queued_frame
                     audio_reconnect_attempt += 1
                     delay = reconnect_delay(audio_reconnect_attempt)
@@ -1568,83 +1438,21 @@ class TxityTransmitter:
                     control_configured = False
                     self._stop_event.wait(delay)
                     continue
-                if drm_mode:
-                    sent_at = time.perf_counter()
-                    if drm_last_send_at is not None:
-                        interval_ms = (sent_at - drm_last_send_at) * 1000.0
-                        drm_send_interval_count += 1
-                        drm_send_interval_total_ms += interval_ms
-                        drm_send_interval_max_ms = max(
-                            drm_send_interval_max_ms,
-                            interval_ms,
-                        )
-                    drm_last_send_at = sent_at
                 pending_frame = None
                 audio_reconnect_attempt = 0
-                send_count += 1
                 if audio_source in {"mic", "loopback"} and not using_silence_frame:
                     last_audio_frame_at = time.monotonic()
                 if drm_mode:
-                    playlist_next_frame_deadline = next_drm_frame_deadline(
+                    playlist_next_frame_deadline = next_audio_frame_deadline(
                         playlist_next_frame_deadline,
                         time.perf_counter(),
+                        catch_up_after_delay=True,
                     )
                 elif audio_source == "playlist":
-                    playlist_next_frame_deadline = next_playlist_frame_deadline(
+                    playlist_next_frame_deadline = next_audio_frame_deadline(
                         playlist_next_frame_deadline,
                         time.perf_counter(),
                     )
-                now = time.monotonic()
-                if now - last_metrics_at >= 1.0:
-                    queue_depth = audio_queue.qsize()
-                    if drm_mode:
-                        drm_queue_min_frames = min(drm_queue_min_frames, queue_depth)
-                    self.events.put({
-                        "kind": "tx_metrics",
-                        "frames_sent": send_count,
-                        "frames_dropped": drop_count,
-                        "queue_depth": queue_depth,
-                        "playlist_underruns": playlist_underruns,
-                        "drm_mode": drm_mode,
-                        "drm_queue_underruns": drm_queue_underruns,
-                        "drm_queue_min_frames": drm_queue_min_frames if drm_mode else 0,
-                        "drm_send_slow_count": drm_send_slow_count,
-                        "drm_send_max_ms": drm_send_max_ms,
-                        "drm_send_reconnects": drm_send_reconnects,
-                    })
-                    last_metrics_at = now
-
-                if drm_mode and now - last_drm_transport_report >= 5.0:
-                    queue_depth = audio_queue.qsize()
-                    report_elapsed = max(now - last_drm_transport_report, 0.001)
-                    send_rate = drm_send_interval_count / report_elapsed
-                    average_interval_ms = (
-                        drm_send_interval_total_ms / drm_send_interval_count
-                        if drm_send_interval_count
-                        else 0.0
-                    )
-                    self.events.put({
-                        "kind": "tx_log",
-                        "text": (
-                            f"DRM transport health: queue={queue_depth} blocks "
-                            f"({queue_depth * AUDIO_FRAME_INTERVAL_SECONDS:.2f} s), "
-                            f"low-water={drm_queue_min_frames} blocks, "
-                            f"underruns={drm_queue_underruns}, "
-                            f"send_rate={send_rate:.1f} blocks/s, "
-                            f"avg_interval={average_interval_ms:.2f} ms, "
-                            f"max_interval={drm_send_interval_max_ms:.1f} ms, "
-                            f"slow_sends={drm_send_slow_count}, "
-                            f"max_send={drm_send_max_ms:.1f} ms, "
-                            f"reconnects={drm_send_reconnects}."
-                        ),
-                    })
-                    drm_queue_min_frames = queue_depth
-                    drm_send_slow_count = 0
-                    drm_send_max_ms = 0.0
-                    drm_send_interval_count = 0
-                    drm_send_interval_total_ms = 0.0
-                    drm_send_interval_max_ms = 0.0
-                    last_drm_transport_report = now
 
         except Exception as exc:
             if not self._stop_event.is_set():
