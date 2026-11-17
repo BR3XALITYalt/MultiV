@@ -295,6 +295,32 @@ class CommandLineTests(unittest.TestCase):
         self.assertTrue(shutdown_event.is_set())
         self.assertEqual(transmitter.stop_calls, 1)
 
+    def test_headless_logs_transmitter_audio_and_playlist_diagnostics(self):
+        logger = logging.getLogger("test.txitpy-headless-diagnostics")
+        common = {
+            "logger": logger,
+            "transmitter": object(),
+            "shutdown_event": threading.Event(),
+            "state": {},
+            "plan": {},
+        }
+
+        with self.assertLogs(logger, level="INFO") as captured:
+            _handle_event({
+                "kind": "tx_log",
+                "text": "Authenticated TX audio WebSocket connected.",
+            }, **common)
+            _handle_event({
+                "kind": "tx_playlist_track",
+                "path": "C:/Radio/Example.ogg",
+                "index": 1,
+                "count": 3,
+            }, **common)
+
+        output = "\n".join(captured.output)
+        self.assertIn("Authenticated TX audio WebSocket connected.", output)
+        self.assertIn("Playlist track 1/3: Example.ogg", output)
+
     def test_device_can_be_selected_by_name_or_numeric_id(self):
         devices = [(2, "USB Audio Codec"), (5, "Built-in Microphone")]
         args = self.parser.parse_args([
