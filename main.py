@@ -4581,6 +4581,7 @@ def build_app() -> None:
             elif kind == "auth_signed_out":
                 transmitter.stop(wait=0.5)
                 tx_profile_initialized = False
+                clear_auth_token()
                 client.set_discord_auth(None, None)
                 discord_authenticated = False
                 account_var.set("Not signed in to Discord")
