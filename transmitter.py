@@ -173,6 +173,33 @@ def parse_rf_frequency(value: Any) -> int:
     return frequency
 
 
+def build_frequency_candidates(
+    primary_frequency: Any,
+    fallback_frequencies: list[Any] | tuple[Any, ...] | None = None,
+) -> list[tuple[str, int]]:
+    """Return ordered, unique (display text, hertz) frequency candidates."""
+    values = [primary_frequency, *(fallback_frequencies or [])]
+    candidates: list[tuple[str, int]] = []
+    seen: set[int] = set()
+
+    for index, value in enumerate(values):
+        display_text = str(value or "").strip()
+        if not display_text:
+            if index == 0:
+                raise ValueError("Enter a valid primary frequency before starting transmission.")
+            continue
+
+        frequency_hz = parse_rf_frequency(display_text)
+        if frequency_hz in seen:
+            continue
+        seen.add(frequency_hz)
+        candidates.append((display_text, frequency_hz))
+
+    if not candidates:
+        raise ValueError("Enter at least one valid frequency.")
+    return candidates
+
+
 def mode_bandwidth_hz(mode: Any, station: dict[str, Any] | None = None) -> int:
     """Return a TXITY channel-width estimate, preferring station-reported values."""
     station = station if isinstance(station, dict) else {}
