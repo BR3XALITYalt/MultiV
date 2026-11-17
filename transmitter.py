@@ -717,6 +717,8 @@ class TxityTransmitter:
         pending_frame: Any = None
         carry = bytearray()
         last_callback_warning = 0.0
+        audio_frames_sent = 0
+        last_audio_progress_at = time.monotonic()
 
         def enqueue_pcm_samples(
             samples,
@@ -1468,6 +1470,24 @@ class TxityTransmitter:
                     continue
                 pending_frame = None
                 audio_reconnect_attempt = 0
+                audio_frames_sent += 1
+                progress_now = time.monotonic()
+                if audio_frames_sent == 1:
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": f"First audio frame sent to TXITY ({len(frame)} bytes).",
+                    })
+                    last_audio_progress_at = progress_now
+                elif progress_now - last_audio_progress_at >= 30.0:
+                    audio_duration = audio_frames_sent * AUDIO_FRAME_INTERVAL_SECONDS
+                    self.events.put({
+                        "kind": "tx_log",
+                        "text": (
+                            f"Audio stream active: {audio_frames_sent} frames sent "
+                            f"({audio_duration:.1f} seconds of audio)."
+                        ),
+                    })
+                    last_audio_progress_at = progress_now
                 if audio_source in {"mic", "loopback"} and not using_silence_frame:
                     last_audio_frame_at = time.monotonic()
                 if drm_mode:
