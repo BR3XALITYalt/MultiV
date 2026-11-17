@@ -90,9 +90,9 @@ class StreamingNFMModulatorTests(unittest.TestCase):
         self.assertEqual(NFM_AUDIO_LOW_HZ, 30)
         self.assertEqual(NFM_AUDIO_HIGH_HZ, 2_000)
         self.assertEqual(NFM_CHANNEL_BANDWIDTH_HZ, 9_000)
-        self.assertLess(
+        self.assertGreater(
             NFM_IF_HZ - NFM_DEVIATION_HZ - NFM_AUDIO_HIGH_HZ,
-            500,
+            0,
         )
 
     def test_soft_limiter_preserves_quiet_audio_and_rounds_peaks(self):
