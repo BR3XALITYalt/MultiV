@@ -3,7 +3,7 @@ import json
 import tempfile
 import time
 import unittest
-from pathlib import Path
+from pathlib import Path, PosixPath
 from queue import Queue
 from unittest.mock import patch
 
@@ -36,7 +36,9 @@ class DiscordAuthValidationTests(unittest.TestCase):
         self.assertTrue(is_auth_token("signed.txity.token-value"))
 
     def test_windows_auth_token_uses_programdata(self):
-        with patch("discord_auth.os.name", "nt"), patch.dict(
+        with patch("discord_auth.os.name", "nt"), patch(
+            "discord_auth.Path", PosixPath
+        ), patch.dict(
             "discord_auth.os.environ",
             {"PROGRAMDATA": r"C:\ProgramData"},
         ):
