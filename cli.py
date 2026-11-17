@@ -19,6 +19,7 @@ from audio_playlist import build_playlist_snapshot, normalize_audio_sources
 from discord_auth import is_auth_token, safe_error_text
 from transmitter import (
     SUPPORTED_MODES,
+    build_frequency_candidates,
     build_transmit_config,
     list_audio_inputs,
     list_loopback_devices,
@@ -354,10 +355,23 @@ def build_headless_plan(
         else _setting_bool(settings, "playlist_loop", False)
     )
 
+    selected_frequency = (
+        args.frequency
+        if args.frequency is not None
+        else _setting_text(settings, "frequency", "7.250 MHz")
+    )
+    raw_fallbacks = settings.get("frequency_fallbacks", [])
+    if not isinstance(raw_fallbacks, list):
+        raw_fallbacks = []
+    frequency_candidates = build_frequency_candidates(
+        selected_frequency,
+        raw_fallbacks,
+    )
+
     config = build_transmit_config(
         station_name=args.station_name or _setting_text(settings, "station_name", ""),
         description=args.description if args.description is not None else _setting_text(settings, "description", ""),
-        frequency=args.frequency or _setting_text(settings, "frequency", "7.250 MHz"),
+        frequency=selected_frequency,
         mode=mode,
         station_dbm=args.power if args.power is not None else _setting_text(settings, "station_dbm", "50"),
         allow_overlap=allow_overlap,
@@ -395,8 +409,11 @@ def build_headless_plan(
         drm_interleaving=_setting_text(settings, "drm_interleaving", "Long (2 s)").split(" ", 1)[0].casefold(),
     )
 
+    config["rfHz"] = frequency_candidates[0][1]
     return {
         "config": config,
+        "base_config": dict(config),
+        "frequency_candidates": frequency_candidates,
         "input_device": selected_device,
         "audio_device_name": selected_device_name,
         "audio_source": audio_source,
@@ -440,6 +457,7 @@ def _handle_event(
     transmitter: Any,
     shutdown_event: threading.Event,
     state: dict[str, Any],
+    plan: dict[str, Any],
 ) -> None:
     kind = event.get("kind")
 
@@ -455,7 +473,43 @@ def _handle_event(
             state["negative_count"] = 0
             state["ptt_confirmed"] = False
         elif status == "stopped":
-            shutdown_event.set()
+            if state.get("retry_pending"):
+                candidate_index = int(state["retry_candidate_index"])
+                candidates = plan["frequency_candidates"]
+                display_frequency, frequency_hz = candidates[candidate_index]
+                retry_config = dict(plan["base_config"])
+                retry_config["rfHz"] = frequency_hz
+                plan["config"] = retry_config
+                state["frequency_index"] = candidate_index
+                state["retry_pending"] = False
+                state["negative_reason"] = None
+                state["negative_count"] = 0
+                state["ptt_confirmed"] = False
+                logger.info(
+                    "Starting alternate frequency %d of %d: %s.",
+                    candidate_index + 1,
+                    len(candidates),
+                    display_frequency,
+                )
+                try:
+                    transmitter.start(
+                        plan["config"],
+                        input_device=plan["input_device"],
+                        audio_source=plan["audio_source"],
+                        playlist_files=plan["playlist_files"],
+                        playlist_shuffle=plan["playlist_shuffle"],
+                        playlist_loop=plan["playlist_loop"],
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Could not start alternate frequency %s: %s",
+                        display_frequency,
+                        safe_error_text(str(exc), 800),
+                    )
+                    state["exit_code"] = 1
+                    shutdown_event.set()
+            else:
+                shutdown_event.set()
     elif kind == "tx_error":
         logger.error("Transmission failed: %s", safe_error_text(str(event.get("text") or ""), 800))
         state["exit_code"] = 1
@@ -514,10 +568,39 @@ def _handle_event(
 
                 if state["negative_count"] >= 2:
                     reason_text = reasons.get(reason_key, "TXITY rejected the transmission request")
-                    logger.error("TXITY did not accept PTT: %s (reason %s).", reason_text, reason_key)
-                    state["exit_code"] = 1
-                    shutdown_event.set()
-                    transmitter.stop()
+                    candidates = plan.get("frequency_candidates", [])
+                    current_index = int(state.get("frequency_index", 0))
+                    can_retry = (
+                        reason_key == "3"
+                        and not state["ptt_confirmed"]
+                        and current_index + 1 < len(candidates)
+                    )
+                    if can_retry:
+                        next_index = current_index + 1
+                        display_frequency = candidates[next_index][0]
+                        logger.warning(
+                            "TXITY denied frequency %s. Trying alternate frequency %d of %d: %s.",
+                            candidates[current_index][0],
+                            next_index + 1,
+                            len(candidates),
+                            display_frequency,
+                        )
+                        state["retry_candidate_index"] = next_index
+                        state["retry_pending"] = True
+                        transmitter.stop()
+                    else:
+                        if reason_key == "3" and len(candidates) > 1:
+                            logger.error(
+                                "TXITY rejected all %d configured frequencies. %s (reason %s).",
+                                len(candidates),
+                                reason_text,
+                                reason_key,
+                            )
+                        else:
+                            logger.error("TXITY did not accept PTT: %s (reason %s).", reason_text, reason_key)
+                        state["exit_code"] = 1
+                        shutdown_event.set()
+                        transmitter.stop()
             else:
                 logger.info("Waiting for TXITY to confirm the PTT request.")
 
@@ -577,6 +660,9 @@ def run_headless(
             "negative_reason": None,
             "negative_count": 0,
             "ptt_confirmed": False,
+            "frequency_index": 0,
+            "retry_pending": False,
+            "retry_candidate_index": 0,
         }
 
         try:
@@ -644,6 +730,7 @@ def run_headless(
                     transmitter=transmitter,
                     shutdown_event=shutdown_event,
                     state=state,
+                    plan=plan,
                 )
 
             return int(state["exit_code"])
