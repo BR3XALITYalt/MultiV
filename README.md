@@ -43,7 +43,7 @@ Configure the station, mode, audio source, playlist, and any alternate frequenci
 Run PowerShell as Administrator from the TXITPY folder. Install NSSM separately and make sure `nssm.exe` is on PATH, or pass its full path:
 
 ```powershell
-.\scripts\Install-TXITPYService.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-TXITPYService.ps1
 ```
 
 The installer uses the current Python executable, the settings file in the current user's `%APPDATA%\TXITPY` folder, and `C:\ProgramData\TXITPY\discord-token.txt`. It creates the log directory, configures automatic restart after unexpected exits, and starts the service. Pass explicit paths when the defaults do not match the machine:
@@ -63,7 +63,7 @@ The service reads the saved alternate-frequency list and follows it in order whe
 To stop and remove the service while keeping its settings, token, and logs:
 
 ```powershell
-.\scripts\Remove-TXITPYService.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Remove-TXITPYService.ps1
 ```
 
 DRM service mode does not open the desktop setup prompts. Install the required Rust, Git, CMake, and C/C++ build tools before selecting DRM for a headless service. Use `--list-inputs` or `--list-loopback-devices` to inspect device IDs before choosing `--audio-device`.
