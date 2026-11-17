@@ -178,7 +178,7 @@ class DRMConfigurationTests(unittest.TestCase):
         self.assertRegex(DECDRM_COMMIT, r"^[0-9a-f]{40}$")
 
     def test_drm_playlist_formats_are_explicit(self):
-        self.assertEqual(DRM_PLAYLIST_EXTENSIONS, {".ogg", ".opus", ".mp3", ".flac"})
+        self.assertEqual(DRM_PLAYLIST_EXTENSIONS, {".ogg", ".mp3", ".flac"})
 
     def test_writes_one_mono_xhe_aac_service_in_4_5khz_channel(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -380,16 +380,14 @@ class DRMPlaylistServerTests(unittest.TestCase):
             root = Path(folder)
             first = root / "first.ogg"
             second = root / "second.flac"
-            third = root / "third.opus"
             skipped = root / "ignored.wav"
             first.write_bytes(b"first-track-data")
             second.write_bytes(b"second-track-data")
-            third.write_bytes(b"third-track-data")
             skipped.write_bytes(b"not-a-drm-playlist-file")
             played = []
 
             server = LocalDRMPlaylistServer(
-                [str(first), str(second), str(third), str(skipped)],
+                [str(first), str(second), str(skipped)],
                 loop=False,
                 on_track=lambda *details: played.append(details),
             )
@@ -401,15 +399,12 @@ class DRMPlaylistServerTests(unittest.TestCase):
                 playlist = urlopen(server.url, timeout=3).read().decode("utf-8")
                 self.assertEqual(urlopen(playlist.splitlines()[1], timeout=3).read(), b"second-track-data")
 
-                playlist = urlopen(server.url, timeout=3).read().decode("utf-8")
-                self.assertEqual(urlopen(playlist.splitlines()[1], timeout=3).read(), b"third-track-data")
-
                 with self.assertRaises(HTTPError) as error:
                     urlopen(server.url, timeout=3)
                 self.assertEqual(error.exception.code, 410)
                 self.assertTrue(server.finished.is_set())
-                self.assertEqual([entry[1] for entry in played], [1, 2, 3])
-                self.assertEqual([entry[2] for entry in played], [3, 3, 3])
+                self.assertEqual([entry[1] for entry in played], [1, 2])
+                self.assertEqual([entry[2] for entry in played], [2, 2])
             finally:
                 server.close()
 
@@ -417,7 +412,7 @@ class DRMPlaylistServerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "audio.wav"
             path.write_bytes(b"wav")
-            with self.assertRaisesRegex(ValueError, "OGG/Vorbis, Ogg Opus, MP3, or FLAC"):
+            with self.assertRaisesRegex(ValueError, "OGG, MP3, or FLAC"):
                 LocalDRMPlaylistServer([str(path)])
 
 
