@@ -708,6 +708,39 @@ def _shutdown_headless(
     logger.info("TXITPY shutdown sequence complete.")
 
 
+def exit_headless_process(exit_code: int) -> None:
+    """Flush diagnostics and exit without waiting on unrelated library threads."""
+    logger = logging.getLogger("TXITPY")
+    current_thread = threading.current_thread()
+    lingering_threads = [
+        thread
+        for thread in threading.enumerate()
+        if thread is not current_thread and thread.is_alive() and not thread.daemon
+    ]
+    if lingering_threads:
+        names = ", ".join(
+            f"{thread.name} (ident={thread.ident})"
+            for thread in lingering_threads
+        )
+        logger.warning(
+            "Headless cleanup finished, but non-daemon worker threads remain: %s. "
+            "Exiting the service process now.",
+            names,
+        )
+    else:
+        logger.info("Headless cleanup finished; exiting the service process.")
+
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None:
+            try:
+                stream.flush()
+            except (OSError, ValueError):
+                pass
+
+    logging.shutdown()
+    os._exit(int(exit_code))
+
+
 def run_headless(
     args: argparse.Namespace,
     *,
