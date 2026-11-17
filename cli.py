@@ -20,6 +20,8 @@ from discord_auth import auth_token_path, is_auth_token, safe_error_text
 from service_stop import WindowsServiceStopWindow, hide_service_console
 from transmitter import (
     SUPPORTED_MODES,
+    apply_nfm_transport,
+    apply_rade_transport,
     build_frequency_candidates,
     build_transmit_config,
     list_audio_inputs,
@@ -421,7 +423,8 @@ def build_headless_plan(
         drm_interleaving=_setting_text(settings, "drm_interleaving", "Long (2 s)").split(" ", 1)[0].casefold(),
     )
 
-    config["rfHz"] = frequency_candidates[0][1]
+    apply_nfm_transport(config, frequency_candidates[0][1])
+    apply_rade_transport(config, frequency_candidates[0][1])
     return {
         "config": config,
         "base_config": dict(config),
@@ -503,7 +506,8 @@ def _handle_event(
                 candidates = plan["frequency_candidates"]
                 display_frequency, frequency_hz = candidates[candidate_index]
                 retry_config = dict(plan["base_config"])
-                retry_config["rfHz"] = frequency_hz
+                apply_nfm_transport(retry_config, frequency_hz)
+                apply_rade_transport(retry_config, frequency_hz)
                 plan["config"] = retry_config
                 state["frequency_index"] = candidate_index
                 state["retry_pending"] = False
