@@ -21,7 +21,7 @@ Run `python main.py --help` to see all command-line options.
 
 `--no-gui` (also accepted as `--nogui`) starts a transmission directly from the saved transmit settings. Options such as `--station-name`, `--frequency`, `--mode`, `--power`, `--audio-source`, `--audio-device`, and `--playlist` override individual saved values. Settings not overridden on the command line continue to come from the usual `transmit-settings.json` file.
 
-The Discord session token is not written to the settings file. Headless mode reads it from `TXITPY_DISCORD_AUTH_TOKEN` or from a file specified with `--auth-token-file`. Keep that file readable only by the Windows account running TXITPY and administrators. TXITPY does not print the token. The token must be current; replace it and restart the service when TXITY no longer accepts it.
+After Discord sign-in, TXITPY saves the TXITY session token to `%APPDATA%\\TXITPY\\token.txt` on Windows (or the app's configuration directory on Linux and macOS). Headless mode reads this saved token automatically. You can override the file with `--auth-token-file` or use `TXITPY_DISCORD_AUTH_TOKEN`. The token stays separate from the transmit settings, and **Disconnect Discord** removes the saved token.
 
 Examples:
 
@@ -73,6 +73,6 @@ TXITPY saves station and transmission preferences here:
 - **Windows:** `%APPDATA%\TXITPY\transmit-settings.json`
 - **Linux and macOS:** `$XDG_CONFIG_HOME/TXITPY/transmit-settings.json`, or `~/.config/TXITPY/transmit-settings.json`
 
-The settings file does not store Discord session tokens.
+The Discord session token is stored separately at `%APPDATA%\\TXITPY\\token.txt` on Windows. TXITPY removes it when you select **Disconnect Discord**.
 
 On Windows, minimize TXITPY to put it in the system tray. Select the tray icon to reopen the window.
