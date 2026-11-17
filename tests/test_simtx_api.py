@@ -193,7 +193,7 @@ class SimTxAccountClientTests(unittest.TestCase):
     def test_game_ticket_request_uses_station_binding(self) -> None:
         captured: dict[str, Any] = {}
 
-        def opener(request: Any, _timeout: float) -> FakeResponse:
+        def opener(request: Any, timeout: float) -> FakeResponse:
             captured["request"] = request
             captured["timeout"] = timeout
             return FakeResponse({
