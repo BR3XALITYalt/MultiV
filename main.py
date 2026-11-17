@@ -3842,7 +3842,7 @@ def build_app() -> None:
                     3: "frequency sharing must be enabled by both stations",
                     4: "the total transmitter limit has been reached",
                     5: "enter a station name",
-                    "2": "transmitter capacity is currently full",
+                    "2": "TXITY's transmitter capacity is full",
                     "3": "frequency sharing must be enabled by both stations",
                     "4": "the total transmitter limit has been reached",
                     "5": "enter a station name",
