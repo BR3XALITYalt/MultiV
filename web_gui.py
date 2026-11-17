@@ -95,6 +95,134 @@ body {
   color: #fff;
   font-family: "Lexend", ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
 }
+header.topbar {
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px max(14px, calc((100vw - 1040px) / 2));
+  border: 1px solid #fff;
+  border-radius: 0 0 20px 20px;
+  background: #000;
+}
+.brand { color: #fff; font-size: 21px; font-weight: 900; }
+nav a, .nav-link {
+  border: 1px solid #fff;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: #000;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: none;
+}
+nav a:hover, nav a:first-child { background: #fff; color: #000; }
+main.shell {
+  width: min(1040px, calc(100vw - 28px));
+  max-width: none;
+  margin: 0 auto;
+  padding: 36px 0;
+}
+h1 { color: #fff; font-size: clamp(30px, 5vw, 48px); letter-spacing: -.05em; margin: 0 0 8px; }
+h2 { color: #fff; font-size: 22px; margin: 0 0 16px; }
+p { color: #d7d7d7; line-height: 1.55; }
+.card, .panel {
+  max-width: 460px;
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid #fff;
+  border-radius: 24px;
+  background: #040404;
+}
+label { display: grid; gap: 8px; color: #fff; font-size: 15px; font-weight: 800; margin: 18px 0 7px; }
+input {
+  width: 100%;
+  padding: 13px 12px;
+  border: 1px solid #fff;
+  border-radius: 14px;
+  background: #000;
+  color: #fff;
+  font: inherit;
+}
+input:focus { outline: none; box-shadow: 0 0 0 4px #ffffff25; }
+button {
+  margin-top: 18px;
+  padding: 11px 18px;
+  border: 1px solid #fff;
+  border-radius: 999px;
+  background: #fff;
+  color: #000;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.error { color: #fff; font-weight: 800; }
+
+</style>
+</head>
+<body>
+<header class="topbar"><div class="brand">TXITY</div><nav><a href="/">Transmit</a></nav></header>
+<main><h1>TXITPY control panel</h1><p>Sign in to manage your TXITPY transmitter and station profile.</p>
+<section class="card panel"><h2>Local control login</h2><form method="post" action="/login">
+<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+<button type="submit">Sign in</button></form>
+<p class="error">__ERROR__</p></section></main>
+</body></html>"""
+
+
+DASHBOARD_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="csrf-token" content="__CSRF__">
+<title>TXITY - TXITPY</title>
+<style>
+:root{color-scheme:light;--blue:#1769aa;--blue-dark:#174ea6;--ink:#202124;--muted:#5f6368;--line:#dadce0;--surface:#fff;--page:#f5f7fa;--pale:#e8f0fe;--green:#137333;--red:#b3261e}
+*{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);font:15px Arial,Helvetica,sans-serif}
+header{min-height:62px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:7px max(22px,calc((100% - 1120px)/2));gap:16px}
+.brand{font-size:21px;font-weight:700;letter-spacing:.2px;color:#1a1a1a;white-space:nowrap}
+nav{display:flex;align-items:center;gap:5px;flex-wrap:wrap}nav a,nav button{color:#41464d;text-decoration:none;padding:10px 13px;border:0;background:transparent;border-radius:4px;font:inherit;cursor:pointer}
+nav a.active{background:var(--pale);color:var(--blue-dark);font-weight:600}
+main{max-width:1120px;margin:26px auto 60px;padding:0 22px}
+.hero{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:8px 0 20px}
+h1{font-size:27px;font-weight:600;margin:0 0 5px}h2{font-size:19px;font-weight:600;margin:0 0 16px}h3{font-size:15px;font-weight:600;margin:0 0 8px}
+.sub{color:var(--muted);margin:0;line-height:1.45}.status{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+.dot{width:9px;height:9px;border-radius:50%;background:#8a8f98}.dot.live{background:#188038}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px;margin:0 0 14px;min-width:0}
+.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.field{min-width:0}.field.full{grid-column:1/-1}
+label{display:block;color:#4b5057;font-size:13px;font-weight:600;margin:0 0 7px}
+input,select,textarea{width:100%;padding:10px 11px;border:1px solid #b9bec5;border-radius:4px;background:#fff;color:var(--ink);font:inherit;min-height:41px}
+textarea{min-height:150px;resize:vertical;line-height:1.45}
+input:focus,select:focus,textarea:focus{outline:2px solid #8ab4f8;outline-offset:1px;border-color:var(--blue)}
+.hint{font-size:12px;color:var(--muted);line-height:1.45;margin:6px 0 0}
+.actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:17px}
+button.primary{background:var(--blue);color:white;border:1px solid var(--blue);border-radius:4px;padding:10px 17px;font:inherit;font-weight:600;cursor:pointer}
+button.secondary{background:white;color:var(--blue-dark);border:1px solid #aeb8c4;border-radius:4px;padding:10px 15px;font:inherit;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+.checkbox{display:flex;align-items:center;gap:9px;color:var(--ink);font-weight:400}.checkbox input{width:17px;min-height:17px;margin:0}
+#notice{min-height:23px;color:var(--muted);font-size:13px;margin-top:8px}
+#notice.error{color:var(--red)}#notice.success{color:var(--green)}
+.state-box{padding:12px 14px;background:#f8f9fa;border:1px solid var(--line);border-radius:5px;color:#3c4043;line-height:1.5}
+footer{max-width:1120px;margin:0 auto;padding:0 22px 28px;color:var(--muted);font-size:12px}
+@media(max-width:720px){header{align-items:flex-start;flex-direction:column;padding:14px 18px;gap:8px}.grid,.field-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.hero{align-items:flex-start;flex-direction:column}main{margin-top:20px;padding:0 14px}}
+
+:root {
+  color-scheme: dark;
+  font-family: "Lexend", ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+  background: #000;
+  color: #fff;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #000;
+  color: #fff;
+  font-family: "Lexend", ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+}
 .shell {
   width: min(1040px, calc(100vw - 28px));
   max-width: none;
@@ -312,134 +440,6 @@ footer {
   .field.full { grid-column: auto; }
 }
 
-
-:root {
-  color-scheme: dark;
-  font-family: "Lexend", ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
-  background: #000;
-  color: #fff;
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: #000;
-  color: #fff;
-  font-family: "Lexend", ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
-}
-header.topbar {
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px max(14px, calc((100vw - 1040px) / 2));
-  border: 1px solid #fff;
-  border-radius: 0 0 20px 20px;
-  background: #000;
-}
-.brand { color: #fff; font-size: 21px; font-weight: 900; }
-nav a, .nav-link {
-  border: 1px solid #fff;
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: #000;
-  color: #fff;
-  font: inherit;
-  font-weight: 800;
-  text-decoration: none;
-}
-nav a:hover, nav a:first-child { background: #fff; color: #000; }
-main.shell {
-  width: min(1040px, calc(100vw - 28px));
-  max-width: none;
-  margin: 0 auto;
-  padding: 36px 0;
-}
-h1 { color: #fff; font-size: clamp(30px, 5vw, 48px); letter-spacing: -.05em; margin: 0 0 8px; }
-h2 { color: #fff; font-size: 22px; margin: 0 0 16px; }
-p { color: #d7d7d7; line-height: 1.55; }
-.card, .panel {
-  max-width: 460px;
-  margin-top: 24px;
-  padding: 24px;
-  border: 1px solid #fff;
-  border-radius: 24px;
-  background: #040404;
-}
-label { display: grid; gap: 8px; color: #fff; font-size: 15px; font-weight: 800; margin: 18px 0 7px; }
-input {
-  width: 100%;
-  padding: 13px 12px;
-  border: 1px solid #fff;
-  border-radius: 14px;
-  background: #000;
-  color: #fff;
-  font: inherit;
-}
-input:focus { outline: none; box-shadow: 0 0 0 4px #ffffff25; }
-button {
-  margin-top: 18px;
-  padding: 11px 18px;
-  border: 1px solid #fff;
-  border-radius: 999px;
-  background: #fff;
-  color: #000;
-  font: inherit;
-  font-weight: 800;
-  cursor: pointer;
-}
-.error { color: #fff; font-weight: 800; }
-
-</style>
-</head>
-<body>
-<header class="topbar"><div class="brand">TXITY</div><nav><a href="/">Transmit</a></nav></header>
-<main><h1>TXITPY control panel</h1><p>Sign in to manage your TXITPY transmitter and station profile.</p>
-<section class="card panel"><h2>Local control login</h2><form method="post" action="/login">
-<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
-<button type="submit">Sign in</button></form>
-<p class="error">__ERROR__</p></section></main>
-</body></html>"""
-
-
-DASHBOARD_HTML = """<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="csrf-token" content="__CSRF__">
-<title>TXITY - TXITPY</title>
-<style>
-:root{color-scheme:light;--blue:#1769aa;--blue-dark:#174ea6;--ink:#202124;--muted:#5f6368;--line:#dadce0;--surface:#fff;--page:#f5f7fa;--pale:#e8f0fe;--green:#137333;--red:#b3261e}
-*{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);font:15px Arial,Helvetica,sans-serif}
-header{min-height:62px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:7px max(22px,calc((100% - 1120px)/2));gap:16px}
-.brand{font-size:21px;font-weight:700;letter-spacing:.2px;color:#1a1a1a;white-space:nowrap}
-nav{display:flex;align-items:center;gap:5px;flex-wrap:wrap}nav a,nav button{color:#41464d;text-decoration:none;padding:10px 13px;border:0;background:transparent;border-radius:4px;font:inherit;cursor:pointer}
-nav a.active{background:var(--pale);color:var(--blue-dark);font-weight:600}
-main{max-width:1120px;margin:26px auto 60px;padding:0 22px}
-.hero{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:8px 0 20px}
-h1{font-size:27px;font-weight:600;margin:0 0 5px}h2{font-size:19px;font-weight:600;margin:0 0 16px}h3{font-size:15px;font-weight:600;margin:0 0 8px}
-.sub{color:var(--muted);margin:0;line-height:1.45}.status{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
-.dot{width:9px;height:9px;border-radius:50%;background:#8a8f98}.dot.live{background:#188038}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px;margin:0 0 14px;min-width:0}
-.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
-.field{min-width:0}.field.full{grid-column:1/-1}
-label{display:block;color:#4b5057;font-size:13px;font-weight:600;margin:0 0 7px}
-input,select,textarea{width:100%;padding:10px 11px;border:1px solid #b9bec5;border-radius:4px;background:#fff;color:var(--ink);font:inherit;min-height:41px}
-textarea{min-height:150px;resize:vertical;line-height:1.45}
-input:focus,select:focus,textarea:focus{outline:2px solid #8ab4f8;outline-offset:1px;border-color:var(--blue)}
-.hint{font-size:12px;color:var(--muted);line-height:1.45;margin:6px 0 0}
-.actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:17px}
-button.primary{background:var(--blue);color:white;border:1px solid var(--blue);border-radius:4px;padding:10px 17px;font:inherit;font-weight:600;cursor:pointer}
-button.secondary{background:white;color:var(--blue-dark);border:1px solid #aeb8c4;border-radius:4px;padding:10px 15px;font:inherit;cursor:pointer}
-button:disabled{opacity:.5;cursor:not-allowed}
-.checkbox{display:flex;align-items:center;gap:9px;color:var(--ink);font-weight:400}.checkbox input{width:17px;min-height:17px;margin:0}
-#notice{min-height:23px;color:var(--muted);font-size:13px;margin-top:8px}
-#notice.error{color:var(--red)}#notice.success{color:var(--green)}
-.state-box{padding:12px 14px;background:#f8f9fa;border:1px solid var(--line);border-radius:5px;color:#3c4043;line-height:1.5}
-footer{max-width:1120px;margin:0 auto;padding:0 22px 28px;color:var(--muted);font-size:12px}
-@media(max-width:720px){header{align-items:flex-start;flex-direction:column;padding:14px 18px;gap:8px}.grid,.field-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.hero{align-items:flex-start;flex-direction:column}main{margin-top:20px;padding:0 14px}}
 </style>
 </head>
 <body>
