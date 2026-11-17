@@ -498,7 +498,7 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["mode"], "DSB")
 
     def test_mode_bandwidth_defaults_match_txity_transmit_config(self):
-                self.assertEqual(mode_bandwidth_hz("DRM"), 12_000)
+        self.assertEqual(mode_bandwidth_hz("DRM"), 12_000)
         self.assertEqual(mode_bandwidth_hz("NFM"), 9_000)
         self.assertEqual(mode_bandwidth_hz("AM"), 12_000)
         self.assertEqual(mode_bandwidth_hz("DSB"), 12_000)
