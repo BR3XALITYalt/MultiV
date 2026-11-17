@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from audio_playlist import build_playlist_snapshot, normalize_audio_sources
-from discord_auth import is_auth_token, safe_error_text
+from discord_auth import auth_token_path, is_auth_token, safe_error_text
 from transmitter import (
     SUPPORTED_MODES,
     build_frequency_candidates,
@@ -53,7 +53,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--auth-token-file",
         type=Path,
         metavar="PATH",
-        help="Read the TXITY Discord session token from a UTF-8 text file.",
+        help="Read the TXITY session token from a UTF-8 text file (default: the saved AppData token).",
     )
     parser.add_argument(
         "--auth-token-env",
@@ -424,23 +424,23 @@ def build_headless_plan(
 
 
 def _read_auth_token(args: argparse.Namespace) -> str:
-    if args.auth_token_file is not None:
+    token_file = args.auth_token_file.expanduser() if args.auth_token_file is not None else auth_token_path()
+    if args.auth_token_file is not None or token_file.is_file():
         try:
-            token = args.auth_token_file.expanduser().read_text(encoding="utf-8-sig").strip()
+            token = token_file.read_text(encoding="utf-8-sig").strip()
         except OSError as exc:
-            raise ValueError(f"Could not read the Discord session token file: {exc}") from exc
+            raise ValueError(f"Could not read the TXITY session token file {token_file}: {exc}") from exc
+        source = f"the file {token_file}"
     else:
         token = os.environ.get(args.auth_token_env, "").strip()
+        source = (
+            f"the default token file {token_file} or environment variable {args.auth_token_env}"
+        )
 
     if not is_auth_token(token):
-        source = (
-            f"the file {args.auth_token_file}"
-            if args.auth_token_file is not None
-            else f"environment variable {args.auth_token_env}"
-        )
         raise ValueError(
             f"No valid TXITY Discord session token was found in {source}. "
-            "Use --auth-token-file or set the token environment variable."
+            "Sign in with Discord in TXITPY or set the token environment variable."
         )
     return token
 
