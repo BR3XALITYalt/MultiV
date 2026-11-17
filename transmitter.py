@@ -748,6 +748,7 @@ class TxityTransmitter:
         playlist_shuffle: bool,
         playlist_loop: bool,
     ) -> None:
+        import numpy as np
         import websocket
 
         system_awake_handle = begin_windows_system_awake()
