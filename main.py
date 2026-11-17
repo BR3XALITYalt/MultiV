@@ -54,6 +54,7 @@ from transmitter import (
     list_loopback_devices,
     parse_rf_frequency,
 )
+from web_gui import TxityWebGUI, create_password_record
 
 BASE_URL = "https://txity.radiodiscussion.org"
 CONTROL_URL = "wss://txity.radiodiscussion.org/ws/control"
@@ -1144,6 +1145,16 @@ def build_app() -> None:
     tx_details_var = tk.StringVar(root, saved_text("station_details", ""))
     tx_page_layout_var = tk.StringVar(root, saved_text("station_page_layout", ""))
 
+    web_gui_enabled_var = tk.BooleanVar(root, saved_bool("web_gui_enabled", False))
+    web_gui_password_var = tk.StringVar(root, "")
+    web_gui_status_var = tk.StringVar(root, "Web GUI is disabled.")
+    web_gui_password_salt = saved_text("web_gui_password_salt", "")
+    web_gui_password_hash = saved_text("web_gui_password_hash", "")
+    web_gui_server: TxityWebGUI | None = None
+    web_gui_commands: queue.Queue[dict[str, Any]] = queue.Queue()
+    web_gui_state_lock = threading.Lock()
+    web_gui_state: dict[str, Any] = {}
+
     tx_fade_enabled_var = tk.BooleanVar(root, saved_bool("fade_enabled", False))
     tx_fade_seconds_var = tk.StringVar(root, saved_text("fade_seconds", "15"))
     tx_fade_min_dbm_var = tk.StringVar(root, saved_text("fade_min_dbm", "25"))
@@ -1204,6 +1215,9 @@ def build_app() -> None:
             "station_logo_url": tx_logo_url_var.get(),
             "station_details": tx_details_var.get(),
             "station_page_layout": tx_page_layout_var.get(),
+            "web_gui_enabled": web_gui_enabled_var.get(),
+            "web_gui_password_salt": web_gui_password_salt,
+            "web_gui_password_hash": web_gui_password_hash,
             "fade_enabled": tx_fade_enabled_var.get(),
             "fade_seconds": tx_fade_seconds_var.get(),
             "fade_min_dbm": tx_fade_min_dbm_var.get(),
@@ -1286,7 +1300,7 @@ def build_app() -> None:
         tx_power_var, tx_audio_source_var, tx_audio_device_var,
         tx_playlist_shuffle_var, tx_playlist_loop_var, tx_cw_text_var,
         tx_cw_wpm_var, tx_cw_loop_var, tx_allow_overlap_var, tx_logo_url_var,
-        tx_details_var, tx_page_layout_var, tx_fade_enabled_var,
+        tx_details_var, tx_page_layout_var, web_gui_enabled_var, tx_fade_enabled_var,
         tx_fade_seconds_var, tx_fade_min_dbm_var, tx_fade_shape_var,
         tx_agc_enabled_var, tx_agc_target_var, tx_mic_gain_var, tx_bass_var,
         tx_treble_var, tx_presence_var, tx_drive_var, tx_nfm_transport_bandwidth_var,
@@ -1660,6 +1674,8 @@ def build_app() -> None:
                 tray_icon.stop()
             except Exception as exc:
                 pass
+        if web_gui_server is not None:
+            web_gui_server.stop()
         transmitter.stop(wait=1.0)
         client.disconnect()
         save_tx_settings_now()
@@ -1729,7 +1745,7 @@ def build_app() -> None:
 
     def navigate(page: str) -> None:
         nonlocal current_page
-        if not discord_authenticated and page != "discord":
+        if not discord_authenticated and page not in {"discord", "settings"}:
             current_page = "discord"
             build_shell()
             return
@@ -2272,6 +2288,162 @@ def build_app() -> None:
             frequency_retry_context = None
             details = safe_error_text(str(exc), 500)
             tx_status_var.set(details)
+
+    def get_web_gui_state() -> dict[str, Any]:
+        with web_gui_state_lock:
+            return dict(web_gui_state)
+
+    def publish_web_gui_state() -> None:
+        snapshot = {
+            "station_name": tx_station_name_var.get(),
+            "description": tx_description_var.get(),
+            "frequency": tx_frequency_var.get(),
+            "mode": tx_mode_var.get(),
+            "station_dbm": tx_power_var.get(),
+            "allow_overlap": tx_allow_overlap_var.get(),
+            "station_logo_url": tx_logo_url_var.get(),
+            "station_details": tx_details_var.get(),
+            "audio_source": tx_audio_source_var.get(),
+            "status": tx_status_var.get(),
+            "transmitting": transmitter.is_busy,
+            "account": account_var.get(),
+        }
+        with web_gui_state_lock:
+            web_gui_state.clear()
+            web_gui_state.update(snapshot)
+
+    def poll_web_gui_commands() -> None:
+        while True:
+            try:
+                command = web_gui_commands.get_nowait()
+            except queue.Empty:
+                break
+
+            command_type = command.get("type")
+            if command_type == "settings":
+                if transmitter.is_busy:
+                    web_gui_status_var.set(
+                        "Stop transmission before changing station or signal settings."
+                    )
+                    continue
+                values = command.get("values", {})
+                if not isinstance(values, dict):
+                    continue
+                tx_station_name_var.set(str(values.get("station_name", ""))[:48])
+                tx_description_var.set(str(values.get("description", ""))[:180])
+                tx_frequency_var.set(str(values.get("frequency", ""))[:32])
+                selected_mode = str(values.get("mode", "AM")).upper()
+                tx_mode_var.set(selected_mode)
+                tx_mode_display_var.set(
+                    "DRM [EXPERIMENTAL]" if selected_mode == "DRM" else selected_mode
+                )
+                tx_power_var.set(str(values.get("station_dbm", "50"))[:16])
+                tx_allow_overlap_var.set(bool(values.get("allow_overlap", False)))
+                tx_logo_url_var.set(str(values.get("station_logo_url", ""))[:512])
+                tx_details_var.set(str(values.get("station_details", ""))[:1200])
+                save_tx_settings_now()
+                web_gui_status_var.set("Station settings updated from the browser.")
+            elif command_type == "transmit":
+                action = command.get("action")
+                if action == "start":
+                    if transmitter.is_busy:
+                        web_gui_status_var.set("A transmission is already starting or active.")
+                    elif not discord_authenticated:
+                        web_gui_status_var.set(
+                            "Sign in to Discord in the TXITPY desktop app before transmitting."
+                        )
+                    else:
+                        toggle_transmission()
+                        web_gui_status_var.set("Transmission start requested.")
+                elif action == "stop":
+                    if transmitter.is_busy:
+                        toggle_transmission()
+                        web_gui_status_var.set("Transmission stop requested.")
+                    else:
+                        web_gui_status_var.set("No transmission is active.")
+
+        publish_web_gui_state()
+        try:
+            root.after(150, poll_web_gui_commands)
+        except tk.TclError:
+            pass
+
+    def start_web_gui_server() -> None:
+        nonlocal web_gui_server
+        if web_gui_server is not None and web_gui_server.running:
+            web_gui_status_var.set("Listening on http://0.0.0.0:23234")
+            return
+        if not web_gui_password_salt or not web_gui_password_hash:
+            raise ValueError("Set a Web GUI password before enabling the browser interface.")
+        server = TxityWebGUI(
+            host="0.0.0.0",
+            port=23234,
+            password_salt=web_gui_password_salt,
+            password_hash=web_gui_password_hash,
+            state_provider=get_web_gui_state,
+            command_submitter=web_gui_commands.put,
+        )
+        server.start()
+        web_gui_server = server
+        web_gui_status_var.set("Listening on http://0.0.0.0:23234")
+
+    def stop_web_gui_server() -> None:
+        nonlocal web_gui_server
+        if web_gui_server is not None:
+            web_gui_server.stop()
+            web_gui_server = None
+        web_gui_status_var.set("Web GUI is disabled.")
+
+    def save_web_gui_password() -> None:
+        nonlocal web_gui_password_salt, web_gui_password_hash
+        try:
+            web_gui_password_salt, web_gui_password_hash = create_password_record(
+                web_gui_password_var.get()
+            )
+        except ValueError as exc:
+            messagebox.showerror("Web GUI password", str(exc), parent=root)
+            return
+        web_gui_password_var.set("")
+        if web_gui_server is not None:
+            web_gui_server.set_credentials(web_gui_password_salt, web_gui_password_hash)
+        save_tx_settings_now()
+        if web_gui_enabled_var.get() and (web_gui_server is None or not web_gui_server.running):
+            try:
+                start_web_gui_server()
+            except (OSError, ValueError) as exc:
+                web_gui_enabled_var.set(False)
+                save_tx_settings_now()
+                web_gui_status_var.set(f"Could not start Web GUI: {exc}")
+                messagebox.showerror("Web GUI", str(exc), parent=root)
+                return
+        messagebox.showinfo(
+            "Web GUI password",
+            "Password saved as a salted PBKDF2 hash.",
+            parent=root,
+        )
+
+    def toggle_web_gui() -> None:
+        if web_gui_enabled_var.get():
+            if not web_gui_password_salt or not web_gui_password_hash:
+                web_gui_enabled_var.set(False)
+                save_tx_settings_now()
+                messagebox.showinfo(
+                    "Web GUI password required",
+                    "Set a Web GUI password before enabling the browser interface.",
+                    parent=root,
+                )
+                return
+            try:
+                start_web_gui_server()
+            except (OSError, ValueError) as exc:
+                web_gui_enabled_var.set(False)
+                save_tx_settings_now()
+                web_gui_status_var.set(f"Could not start Web GUI: {exc}")
+                messagebox.showerror("Web GUI", str(exc), parent=root)
+                return
+        else:
+            stop_web_gui_server()
+        save_tx_settings_now()
 
     def start_pending_frequency_retry() -> None:
         nonlocal frequency_retry_context
@@ -4086,6 +4258,176 @@ def build_app() -> None:
                     wraplength=790,
                 ).pack(anchor="w", pady=(3, 0))
 
+    def show_settings(parent: tk.Frame) -> None:
+        page, _canvas = create_scrollable_page(parent)
+        make_label(
+            page,
+            "Settings",
+            font=("Segoe UI", 25, "bold"),
+            background=palette["background"],
+        ).pack(anchor="w", pady=(8, 18))
+
+        profile_card = make_card(page, padding=16)
+        profile_card.pack(fill="x", pady=(0, 14))
+        make_label(
+            profile_card,
+            "Station profile",
+            font=("Segoe UI", 16, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 6))
+        make_label(
+            profile_card,
+            "These values are sent to TXITY as your public station logo and station-page details.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=820,
+        ).pack(anchor="w", pady=(0, 14))
+
+        logo_frame = tk.Frame(profile_card, bg=palette["surfaceContainerLow"])
+        logo_frame.pack(fill="x", pady=(0, 12))
+        make_label(
+            logo_frame,
+            "Station logo URL",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        logo_entry = tk.Entry(
+            logo_frame,
+            textvariable=tx_logo_url_var,
+            font=("Segoe UI", 10),
+            bg=palette["surfaceContainerLowest"],
+            fg=palette["onSurface"],
+            insertbackground=palette["onSurface"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=palette["outline"],
+            highlightcolor=palette["primary"],
+        )
+        logo_entry.pack(fill="x", ipady=7)
+
+        make_label(
+            profile_card,
+            "Station page details",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        details_text = tk.Text(
+            profile_card,
+            height=6,
+            wrap="word",
+            font=("Segoe UI", 10),
+            bg=palette["surfaceContainerLowest"],
+            fg=palette["onSurface"],
+            insertbackground=palette["onSurface"],
+            relief="flat",
+            borderwidth=1,
+            highlightthickness=1,
+            highlightbackground=palette["outline"],
+            highlightcolor=palette["primary"],
+        )
+        details_text.insert("1.0", tx_details_var.get())
+        details_text.pack(fill="x", ipady=5)
+
+        def save_details_text(_event=None) -> None:
+            tx_details_var.set(details_text.get("1.0", "end-1c")[:1200])
+
+        details_text.bind("<KeyRelease>", save_details_text)
+        details_text.bind("<FocusOut>", save_details_text)
+        make_label(
+            profile_card,
+            "Displayed when someone opens your station page. Maximum 1,200 characters.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(6, 0))
+
+        web_card = make_card(page, padding=16)
+        web_card.pack(fill="x")
+        make_label(
+            web_card,
+            "Browser control panel",
+            font=("Segoe UI", 16, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 6))
+        make_label(
+            web_card,
+            "Serve the TXITPY control interface to devices on your local network, using the TXITY transmit and station-page layout.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=820,
+        ).pack(anchor="w", pady=(0, 10))
+
+        enabled = tk.Checkbutton(
+            web_card,
+            text="Enable Web GUI",
+            variable=web_gui_enabled_var,
+            command=toggle_web_gui,
+            font=("Segoe UI", 10, "bold"),
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerLowest"],
+        )
+        enabled.pack(anchor="w", pady=(2, 12))
+
+        make_label(
+            web_card,
+            "Set or change password",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        password_row = tk.Frame(web_card, bg=palette["surfaceContainerLow"])
+        password_row.pack(fill="x")
+        password_entry = tk.Entry(
+            password_row,
+            textvariable=web_gui_password_var,
+            show="*",
+            font=("Segoe UI", 10),
+            bg=palette["surfaceContainerLowest"],
+            fg=palette["onSurface"],
+            insertbackground=palette["onSurface"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=palette["outline"],
+            highlightcolor=palette["primary"],
+        )
+        password_entry.pack(side="left", fill="x", expand=True, ipady=7, padx=(0, 8))
+        make_button(
+            password_row,
+            "Save password",
+            save_web_gui_password,
+            kind="primary",
+        ).pack(side="left")
+
+        make_label(
+            web_card,
+            variable=web_gui_status_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["primary"],
+            background=palette["surfaceContainerLow"],
+            wraplength=820,
+        ).pack(anchor="w", pady=(14, 6))
+        make_label(
+            web_card,
+            "Address: http://127.0.0.1:23234 on this computer. Other devices use this computer's LAN IP on port 23234. The password is hashed in the settings file, but HTTP does not encrypt traffic. Use this only on a trusted network and do not forward the port to the internet.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=820,
+        ).pack(anchor="w", pady=(4, 10))
+        make_button(
+            web_card,
+            "Open Web GUI",
+            lambda: webbrowser.open("http://127.0.0.1:23234"),
+            kind="tonal",
+        ).pack(anchor="w")
+
     def show_discord(parent: tk.Frame) -> None:
         page = tk.Frame(parent, bg=palette["background"])
         page.pack(fill="both", expand=True)
@@ -4197,6 +4539,7 @@ def build_app() -> None:
                 ("Transmit", "transmit"),
                 ("Stations", "stations"),
                 ("Discord", "discord"),
+                ("Settings", "settings"),
             )
             for label, destination in destinations:
                 selected = (
@@ -4268,6 +4611,8 @@ def build_app() -> None:
 
             if current_page == "transmit":
                 show_transmit(content_frame)
+            elif current_page == "settings":
+                show_settings(content_frame)
             elif current_page == "stations":
                 show_stations(content_frame)
             elif current_page == "station_detail":
@@ -4277,6 +4622,14 @@ def build_app() -> None:
             else:
                 show_transmit(content_frame)
         else:
+            make_button(
+                topbar,
+                "Settings",
+                lambda: navigate("settings"),
+                kind="text",
+                padx=10,
+                pady=8,
+            ).pack(side="left", padx=(8, 0))
             make_button(
                 topbar,
                 "Light mode" if theme_mode == "dark" else "Dark mode",
@@ -4292,7 +4645,10 @@ def build_app() -> None:
                 pady=16,
             )
             content_frame.pack(fill="both", expand=True)
-            show_gate(content_frame)
+            if current_page == "settings":
+                show_settings(content_frame)
+            else:
+                show_gate(content_frame)
 
     def apply_status(data: dict[str, Any]) -> None:
         nonlocal server_band_min_hz, server_band_max_hz
@@ -4789,6 +5145,14 @@ def build_app() -> None:
 
     build_shell()
     root.protocol("WM_DELETE_WINDOW", on_shutdown)
+    if web_gui_enabled_var.get():
+        try:
+            start_web_gui_server()
+        except (OSError, ValueError) as exc:
+            web_gui_enabled_var.set(False)
+            save_tx_settings_now()
+            web_gui_status_var.set(f"Could not start Web GUI: {exc}")
+    root.after(150, poll_web_gui_commands)
     root.after(250, drain_events)
     root.after(60_000, periodic_station_refresh)
     playlist_watch_thread = threading.Thread(
