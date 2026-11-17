@@ -5,4 +5,5 @@ numpy>=1.26
 sounddevice>=0.5.1
 PyAudioWPatch>=0.2.12.9; sys_platform == "win32"
 soundfile>=0.14.0
+av>=14.0.0
 pystray>=0.19.5; sys_platform == "win32"
