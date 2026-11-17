@@ -11,8 +11,10 @@ SUPPORTED_AUDIO_EXTENSIONS = frozenset({
     ".aif",
     ".aiff",
     ".flac",
+    ".m4a",
     ".mp3",
     ".ogg",
+    ".opus",
     ".wav",
 })
 
