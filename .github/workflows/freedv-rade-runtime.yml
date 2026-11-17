@@ -1,0 +1,129 @@
+name: FreeDV RADE V1 runtime
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/freedv-rade-runtime.yml"
+      - "freedv_rade_tx.c"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-runtime:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out TXITPY
+        uses: actions/checkout@v7
+
+      - name: Check out the pinned FreeDV RADE C implementation
+        uses: actions/checkout@v7
+        with:
+          repository: freedv/rade_c
+          ref: be66f3927eaf872a2fa2ebb4fa08f937d8bd2bce
+          path: rade_c
+
+      - name: Install the Windows cross-build toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 wine cmake autoconf automake libtool pkg-config build-essential make git zip
+
+      - name: Add the TXITPY streaming entry point
+        run: |
+          cp freedv_rade_tx.c rade_c/src/freedv_rade_tx.c
+          cat >> rade_c/src/CMakeLists.txt <<'EOF'
+
+          # TXITPY streams 16 kHz speech PCM into RADE and reads 8 kHz real audio blocks.
+          add_executable(freedv_rade_tx freedv_rade_tx.c)
+          target_link_libraries(freedv_rade_tx rade ${RADE_EXE_OPUS_LIBS})
+          EOF
+
+      - name: Cross-compile RADE V1 for Windows x64
+        run: |
+          cmake -S rade_c -B rade_c/build-win -DCMAKE_TOOLCHAIN_FILE=rade_c/cmake/toolchain-mingw64.cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build rade_c/build-win --target freedv_rade_tx --parallel 2
+
+      - name: Package the encoder and runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp rade_c/build-win/src/freedv_rade_tx.exe dist/
+          cp rade_c/build-win/src/librade.dll dist/
+
+          for binary in dist/freedv_rade_tx.exe dist/librade.dll; do
+            x86_64-w64-mingw32-objdump -p "$binary" |
+              awk '/DLL Name:/ {print $3}' |
+              grep -E '^(libgcc|libwinpthread|libssp|libstdc)[^/]*\.dll$' || true
+          done | sort -u > dist/runtime-dependencies.txt
+
+          while read -r dependency; do
+            [ -n "$dependency" ] || continue
+            resolved="$(x86_64-w64-mingw32-gcc -print-file-name="$dependency")"
+            if [ ! -f "$resolved" ]; then
+              echo "Missing MinGW runtime dependency: $dependency"
+              exit 1
+            fi
+            cp "$resolved" dist/
+          done < dist/runtime-dependencies.txt
+
+          cp rade_c/LICENSE dist/LICENSE-RADE.txt
+          opus_license="$(find rade_c/build-win -path '*/build_opus/COPYING' -print -quit)"
+          if [ -z "$opus_license" ]; then
+            echo "Could not locate the bundled Opus license."
+            exit 1
+          fi
+          cp "$opus_license" dist/LICENSE-OPUS.txt
+          cat > dist/THIRD-PARTY-NOTICES.txt <<'EOF'
+          TXITPY FreeDV RADE V1 runtime
+
+          RADE C implementation:
+          https://github.com/freedv/rade_c
+          Licensed under the BSD 2-Clause License. See LICENSE-RADE.txt.
+
+          Speech feature extraction and FARGAN vocoder:
+          Opus project.
+          https://opus-codec.org/
+          See LICENSE-OPUS.txt.
+          EOF
+
+          (cd dist && zip -9 ../txitpy-rade-v1-windows-x64.zip             freedv_rade_tx.exe librade.dll             libgcc_s_seh-1.dll libwinpthread-1.dll libssp-0.dll             LICENSE-RADE.txt LICENSE-OPUS.txt THIRD-PARTY-NOTICES.txt)
+          sha256sum txitpy-rade-v1-windows-x64.zip > txitpy-rade-v1-windows-x64.zip.sha256
+
+      - name: Check the Windows encoder starts and emits an end-of-over frame
+        run: |
+          cd dist
+          printf '' | wine ./freedv_rade_tx.exe > empty-output.bin
+          python - <<'PY'
+          import struct
+          from pathlib import Path
+
+          output = Path("empty-output.bin").read_bytes()
+          if len(output) < 4:
+              raise SystemExit("The RADE helper did not emit a frame header.")
+          sample_count = struct.unpack_from("<I", output)[0]
+          if sample_count != 1152 or len(output) != 4 + sample_count * 4:
+              raise SystemExit(
+                  f"Unexpected RADE end-of-over frame: {sample_count} samples, "
+                  f"{len(output)} output bytes."
+              )
+          print("RADE V1 streaming helper smoke test passed.")
+          PY
+
+      - name: Publish the Windows runtime
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: txitpy-rade-runtime
+          target_commitish: main
+          name: TXITPY FreeDV RADE Runtime
+          body: Prebuilt Windows x64 runtime for the FreeDV RADE V1 transmitter.
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          files: |
+            txitpy-rade-v1-windows-x64.zip
+            txitpy-rade-v1-windows-x64.zip.sha256
