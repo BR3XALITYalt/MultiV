@@ -50,7 +50,7 @@ TXITPY supports MP3, WAV, FLAC, OGG, Opus, M4A, and AIFF playlists. During playb
 
 ### NFM
 
-The **NFM** mode generates narrowband FM in TXITPY with a 5 kHz intermediate frequency, 2 kHz peak deviation, and a 250-2,500 Hz voice band. It supports microphone, desktop-audio loopback, and Playlist input. TXITY does not provide a native NFM transport mode, so TXITPY sends the generated signal through its existing USB or LSB path. The frequency entered in TXITPY is the resulting NFM channel center. The TXITY station directory displays the underlying sideband transport and its carrier, which is offset by 5 kHz. NFM is currently limited to TXITY's 7.000-8.000 MHz room and has not yet been verified with an independent receiver.
+The **NFM** mode generates narrowband FM in TXITPY with a 5 kHz intermediate frequency, 2 kHz peak deviation, and a 30-2,500 Hz audio band. Its input uses a soft limiter instead of hard clipping to reduce distortion on louder music. It supports microphone, desktop-audio loopback, and Playlist input. TXITY does not provide a native NFM transport mode, so TXITPY sends the generated signal through its existing USB or LSB path. The frequency entered in TXITPY is the resulting NFM channel center. The TXITY station directory displays the underlying sideband transport and its carrier, which is offset by 5 kHz. NFM is currently limited to TXITY's 7.000-8.000 MHz room and has not yet been verified with an independent receiver.
 
 ### DRM [EXPERIMENTAL]
 
