@@ -1083,6 +1083,9 @@ class TxityTransmitter:
         control_wait_reported = False
         secondary_status_signature = None
         secondary_status_logged_at = 0.0
+        secondary_ptt_requested_at: float | None = None
+        secondary_rejection_signature = None
+        secondary_rejection_count = 0
 
         def wait_for_control_connection() -> bool:
             nonlocal control_wait_reported
@@ -1181,6 +1184,7 @@ class TxityTransmitter:
 
         def drain_secondary_events() -> None:
             nonlocal secondary_status_signature, secondary_status_logged_at
+            nonlocal secondary_rejection_signature, secondary_rejection_count
             if secondary_client is None:
                 return
             while True:
@@ -1205,6 +1209,11 @@ class TxityTransmitter:
                         "kind": "tx_log",
                         "text": f"LSB control session server message: {str(payload)[:500]}",
                     })
+                    if isinstance(payload, dict) and str(payload.get("type") or "").lower() in {"kicked", "banned"}:
+                        raise RuntimeError(
+                            "TXITY terminated the LSB control session: "
+                            f"{_safe_error(payload.get('message') or payload.get('reason') or payload.get('type'))}"
+                        )
                 elif kind == "status":
                     status = event.get("data")
                     if not isinstance(status, dict):
@@ -1216,6 +1225,39 @@ class TxityTransmitter:
                         status.get("queuePosition"),
                     )
                     now = time.monotonic()
+                    if (
+                        secondary_ptt_requested_at is not None
+                        and now - secondary_ptt_requested_at >= PTT_CONFIRMATION_GRACE_SECONDS
+                        and status.get("ptt") is False
+                        and (
+                            status.get("txStartUsable") is False
+                            or status.get("txBlockReason") not in (None, False, "")
+                            or status.get("txStartReason") not in (None, False, "")
+                        )
+                        and not (
+                            isinstance(status.get("queuePosition"), int)
+                            and status.get("queuePosition") >= 0
+                        )
+                    ):
+                        rejection = (
+                            status.get("txStartReason", status.get("txBlockReason"))
+                            or "TXITY rejected the LSB PTT request"
+                        )
+                        if rejection == secondary_rejection_signature:
+                            secondary_rejection_count += 1
+                        else:
+                            secondary_rejection_signature = rejection
+                            secondary_rejection_count = 1
+                        if secondary_rejection_count >= 2:
+                            raise RuntimeError(
+                                "TXITY did not accept the LSB+C transmission on the second "
+                                f"account session. Server reason: {_safe_error(rejection)}. "
+                                "The paired AM (DEV) test is stopping so USB does not continue alone."
+                            )
+                    elif status.get("ptt") is True:
+                        secondary_rejection_signature = None
+                        secondary_rejection_count = 0
+
                     if signature != secondary_status_signature or now - secondary_status_logged_at >= 5.0:
                         secondary_status_signature = signature
                         secondary_status_logged_at = now
@@ -1679,6 +1721,10 @@ class TxityTransmitter:
 
                     ptt_sent = True
                     control_configured = True
+                    if secondary_client is not None:
+                        secondary_ptt_requested_at = time.monotonic()
+                        secondary_rejection_signature = None
+                        secondary_rejection_count = 0
                     last_control_generation = getattr(
                         self.client, "control_generation", None
                     )
