@@ -2087,6 +2087,1940 @@ def build_app() -> None:
             pass
 
     def toggle_transmission() -> None:
+        if transmitter.is_busy:
+            transmitter.stop()
+            tx_status_var.set("Stopping transmission...")
+            if tx_audio_source_var.get() == "Audio playlist":
+                tx_playlist_status_var.set("Stopping playlist...")
+            update_transmit_button()
+            return
+        if not discord_authenticated:
+            navigate("discord")
+            return
+
+        try:
+            config = build_transmit_config(
+                station_name=tx_station_name_var.get(),
+                description=tx_description_var.get(),
+                frequency=tx_frequency_var.get(),
+                mode=tx_mode_var.get(),
+                station_dbm=tx_power_var.get(),
+                allow_overlap=tx_allow_overlap_var.get(),
+                auth_token=client.auth_token,
+                cw_text=tx_cw_text_var.get(),
+                cw_wpm=tx_cw_wpm_var.get(),
+                cw_loop=tx_cw_loop_var.get(),
+                station_logo_url=tx_logo_url_var.get(),
+                station_details=tx_details_var.get(),
+                station_page_layout=tx_page_layout_var.get(),
+                fade_enabled=tx_fade_enabled_var.get(),
+                fade_seconds=tx_fade_seconds_var.get(),
+                fade_min_dbm=tx_fade_min_dbm_var.get(),
+                fade_shape=tx_fade_shape_var.get().split("-", 1)[0].strip(),
+                agc_enabled=tx_agc_enabled_var.get(),
+                agc_target=tx_agc_target_var.get(),
+                mic_gain_db=tx_mic_gain_var.get(),
+                bass_db=tx_bass_var.get(),
+                treble_db=tx_treble_var.get(),
+                presence_db=tx_presence_var.get(),
+                drive=tx_drive_var.get(),
+                ssb_bandwidth_hz=tx_ssb_bandwidth_var.get(),
+                ssb_low_cut_hz=tx_ssb_low_cut_var.get(),
+                ssb_high_cut_hz=tx_ssb_high_cut_var.get(),
+                am_bandwidth_hz=tx_am_bandwidth_var.get(),
+                am_pre_emphasis=tx_am_pre_emphasis_var.get(),
+                drm_service_label=tx_drm_service_label_var.get(),
+                drm_service_id=tx_drm_service_id_var.get(),
+                drm_language=tx_drm_language_var.get(),
+                drm_programme_type=tx_drm_programme_type_var.get(),
+                drm_iso_language=tx_drm_iso_language_var.get(),
+                drm_iso_country=tx_drm_iso_country_var.get(),
+                drm_audio_codec=tx_drm_audio_codec_var.get(),
+                drm_msc_mode=tx_drm_msc_mode_var.get(),
+                drm_interleaving=tx_drm_interleaving_var.get().split(" ", 1)[0].casefold(),
+            )
+            if config["mode"] == "CW":
+                audio_source = "mic"
+            else:
+                audio_source = {
+                    "Desktop audio (output loopback)": "loopback",
+                    "Audio playlist": "playlist",
+                }.get(tx_audio_source_var.get(), "mic")
+            playlist_files = list(tx_playlist_files) if audio_source == "playlist" else []
+            selected_device = (
+                tx_audio_device_ids.get(tx_audio_device_var.get())
+                if audio_source in {"mic", "loopback"}
+                else None
+            )
+            if config["mode"] != "CW" and selected_device is None and audio_source == "loopback":
+                raise ValueError("Select a desktop output device for loopback capture.")
+            if audio_source == "playlist" and not playlist_files:
+                raise ValueError("Add at least one audio file or folder to the playlist.")
+            transmitter.start(
+                config,
+                input_device=selected_device,
+                audio_source=audio_source,
+                playlist_files=playlist_files,
+                playlist_shuffle=tx_playlist_shuffle_var.get(),
+                playlist_loop=tx_playlist_loop_var.get(),
+            )
+            tx_status_var.set("Preparing transmission...")
+            if audio_source == "playlist":
+                tx_playlist_status_var.set("Preparing playlist...")
+            update_transmit_button()
+        except Exception as exc:
+            details = safe_error_text(str(exc), 500)
+            tx_status_var.set(details)
+
+    def show_transmit(parent: tk.Frame) -> None:
+        nonlocal tx_transmit_button, playlist_ui_refresh_callback
+
+        page, _canvas = create_scrollable_page(parent)
+
+        hero = tk.Frame(page, bg=palette["background"])
+        hero.pack(fill="x", pady=(6, 16))
+        make_label(
+            hero,
+            "TXITPY",
+            font=("Segoe UI", 28, "bold"),
+            background=palette["background"],
+        ).pack(side="left")
+        make_label(
+            hero,
+            "Transmit",
+            font=("Segoe UI", 11, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["background"],
+        ).pack(side="left", padx=(12, 0), pady=(9, 0))
+        make_label(
+            hero,
+            variable=connection_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["background"],
+        ).pack(side="right", pady=(10, 0))
+
+        def add_tx_entry(
+            parent_frame: tk.Misc,
+            label: str,
+            variable: tk.StringVar,
+            *,
+            column: int,
+            row: int,
+        ) -> tk.Entry:
+            wrapper = tk.Frame(parent_frame, bg=palette["surfaceContainerLow"])
+            wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
+            make_label(
+                wrapper,
+                label,
+                font=("Segoe UI", 9, "bold"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w", pady=(0, 4))
+            entry = tk.Entry(
+                wrapper,
+                textvariable=variable,
+                font=("Segoe UI", 10),
+                bg=palette["surfaceContainerLowest"],
+                fg=palette["onSurface"],
+                insertbackground=palette["onSurface"],
+                selectbackground=palette["primaryContainer"],
+                selectforeground=palette["onPrimaryContainer"],
+                relief="flat",
+                borderwidth=1,
+                highlightthickness=1,
+                highlightbackground=palette["outline"],
+                highlightcolor=palette["primary"],
+            )
+            entry.pack(fill="x", ipady=7)
+            return entry
+
+        def style_tx_combobox(widget: ttk.Combobox) -> None:
+            style = ttk.Style(root)
+            style.configure(
+                "TXITY.Transmit.TCombobox",
+                fieldbackground=palette["surfaceContainerLowest"],
+                background=palette["surfaceContainerHigh"],
+                foreground=palette["onSurface"],
+                arrowcolor=palette["onSurface"],
+                bordercolor=palette["outline"],
+                lightcolor=palette["outline"],
+                darkcolor=palette["outline"],
+                padding=(10, 8),
+            )
+            style.map(
+                "TXITY.Transmit.TCombobox",
+                fieldbackground=[
+                    ("readonly", palette["surfaceContainerLowest"]),
+                    ("disabled", palette["surfaceContainer"]),
+                ],
+                foreground=[
+                    ("readonly", palette["onSurface"]),
+                    ("disabled", palette["onSurfaceVariant"]),
+                ],
+                bordercolor=[
+                    ("focus", palette["primary"]),
+                    ("!focus", palette["outline"]),
+                ],
+            )
+            widget.configure(style="TXITY.Transmit.TCombobox", font=("Segoe UI", 11))
+            # A wheel over a closed combobox should move the page, not cycle options.
+            widget.bind("<MouseWheel>", scroll_active_canvas)
+            widget.bind("<Button-4>", lambda event: scroll_active_canvas(event, -1))
+            widget.bind("<Button-5>", lambda event: scroll_active_canvas(event, 1))
+
+        station_card = make_card(page, padding=16)
+        station_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            station_card,
+            "Station",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 10))
+
+        station_fields = tk.Frame(station_card, bg=palette["surfaceContainerLow"])
+        station_fields.pack(fill="x")
+        station_fields.grid_columnconfigure(0, weight=1, uniform="station-fields")
+        station_fields.grid_columnconfigure(1, weight=1, uniform="station-fields")
+        add_tx_entry(station_fields, "Station name (required)", tx_station_name_var, column=0, row=0)
+        add_tx_entry(station_fields, "Short description", tx_description_var, column=1, row=0)
+        add_tx_entry(station_fields, "Transmit frequency", tx_frequency_var, column=0, row=1)
+        make_label(
+            station_card,
+            variable=tx_frequency_check_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=860,
+        ).pack(anchor="w", padx=6, pady=(8, 0))
+        update_frequency_check()
+
+        signal_card = make_card(page, padding=16)
+        signal_card.pack(fill="x", pady=(0, 12))
+
+        drm_metadata_slot = tk.Frame(page, bg=palette["background"])
+        drm_metadata_slot.pack(fill="x")
+        drm_metadata_card = make_card(drm_metadata_slot, padding=16)
+        make_label(
+            drm_metadata_card,
+            "DRM service metadata",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        make_label(
+            drm_metadata_card,
+            "These values are broadcast in the DRM service information. A blank service label uses the station name.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=860,
+        ).pack(anchor="w", pady=(0, 10))
+
+        drm_metadata_fields = tk.Frame(drm_metadata_card, bg=palette["surfaceContainerLow"])
+        drm_metadata_fields.pack(fill="x")
+        drm_metadata_fields.grid_columnconfigure(0, weight=1, uniform="drm-metadata")
+        drm_metadata_fields.grid_columnconfigure(1, weight=1, uniform="drm-metadata")
+        add_tx_entry(
+            drm_metadata_fields,
+            "Service label (optional, max 16 characters)",
+            tx_drm_service_label_var,
+            column=0,
+            row=0,
+        )
+        add_tx_entry(
+            drm_metadata_fields,
+            "Service ID (hexadecimal, 24-bit)",
+            tx_drm_service_id_var,
+            column=1,
+            row=0,
+        )
+
+        language_frame = tk.Frame(drm_metadata_fields, bg=palette["surfaceContainerLow"])
+        language_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            language_frame,
+            "Language",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        drm_language_picker = ttk.Combobox(
+            language_frame,
+            textvariable=tx_drm_language_var,
+            values=DRM_LANGUAGES,
+            state="readonly",
+            height=10,
+        )
+        drm_language_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_language_picker)
+
+        programme_type_frame = tk.Frame(drm_metadata_fields, bg=palette["surfaceContainerLow"])
+        programme_type_frame.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
+        make_label(
+            programme_type_frame,
+            "Programme type",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        drm_programme_type_picker = ttk.Combobox(
+            programme_type_frame,
+            textvariable=tx_drm_programme_type_var,
+            values=DRM_PROGRAMME_TYPES,
+            state="readonly",
+            height=12,
+        )
+        drm_programme_type_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_programme_type_picker)
+
+        add_tx_entry(
+            drm_metadata_fields,
+            "ISO language code (optional, e.g. eng)",
+            tx_drm_iso_language_var,
+            column=0,
+            row=2,
+        )
+        add_tx_entry(
+            drm_metadata_fields,
+            "Country code (optional, e.g. US)",
+            tx_drm_iso_country_var,
+            column=1,
+            row=2,
+        )
+
+        make_label(
+            drm_metadata_card,
+            "Audio settings",
+            font=("Segoe UI", 12, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(14, 8))
+
+        drm_audio_fields = tk.Frame(drm_metadata_card, bg=palette["surfaceContainerLow"])
+        drm_audio_fields.pack(fill="x")
+        drm_audio_fields.grid_columnconfigure(0, weight=1, uniform="drm-audio")
+        drm_audio_fields.grid_columnconfigure(1, weight=1, uniform="drm-audio")
+
+        codec_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        codec_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            codec_frame,
+            "Audio codec",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        drm_codec_picker = ttk.Combobox(
+            codec_frame,
+            textvariable=tx_drm_audio_codec_var,
+            values=DRM_AUDIO_CODECS,
+            state="readonly",
+            height=4,
+        )
+        drm_codec_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_codec_picker)
+        make_label(
+            codec_frame,
+            "xHE-AAC is designed for better quality at low bitrates. Use HE-AAC for older decoders.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
+        interleaving_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        interleaving_frame.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
+        make_label(
+            interleaving_frame,
+            "Interleaving",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        drm_interleaving_picker = ttk.Combobox(
+            interleaving_frame,
+            textvariable=tx_drm_interleaving_var,
+            values=("Long (2 s)", "Short (400 ms)"),
+            state="readonly",
+            height=4,
+        )
+        drm_interleaving_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_interleaving_picker)
+        make_label(
+            interleaving_frame,
+            "Long interleaving improves resistance to fading, with a little more decoding delay.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
+        msc_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        msc_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            msc_frame,
+            "MSC modulation",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        drm_msc_picker = ttk.Combobox(
+            msc_frame,
+            textvariable=tx_drm_msc_mode_var,
+            values=DRM_MSC_MODES,
+            state="readonly",
+            height=4,
+        )
+        drm_msc_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_msc_picker)
+        make_label(
+            msc_frame,
+            "16-QAM is more robust but carries less audio data. 64-QAM has more capacity when reception is strong.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
+        def update_drm_metadata_visibility() -> None:
+            if tx_mode_var.get().strip().upper() == "DRM":
+                if not drm_metadata_card.winfo_manager():
+                    drm_metadata_card.pack(fill="x", pady=(0, 12))
+            else:
+                drm_metadata_card.pack_forget()
+        make_label(
+            signal_card,
+            "Signal settings",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 10))
+
+        signal_fields = tk.Frame(signal_card, bg=palette["surfaceContainerLow"])
+        signal_fields.pack(fill="x")
+        signal_fields.grid_columnconfigure(0, weight=3, uniform="signal-fields")
+        signal_fields.grid_columnconfigure(1, weight=2, uniform="signal-fields")
+
+        mode_frame = tk.Frame(signal_fields, bg=palette["surfaceContainerLow"])
+        mode_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            mode_frame,
+            "Signal type",
+            font=("Segoe UI", 10, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        mode_picker = ttk.Combobox(
+            mode_frame,
+            textvariable=tx_mode_var,
+            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "DRM", "CW"),
+            state="readonly",
+            height=8,
+        )
+        mode_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(mode_picker)
+
+        mode_help = make_label(
+            mode_frame,
+            variable=tx_mode_help_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=570,
+        )
+        mode_help.pack(anchor="w", pady=(6, 0))
+
+        def update_mode_help(_event=None) -> None:
+            descriptions = {
+                "AM": "AM - normal AM with carrier.",
+                "USB": "USB - upper sideband.",
+                "LSB": "LSB - lower sideband.",
+                "USB+C": "USB+C - upper sideband with carrier.",
+                "LSB+C": "LSB+C - lower sideband with carrier.",
+                "DSB": "DSB - double-sideband suppressed carrier.",
+                "DRM": "DRM30 - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Microphone and OGG, MP3, or FLAC playlists are supported.",
+                "CW": "CW - carrier only. The microphone and desktop audio sources are not used.",
+            }
+            tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
+            update_drm_metadata_visibility()
+            update_frequency_check()
+
+        def restore_previous_mode() -> None:
+            previous = str(drm_setup_state.get("previous_mode") or "AM")
+            tx_mode_var.set(previous)
+            update_mode_help()
+
+        def set_mode_picker_enabled(enabled: bool) -> None:
+            try:
+                if mode_picker.winfo_exists():
+                    mode_picker.configure(state="readonly" if enabled else "disabled")
+            except tk.TclError:
+                pass
+
+        drm_progressbar: ttk.Progressbar | None = None
+
+        def set_drm_progress_visible(visible: bool) -> None:
+            progress = drm_progressbar
+            if progress is None:
+                return
+            try:
+                if not progress.winfo_exists():
+                    return
+                if visible:
+                    progress.pack(fill="x", pady=(12, 0))
+                    progress.start(25)
+                else:
+                    progress.stop()
+                    progress.pack_forget()
+            except tk.TclError:
+                pass
+
+        def start_drm_setup() -> None:
+            drm_setup_state["running"] = True
+            previous_mode = str(drm_setup_state.get("previous_mode") or "AM")
+            tx_mode_var.set(previous_mode)
+            tx_mode_help_var.set("Setting up DRM30. Downloading and building its encoder...")
+            tx_status_var.set("Preparing DRM dependencies...")
+            set_drm_progress_visible(True)
+            set_mode_picker_enabled(False)
+
+            def setup_worker() -> None:
+                def report(line: str) -> None:
+                    drm_setup_events.put(("log", line))
+
+                try:
+                    encoder = prepare_drm_encoder(on_log=report)
+                except Exception as exc:
+                    drm_setup_events.put(("error", str(exc)))
+                else:
+                    drm_setup_events.put(("success", str(encoder)))
+
+            threading.Thread(
+                target=setup_worker,
+                daemon=True,
+                name="txitpy-drm-setup",
+            ).start()
+            root.after(150, poll_drm_setup)
+
+
+        def poll_drm_setup() -> None:
+            completed = False
+            while True:
+                try:
+                    kind, value = drm_setup_events.get_nowait()
+                except queue.Empty:
+                    break
+
+                if kind == "log":
+                    tx_status_var.set(value[:240])
+                elif kind == "success":
+                    completed = True
+                    drm_setup_state["running"] = False
+                    set_drm_progress_visible(False)
+                    drm_setup_state["previous_mode"] = "DRM"
+                    tx_mode_var.set("DRM")
+                    tx_status_var.set("DRM encoder is ready.")
+                    update_mode_help()
+                    set_mode_picker_enabled(True)
+                elif kind == "error":
+                    completed = True
+                    drm_setup_state["running"] = False
+                    set_drm_progress_visible(False)
+                    restore_previous_mode()
+                    tx_status_var.set("DRM setup failed.")
+                    set_mode_picker_enabled(True)
+                    messagebox.showerror(
+                        "DRM setup failed",
+                        value,
+                        parent=root,
+                    )
+
+            if not completed and drm_setup_state["running"]:
+                root.after(150, poll_drm_setup)
+
+        def handle_mode_selection(_event=None) -> None:
+            selected = tx_mode_var.get().strip().upper()
+            if selected != "DRM":
+                if not drm_setup_state["running"]:
+                    drm_setup_state["previous_mode"] = selected
+                update_mode_help()
+                return
+
+            if drm_setup_state["running"]:
+                return
+
+            status = drm_setup_status()
+            if status.get("ready"):
+                drm_setup_state["previous_mode"] = "DRM"
+                update_mode_help()
+                return
+
+            missing_build_tools = [
+                str(item) for item in (status.get("missing_build_tools") or [])
+            ]
+            if missing_build_tools:
+                from drm_support import VISUAL_STUDIO_BUILD_TOOLS_LABEL
+
+                if (
+                    os.name == "nt"
+                    and missing_build_tools == [VISUAL_STUDIO_BUILD_TOOLS_LABEL]
+                ):
+                    install_prompt = (
+                        "DRM needs Microsoft's Visual Studio C++ Build Tools.\n\n"
+                        "TXITPY can download the official installer and add the "
+                        "'Desktop development with C++' workload, including the MSVC compiler "
+                        "and Windows SDK. The installer may request administrator approval. "
+                        "TXITPY will then continue installing any missing DRM dependencies.\n\n"
+                        "Install the C++ build tools and continue setting up DRM?"
+                    )
+                    if messagebox.askyesno(
+                        "Install DRM build tools",
+                        install_prompt,
+                        parent=root,
+                    ):
+                        start_drm_setup()
+                    else:
+                        restore_previous_mode()
+                    return
+
+                restore_previous_mode()
+                messagebox.showerror(
+                    "DRM build tools missing",
+                    "DRM needs these build tools, which TXITPY could not detect:\n\n"
+                    + "\n".join(missing_build_tools)
+                    + "\n\nInstall the missing tools, then select DRM again.",
+                    parent=root,
+                )
+                return
+
+            missing = [str(item) for item in (status.get("missing") or [])]
+            if not missing:
+                missing = ["the DRM encoder has not been built on this computer"]
+
+            if not status.get("rust_ready") and os.name != "nt":
+                restore_previous_mode()
+                messagebox.showinfo(
+                    "Rust is required for DRM",
+                    "Install Rust 1.88 or newer from https://rust-lang.org/tools/install, "
+                    "then restart TXITPY and select DRM again.",
+                    parent=root,
+                )
+                webbrowser.open("https://rust-lang.org/tools/install")
+                return
+
+            prompt = (
+                "DRM mode is not ready. TXITPY could not detect:\n\n"
+                + "\n".join(f"• {item}" for item in missing)
+                + "\n\nDownload and install the missing components and build the DRM encoder now? "
+                "TXITPY will select DRM when setup finishes."
+            )
+            if not messagebox.askyesno("Set up DRM30", prompt, parent=root):
+                restore_previous_mode()
+                return
+
+            start_drm_setup()
+
+        mode_picker.bind("<<ComboboxSelected>>", handle_mode_selection)
+        update_mode_help()
+        if tx_mode_var.get().strip().upper() == "DRM":
+            root.after_idle(handle_mode_selection)
+
+        power_frame = tk.Frame(signal_fields, bg=palette["surfaceContainerLow"])
+        power_frame.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
+        make_label(
+            power_frame,
+            "Station power",
+            font=("Segoe UI", 10, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 6))
+        power_scale = tk.Scale(
+            power_frame,
+            variable=tx_power_var,
+            from_=-140,
+            to=53,
+            resolution=1,
+            orient="horizontal",
+            showvalue=True,
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
+            borderwidth=0,
+            relief="flat",
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            troughcolor=palette["surfaceContainerHighest"],
+            activebackground=palette["primary"],
+            font=("Segoe UI", 9),
+        )
+        power_scale.pack(fill="x", expand=True, pady=(1, 0))
+        make_label(
+            power_frame,
+            variable=tx_power_readout_var,
+            font=("Segoe UI", 10, "bold"),
+            color=palette["primary"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="e", pady=(3, 0))
+
+        sharing = tk.Checkbutton(
+            signal_card,
+            text="Allow shared frequency overlap with stations that also enable sharing",
+            variable=tx_allow_overlap_var,
+            command=update_frequency_check,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerHighest"],
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
+            bd=0,
+            anchor="w",
+        )
+        sharing.pack(anchor="w", padx=6, pady=(8, 0))
+
+        fade_card = make_card(page, padding=16)
+        fade_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            fade_card,
+            "Signal fading",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 8))
+        fade_enabled = tk.Checkbutton(
+            fade_card,
+            text="Enable signal fading",
+            variable=tx_fade_enabled_var,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerHighest"],
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
+            bd=0,
+            anchor="w",
+        )
+        fade_enabled.pack(anchor="w", padx=6, pady=(0, 6))
+        fade_fields = tk.Frame(fade_card, bg=palette["surfaceContainerLow"])
+        fade_fields.pack(fill="x")
+        fade_fields.grid_columnconfigure(0, weight=1, uniform="fade-fields")
+        fade_fields.grid_columnconfigure(1, weight=1, uniform="fade-fields")
+        fade_seconds_entry = add_tx_entry(
+            fade_fields, "Fade cycle length (10-60 seconds)",
+            tx_fade_seconds_var, column=0, row=0,
+        )
+        fade_min_entry = add_tx_entry(
+            fade_fields, "Lowest power point (-140 to 50 dBm)",
+            tx_fade_min_dbm_var, column=1, row=0,
+        )
+        fade_shape_frame = tk.Frame(fade_fields, bg=palette["surfaceContainerLow"])
+        fade_shape_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=6)
+        make_label(
+            fade_shape_frame,
+            "Fade style",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        fade_shape_values = tuple(
+            f"{shape_id} - {shape_name}" for shape_id, shape_name in fade_shape_names.items()
+        )
+        fade_shape_picker = ttk.Combobox(
+            fade_shape_frame,
+            textvariable=tx_fade_shape_var,
+            values=fade_shape_values,
+            state="readonly",
+            height=6,
+        )
+        fade_shape_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(fade_shape_picker)
+        fade_shape_help_var = tk.StringVar(root)
+        def update_fade_shape_help(_event=None) -> None:
+            selected_shape_id = tx_fade_shape_var.get().split("-", 1)[0].strip()
+            fade_shape_help_var.set(fade_shape_names.get(selected_shape_id, "Choose a fade curve."))
+        fade_shape_picker.bind("<<ComboboxSelected>>", update_fade_shape_help)
+        update_fade_shape_help()
+        make_label(
+            fade_shape_frame,
+            variable=fade_shape_help_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(5, 0))
+
+        def update_fade_controls(*_args) -> None:
+            state = "normal" if tx_fade_enabled_var.get() else "disabled"
+            fade_seconds_entry.configure(state=state)
+            fade_min_entry.configure(state=state)
+            fade_shape_picker.configure(state="readonly" if state == "normal" else "disabled")
+        tx_fade_enabled_var.trace_add("write", update_fade_controls)
+        update_fade_controls()
+
+        audio_filter_card = make_card(page, padding=16)
+        audio_filter_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            audio_filter_card,
+            "Audio processing and filters",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 8))
+        agc_row = tk.Frame(audio_filter_card, bg=palette["surfaceContainerLow"])
+        agc_row.pack(fill="x", padx=6, pady=(0, 8))
+        agc_toggle = tk.Checkbutton(
+            agc_row,
+            text="Server AGC enabled",
+            variable=tx_agc_enabled_var,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerHighest"],
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
+            bd=0,
+            anchor="w",
+        )
+        agc_toggle.pack(side="left")
+        audio_filter_grid = tk.Frame(audio_filter_card, bg=palette["surfaceContainerLow"])
+        audio_filter_grid.pack(fill="x")
+        for column in range(2):
+            audio_filter_grid.grid_columnconfigure(column, weight=1, uniform="audio-filter-fields")
+
+        def add_audio_scale(
+            label: str,
+            variable: tk.StringVar,
+            minimum: float,
+            maximum: float,
+            step: float,
+            formatter,
+            row: int,
+            column: int,
+        ) -> None:
+            wrapper = tk.Frame(audio_filter_grid, bg=palette["surfaceContainerLow"])
+            wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
+            make_label(
+                wrapper,
+                label,
+                font=("Segoe UI", 9, "bold"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w")
+            value_var = tk.StringVar(root, "")
+            def update_readout(*_args) -> None:
+                try:
+                    value_var.set(formatter(float(variable.get())))
+                except (TypeError, ValueError):
+                    value_var.set("Invalid value")
+            variable.trace_add("write", update_readout)
+            update_readout()
+            scale = tk.Scale(
+                wrapper,
+                variable=variable,
+                from_=minimum,
+                to=maximum,
+                resolution=step,
+                orient="horizontal",
+                showvalue=False,
+                highlightthickness=2,
+                highlightbackground=palette["surfaceContainerLow"],
+                highlightcolor=palette["primary"],
+                cursor="hand2",
+                takefocus=True,
+                borderwidth=0,
+                relief="flat",
+                bg=palette["surfaceContainerLow"],
+                fg=palette["onSurface"],
+                troughcolor=palette["surfaceContainerHighest"],
+                activebackground=palette["primary"],
+                font=("Segoe UI", 9),
+            )
+            scale.pack(fill="x", pady=(1, 0))
+            make_label(
+                wrapper,
+                variable=value_var,
+                font=("Segoe UI", 9, "bold"),
+                color=palette["primary"],
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="e")
+
+        add_audio_scale("AGC target level", tx_agc_target_var, 0.16, 0.24, 0.01,
+                        lambda value: f"{value:.2f} RMS", 0, 0)
+        add_audio_scale("Microphone gain", tx_mic_gain_var, -6, 6, 1,
+                        lambda value: f"{value:+.0f} dB", 0, 1)
+        add_audio_scale("Bass", tx_bass_var, -4, 4, 1,
+                        lambda value: f"{value:+.0f} dB", 1, 0)
+        add_audio_scale("Treble", tx_treble_var, -4, 4, 1,
+                        lambda value: f"{value:+.0f} dB", 1, 1)
+        add_audio_scale("Presence / clarity", tx_presence_var, -1, 1, 1,
+                        lambda value: f"{value:+.0f} dB", 2, 0)
+        add_audio_scale("Compression / drive", tx_drive_var, 0, 0.025, 0.005,
+                        lambda value: f"{value * 100:.1f}%", 2, 1)
+        add_audio_scale("SSB voice width", tx_ssb_bandwidth_var, 2400, 10000, 100,
+                        lambda value: f"{value / 1000:.1f} kHz", 3, 0)
+        add_audio_scale("SSB low cut", tx_ssb_low_cut_var, 0, 2000, 25,
+                        lambda value: f"{value:.0f} Hz", 3, 1)
+        add_audio_scale("SSB high edge cut", tx_ssb_high_cut_var, 0, 3000, 25,
+                        lambda value: f"{value:.0f} Hz", 4, 0)
+        add_audio_scale("AM / DSB bandwidth", tx_am_bandwidth_var, 3000, 12000, 500,
+                        lambda value: f"{value / 1000:.1f} kHz", 4, 1)
+        am_pre_emphasis = tk.Checkbutton(
+            audio_filter_card,
+            text="AM pre-emphasis (brighter audio)",
+            variable=tx_am_pre_emphasis_var,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerHighest"],
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
+            bd=0,
+            anchor="w",
+        )
+        am_pre_emphasis.pack(anchor="w", padx=6, pady=(7, 0))
+        make_label(
+            audio_filter_card,
+            "These processing values are sent with the TXITY virtual-service configuration when transmission starts.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", padx=6, pady=(7, 0))
+
+        audio_card = make_card(page, padding=16)
+        audio_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            audio_card,
+            "Audio source",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 10))
+
+        audio_fields = tk.Frame(audio_card, bg=palette["surfaceContainerLow"])
+        audio_fields.pack(fill="x")
+        audio_fields.grid_columnconfigure(0, weight=1, uniform="audio-fields")
+        audio_fields.grid_columnconfigure(1, weight=1, uniform="audio-fields")
+
+        source_frame = tk.Frame(audio_fields, bg=palette["surfaceContainerLow"])
+        source_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            source_frame,
+            "Audio source",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        source_picker = ttk.Combobox(
+            source_frame,
+            textvariable=tx_audio_source_var,
+            values=(
+                "Microphone / line input",
+                "Desktop audio (output loopback)",
+                "Audio playlist",
+            ),
+            state="readonly",
+            height=4,
+        )
+        source_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(source_picker)
+
+        device_frame = tk.Frame(audio_fields, bg=palette["surfaceContainerLow"])
+        device_frame.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
+        make_label(
+            device_frame,
+            variable=tx_audio_device_label_var,
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        device_picker = ttk.Combobox(
+            device_frame,
+            textvariable=tx_audio_device_var,
+            values=("System default",),
+            state="readonly",
+            height=8,
+        )
+        device_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(device_picker)
+
+        playlist_frame = tk.Frame(audio_fields, bg=palette["surfaceContainerLow"])
+        playlist_frame.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=6,
+            pady=6,
+        )
+        make_label(
+            playlist_frame,
+            "Playlist",
+            font=("Segoe UI", 10, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 5))
+        playlist_count_var = tk.StringVar(root, f"{len(tx_playlist_files)} tracks")
+        make_label(
+            playlist_frame,
+            variable=playlist_count_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+
+        playlist_list_frame = tk.Frame(playlist_frame, bg=palette["surfaceContainerLow"])
+        playlist_list_frame.pack(fill="x", pady=(0, 7))
+        playlist_listbox = tk.Listbox(
+            playlist_list_frame,
+            height=7,
+            selectmode="extended",
+            exportselection=False,
+            activestyle="none",
+            bg=palette["surfaceContainerLowest"],
+            fg=palette["onSurface"],
+            selectbackground=palette["primary"],
+            selectforeground=palette["onPrimary"],
+            highlightthickness=2,
+            highlightbackground=palette["outlineVariant"],
+            highlightcolor=palette["primary"],
+            relief="flat",
+            borderwidth=1,
+            font=("Segoe UI", 9),
+            takefocus=True,
+        )
+        playlist_listbox.pack(side="left", fill="both", expand=True)
+        playlist_scrollbar = ttk.Scrollbar(
+            playlist_list_frame,
+            orient="vertical",
+            command=playlist_listbox.yview,
+        )
+        playlist_scrollbar.pack(side="right", fill="y")
+        playlist_listbox.configure(yscrollcommand=playlist_scrollbar.set)
+
+        playlist_display_paths: list[str] = []
+
+        def update_playlist_list() -> None:
+            selected_paths = {
+                playlist_display_paths[index].casefold()
+                for index in playlist_listbox.curselection()
+                if 0 <= index < len(playlist_display_paths)
+            }
+            try:
+                playlist_listbox.delete(0, tk.END)
+                playlist_display_paths.clear()
+                name_counts: dict[str, int] = {}
+                for file_path in tx_playlist_files:
+                    base_name = Path(file_path).name
+                    name_counts[base_name.casefold()] = name_counts.get(base_name.casefold(), 0) + 1
+                for index, file_path in enumerate(tx_playlist_files):
+                    playlist_display_paths.append(file_path)
+                    file_path_obj = Path(file_path)
+                    display = file_path_obj.name
+                    if name_counts.get(display.casefold(), 0) > 1:
+                        display = f"{display}  ({file_path_obj.parent.name})"
+                    playlist_listbox.insert(tk.END, display)
+                    if file_path.casefold() in selected_paths:
+                        playlist_listbox.selection_set(index)
+                playlist_count_var.set(
+                    f"{len(tx_playlist_files)} track" + ("" if len(tx_playlist_files) == 1 else "s")
+                )
+            except tk.TclError:
+                return
+
+        playlist_ui_refresh_callback = update_playlist_list
+
+        def canonical_playlist_path(value: str | Path) -> str:
+            return str(Path(value).expanduser().resolve(strict=False)).casefold()
+
+        def playlist_path_is_within(candidate: str | Path, folder: str | Path) -> bool:
+            candidate_path = canonical_playlist_path(candidate)
+            folder_path = canonical_playlist_path(folder)
+            try:
+                return os.path.commonpath((candidate_path, folder_path)) == folder_path
+            except ValueError:
+                return False
+
+        def add_playlist_sources(sources: list[str] | tuple[str, ...]) -> None:
+            normalized_sources = normalize_audio_sources(sources)
+            if not normalized_sources:
+                tx_playlist_status_var.set("No supported audio files or folders were found.")
+                return
+
+            added_sources: list[str] = []
+            exclusions_cleared = False
+            with playlist_watch_lock:
+                existing_sources = {canonical_playlist_path(item) for item in tx_playlist_sources}
+                for source in normalized_sources:
+                    identity = canonical_playlist_path(source)
+                    source_path = Path(source)
+                    if identity not in existing_sources:
+                        tx_playlist_sources.append(source)
+                        existing_sources.add(identity)
+                        added_sources.append(source)
+
+                    if source_path.is_dir():
+                        exclusions_to_clear = [
+                            excluded for excluded in tx_playlist_excluded_files
+                            if playlist_path_is_within(excluded, source_path)
+                        ]
+                        if exclusions_to_clear:
+                            tx_playlist_excluded_files.difference_update(exclusions_to_clear)
+                            exclusions_cleared = True
+                    elif identity in tx_playlist_excluded_files:
+                        tx_playlist_excluded_files.discard(identity)
+                        exclusions_cleared = True
+
+            if added_sources or exclusions_cleared:
+                added, _removed = refresh_playlist_from_sources()
+                if added:
+                    tx_playlist_status_var.set(f"Added {added} track(s).")
+                elif exclusions_cleared:
+                    tx_playlist_status_var.set("Playlist entries restored.")
+                elif any(Path(item).is_dir() for item in added_sources):
+                    tx_playlist_status_var.set(
+                        "Folder added. TXITPY will refresh the playlist when its contents change."
+                    )
+                else:
+                    tx_playlist_status_var.set("Those audio files are already in the playlist.")
+            else:
+                tx_playlist_status_var.set("Those files and folders are already in the playlist.")
+
+        def add_playlist_files() -> None:
+            selected = filedialog.askopenfilenames(
+                parent=root,
+                title="Add audio files",
+                filetypes=(
+                    ("Audio files", "*.wav *.flac *.ogg *.aiff *.aif *.mp3"),
+                    ("All files", "*.*"),
+                ),
+            )
+            if selected:
+                add_playlist_sources(selected)
+
+        def add_playlist_folder() -> None:
+            selected = filedialog.askdirectory(
+                parent=root,
+                title="Add audio folder",
+                mustexist=True,
+            )
+            if selected:
+                add_playlist_sources([selected])
+
+        def remove_playlist_selection() -> None:
+            selected = sorted(playlist_listbox.curselection())
+            if not selected:
+                return
+            removed_paths = [
+                tx_playlist_files[index]
+                for index in selected
+                if 0 <= index < len(tx_playlist_files)
+            ]
+            with playlist_watch_lock:
+                for file_path in removed_paths:
+                    identity = canonical_playlist_path(file_path)
+                    tx_playlist_excluded_files.add(identity)
+                    tx_playlist_sources[:] = [
+                        source for source in tx_playlist_sources
+                        if canonical_playlist_path(source) != identity
+                    ]
+            refresh_playlist_from_sources()
+            tx_playlist_status_var.set(f"Removed {len(removed_paths)} track(s).")
+
+        def clear_playlist() -> None:
+            with playlist_watch_lock:
+                tx_playlist_sources.clear()
+                tx_playlist_excluded_files.clear()
+            refresh_playlist_from_sources()
+            tx_playlist_status_var.set("Playlist cleared.")
+
+        def refresh_playlist_manually() -> None:
+            added, removed = refresh_playlist_from_sources()
+            tx_playlist_status_var.set(
+                f"Playlist refreshed: {added} added, {removed} removed."
+            )
+
+        playlist_actions = tk.Frame(playlist_frame, bg=palette["surfaceContainerLow"])
+        playlist_actions.pack(fill="x", pady=(0, 6))
+        make_button(
+            playlist_actions,
+            "Add files",
+            add_playlist_files,
+            kind="tonal",
+            padx=12,
+            pady=7,
+        ).pack(side="left", padx=(0, 6))
+        make_button(
+            playlist_actions,
+            "Add folder",
+            add_playlist_folder,
+            kind="tonal",
+            padx=12,
+            pady=7,
+        ).pack(side="left", padx=(0, 6))
+        make_button(
+            playlist_actions,
+            "Remove selected",
+            remove_playlist_selection,
+            kind="tonal",
+            padx=12,
+            pady=7,
+        ).pack(side="left", padx=(0, 6))
+        make_button(
+            playlist_actions,
+            "Clear",
+            clear_playlist,
+            kind="text",
+            padx=10,
+            pady=7,
+        ).pack(side="left")
+        make_button(
+            playlist_actions,
+            "Refresh",
+            refresh_playlist_manually,
+            kind="text",
+            padx=10,
+            pady=7,
+        ).pack(side="left")
+
+        playlist_options = tk.Frame(playlist_frame, bg=palette["surfaceContainerLow"])
+        playlist_options.pack(fill="x", pady=(2, 4))
+        for label, variable in (
+            ("Shuffle playlist", tx_playlist_shuffle_var),
+            ("Loop playlist", tx_playlist_loop_var),
+        ):
+            option = tk.Checkbutton(
+                playlist_options,
+                text=label,
+                variable=variable,
+                bg=palette["surfaceContainerLow"],
+                fg=palette["onSurface"],
+                activebackground=palette["surfaceContainerLow"],
+                activeforeground=palette["onSurface"],
+                selectcolor=palette["surfaceContainerHighest"],
+                highlightthickness=2,
+                highlightbackground=palette["surfaceContainerLow"],
+                highlightcolor=palette["primary"],
+                cursor="hand2",
+                takefocus=True,
+                bd=0,
+                anchor="w",
+            )
+            option.pack(side="left", padx=(0, 18))
+
+        make_label(
+            playlist_frame,
+            variable=tx_playlist_status_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(3, 0))
+        make_label(
+            playlist_frame,
+            "Supported files: WAV, FLAC, OGG, AIFF, and MP3. Added folders refresh automatically when files change.",
+            font=("Segoe UI", 8, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(4, 0))
+        playlist_listbox.bind(
+            "<Delete>",
+            lambda _event: remove_playlist_selection(),
+        )
+        update_playlist_list()
+
+        def refresh_audio_devices(_event=None) -> None:
+            tx_audio_device_ids.clear()
+            selected_source = tx_audio_source_var.get()
+            if selected_source == "Audio playlist":
+                return
+            if selected_source == "Desktop audio (output loopback)":
+                tx_audio_device_label_var.set("Desktop output device")
+                try:
+                    devices = list_loopback_devices()
+                except Exception as exc:
+                    devices = []
+                    details = safe_error_text(str(exc), 300)
+                    tx_status_var.set(details)
+                values = []
+                for device_id, device_name in devices:
+                    tx_audio_device_ids[device_name] = device_id
+                    values.append(device_name)
+                if not values:
+                    values = ["No desktop loopback devices found"]
+                    tx_audio_device_var.set(values[0])
+                    device_picker.configure(values=values)
+                    return
+            else:
+                tx_audio_device_label_var.set("Microphone / line input")
+                tx_audio_device_ids["System default"] = None
+                values = ["System default"]
+                try:
+                    for device_id, device_name in list_audio_inputs():
+                        display = f"{device_id}: {device_name}"
+                        tx_audio_device_ids[display] = device_id
+                        values.append(display)
+                except Exception as exc:
+                    details = safe_error_text(str(exc), 300)
+                    tx_status_var.set(details)
+
+            device_picker.configure(values=values)
+            if tx_audio_device_var.get() not in tx_audio_device_ids:
+                tx_audio_device_var.set(values[0])
+
+        source_picker.bind("<<ComboboxSelected>>", lambda _event: update_audio_source_controls())
+        refresh_button = make_button(
+            audio_card,
+            "Refresh audio devices",
+            refresh_audio_devices,
+            kind="tonal",
+            padx=12,
+            pady=7,
+        )
+        refresh_button.pack(anchor="w", padx=6, pady=(8, 2))
+
+        def update_audio_source_controls() -> None:
+            base_sources = (
+                "Microphone / line input",
+                "Desktop audio (output loopback)",
+                "Audio playlist",
+            )
+            source_values = base_sources
+            source_picker.configure(values=source_values)
+            if tx_audio_source_var.get() not in source_values:
+                tx_audio_source_var.set("Microphone / line input")
+
+            selected_source = tx_audio_source_var.get()
+            if selected_source == "Audio playlist":
+                device_frame.grid_remove()
+                playlist_frame.grid()
+                refresh_button.pack_forget()
+            else:
+                playlist_frame.grid_remove()
+                device_frame.grid()
+                if refresh_button.winfo_manager() != "pack":
+                    refresh_button.pack(anchor="w", padx=6, pady=(8, 2))
+                refresh_audio_devices()
+
+        tx_mode_var.trace_add("write", lambda *_args: update_audio_source_controls())
+        update_audio_source_controls()
+
+        make_label(
+            audio_card,
+            "Choose a microphone, desktop output, or playlist. DRM mode supports microphone and playlist input. "
+            "CW mode uses its configured message instead of an audio source.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", padx=6, pady=(7, 0))
+
+        cw_card = make_card(page, padding=16)
+        cw_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            cw_card,
+            "CW message",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 8))
+        cw_fields = tk.Frame(cw_card, bg=palette["surfaceContainerLow"])
+        cw_fields.pack(fill="x")
+        cw_fields.grid_columnconfigure(0, weight=3, uniform="cw-fields")
+        cw_fields.grid_columnconfigure(1, weight=1, uniform="cw-fields")
+        add_tx_entry(cw_fields, "Message", tx_cw_text_var, column=0, row=0)
+        add_tx_entry(cw_fields, "Speed (5-60 WPM)", tx_cw_wpm_var, column=1, row=0)
+        cw_loop = tk.Checkbutton(
+            cw_card,
+            text="Repeat CW message",
+            variable=tx_cw_loop_var,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerHighest"],
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
+            bd=0,
+            anchor="w",
+        )
+        cw_loop.pack(anchor="w", padx=6, pady=(8, 0))
+
+        connect_card = make_card(page, padding=16)
+        connect_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            connect_card,
+            "How to connect",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w")
+        make_label(
+            connect_card,
+            "TXITY provides a virtual SDR++ Server feed. Connect your SDR++ client to the "
+            "server endpoint shown by TXITY, then start the transmission here. TXITPY sends "
+            "audio to TXITY's virtual service and does not control local RF hardware.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(6, 0))
+
+        status_card = make_card(page, padding=16)
+        status_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            status_card,
+            variable=tx_status_var,
+            font=("Segoe UI", 11, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w")
+        progress_style = ttk.Style(root)
+        progress_style.configure(
+            "TXITY.Horizontal.TProgressbar",
+            background=palette["primary"],
+            troughcolor=palette["surfaceContainerHighest"],
+            bordercolor=palette["surfaceContainerLow"],
+            lightcolor=palette["primary"],
+            darkcolor=palette["primary"],
+            thickness=8,
+        )
+        drm_progressbar = ttk.Progressbar(
+            status_card,
+            mode="indeterminate",
+            maximum=100,
+            style="TXITY.Horizontal.TProgressbar",
+        )
+
+        tx_transmit_button = make_button(
+            page,
+            "Stop Transmission" if transmitter.is_busy else "Start Transmission",
+            toggle_transmission,
+            kind="primary",
+            padx=24,
+            pady=12,
+        )
+        tx_transmit_button.pack(anchor="w", pady=(0, 12))
+
+        make_label(
+            page,
+            "TXITPY streams selected audio only to TXITY's virtual service.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["background"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(0, 8))
+
+    def show_station_detail(parent: tk.Frame) -> None:
+        row = next(
+            (item for item in station_rows if str(item.get("id", "")) == selected_station_id),
+            None,
+        )
+        if row is None:
+            make_button(parent, "Back to stations", lambda: navigate("stations"), kind="tonal").pack(anchor="w")
+            make_label(
+                parent,
+                "This station is no longer in the current listing.",
+                color=palette["onSurfaceVariant"],
+                background=palette["background"],
+            ).pack(anchor="w", pady=18)
+            return
+
+        page, _canvas = create_scrollable_page(parent)
+        make_button(
+            page,
+            "← Back to stations",
+            lambda: navigate("stations"),
+            kind="text",
+            padx=10,
+            pady=7,
+        ).pack(anchor="w", pady=(5, 12))
+
+        make_label(
+            page,
+            "LIVE STATION",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["primary"],
+            background=palette["background"],
+        ).pack(anchor="w")
+        make_label(
+            page,
+            str(row.get("station", "Unknown station")),
+            font=("Segoe UI", 28, "bold"),
+            background=palette["background"],
+            wraplength=900,
+        ).pack(anchor="w", pady=(2, 1))
+        short_description = str(
+            row.get("description")
+            or row.get("details_text")
+            or "No short description has been added."
+        )
+        make_label(
+            page,
+            short_description,
+            font=("Segoe UI", 11, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["background"],
+            wraplength=900,
+        ).pack(anchor="w", pady=(0, 16))
+
+        profile = make_card(page, padding=16)
+        profile.pack(fill="x", pady=(0, 12))
+        upper = tk.Frame(profile, bg=palette["surfaceContainerLow"])
+        upper.pack(fill="x")
+
+        logo = make_image_label(upper, str(row.get("logo_url") or ""), size=176, placeholder="ST", role=f"station profile logo: {row.get('station', 'unknown')}")
+        logo.pack(side="left", padx=(0, 16), pady=(0, 12))
+
+        heading = tk.Frame(upper, bg=palette["surfaceContainerLow"])
+        heading.pack(side="left", fill="both", expand=True)
+        make_label(
+            heading,
+            str(row.get("frequency") or "Frequency not reported"),
+            font=("Segoe UI", 18, "bold"),
+            color=palette["primary"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(4, 8))
+        make_label(
+            heading,
+            f"{row.get('mode') or 'Mode not reported'}  ·  {row.get('on_air') or 'On-air time not reported'}",
+            font=("Segoe UI", 10, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 8))
+        make_label(
+            heading,
+            f"★ {row.get('rating_average'):.2f} ({row.get('rating_count', 0)})"
+            if isinstance(row.get("rating_average"), (int, float)) and row.get("rating_count")
+            else "Not rated yet",
+            font=("Segoe UI", 11, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w")
+        make_label(
+            heading,
+            f"♡ {row.get('likes', 0)} likes",
+            font=("Segoe UI", 10, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(7, 0))
+
+        divider = tk.Frame(profile, bg=palette["outlineVariant"], height=1)
+        divider.pack(fill="x", pady=(4, 14))
+
+        owner = tk.Frame(profile, bg=palette["surfaceContainerLow"])
+        owner.pack(fill="x")
+        avatar_url = str(row.get("avatar_url") or "")
+        avatar = make_image_label(
+            owner,
+            avatar_url,
+            size=42,
+            placeholder="D",
+            role=f"station owner avatar: {row.get('station', 'unknown')}",
+        )
+        avatar.pack(side="left", padx=(0, 10))
+        make_label(
+            owner,
+            f"Discord user: {row.get('operator') or 'Unknown'}",
+            font=("Segoe UI", 10, "normal"),
+            background=palette["surfaceContainerLow"],
+        ).pack(side="left", anchor="center")
+
+        profile_details = str(row.get("details_text") or "").strip()
+        if profile_details:
+            make_label(
+                profile,
+                profile_details,
+                font=("Segoe UI", 10, "normal"),
+                background=palette["surfaceContainerLow"],
+                wraplength=820,
+                justify="left",
+            ).pack(anchor="w", pady=(16, 2))
+
+        page_layout = row.get("page_layout")
+        if isinstance(page_layout, dict) and page_layout.get("blocks"):
+            layout_card = make_card(page, padding=12)
+            layout_card.pack(fill="x", pady=(0, 15))
+            make_label(
+                layout_card,
+                "Station page",
+                font=("Segoe UI", 15, "bold"),
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w", pady=(0, 10))
+            layout_height = page_layout.get("height", 420)
+            layout_height = max(320, min(1_200, int(layout_height)))
+            layout = tk.Frame(
+                layout_card,
+                bg=palette["surfaceContainerLowest"],
+                height=layout_height,
+            )
+            layout.pack(fill="x")
+            layout.pack_propagate(False)
+            for block in page_layout["blocks"]:
+                block_type = block.get("type", "text")
+                x = max(0.0, min(100.0, float(block.get("x", 8))))
+                y = max(0.0, min(100.0, float(block.get("y", 8))))
+                width = max(5.0, min(100.0, float(block.get("width", 84))))
+                height = max(8.0, min(900.0, float(block.get("height", 72))))
+                if block_type == "separator":
+                    tk.Frame(layout, bg=palette["outlineVariant"], height=2).place(
+                        relx=x / 100, rely=y / 100, relwidth=width / 100, height=2
+                    )
+                elif block_type == "image" and block.get("image_url"):
+                    image_block = make_image_label(
+                        layout,
+                        str(block.get("image_url")),
+                        size=min(360, max(80, int(width * 5))),
+                        placeholder="Image",
+                        role=f"station page image: {row.get('station', 'unknown')}",
+                    )
+                    image_block.place(
+                        relx=x / 100,
+                        rely=y / 100,
+                        relwidth=width / 100,
+                        height=min(300, height),
+                    )
+                else:
+                    font_name = str(block.get("font") or "Segoe UI")
+                    if font_name not in {"Lexend", "Segoe UI", "Georgia", "Courier New", "Impact", "system-ui"}:
+                        font_name = "Segoe UI"
+                    font_size = int(block.get("font_size", 18))
+                    font_weight = int(block.get("font_weight", 400))
+                    font_style = "bold" if font_weight >= 600 else "normal"
+                    text_align = str(block.get("align") or "left")
+                    text_widget = make_label(
+                        layout,
+                        str(block.get("text") or ""),
+                        font=(font_name if font_name != "system-ui" else "Segoe UI", font_size, font_style),
+                        background=palette["surfaceContainerLowest"],
+                        justify=text_align,
+                        anchor="center" if text_align == "center" else ("e" if text_align == "right" else "w"),
+                        wraplength=620,
+                    )
+                    text_widget.place(
+                        relx=x / 100,
+                        rely=y / 100,
+                        relwidth=width / 100,
+                        height=min(300, height),
+                    )
+        else:
+            details_text = profile_details or "No extra station details yet."
+            details_card = make_card(page, padding=16)
+            details_card.pack(fill="x", pady=(0, 12))
+            make_label(
+                details_card,
+                "Station details",
+                font=("Segoe UI", 15, "bold"),
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w", pady=(0, 8))
+            make_label(
+                details_card,
+                details_text,
+                font=("Segoe UI", 10, "normal"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+                wraplength=840,
+            ).pack(anchor="w")
+
+        gallery_urls = [
+            url for url in row.get("image_urls", [])
+            if isinstance(url, str) and url and url != row.get("logo_url")
+        ]
+        if gallery_urls:
+            gallery_card = make_card(page, padding=16)
+            gallery_card.pack(fill="x", pady=(0, 12))
+            make_label(
+                gallery_card,
+                "Images",
+                font=("Segoe UI", 15, "bold"),
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w", pady=(0, 10))
+            gallery = tk.Frame(gallery_card, bg=palette["surfaceContainerLow"])
+            gallery.pack(anchor="w")
+            for url in gallery_urls[:6]:
+                make_image_label(gallery, url, size=140, placeholder="Image", role=f"station gallery: {row.get('station', 'unknown')}").pack(
+                    side="left",
+                    padx=(0, 10),
+                )
+
+        comments = row.get("comments") if isinstance(row.get("comments"), list) else []
+        comments_card = make_card(page, padding=16)
+        comments_card.pack(fill="x", pady=(0, 16))
+        make_label(
+            comments_card,
+            f"Comments ({row.get('comment_count', len(comments))})",
+            font=("Segoe UI", 16, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 12))
+        if not comments:
+            make_label(
+                comments_card,
+                "No comments have been posted.",
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).pack(anchor="w")
+        else:
+            for comment in comments[:30]:
+                comment_row = tk.Frame(comments_card, bg=palette["surfaceContainerLow"])
+                comment_row.pack(fill="x", pady=(0, 12))
+                comment_avatar = make_image_label(
+                    comment_row,
+                    str(comment.get("avatar_url") or ""),
+                    size=40,
+                    placeholder="D",
+                    role=f"comment avatar: {comment.get('author', 'unknown')}",
+                )
+                comment_avatar.pack(side="left", padx=(0, 10))
+                comment_body = tk.Frame(comment_row, bg=palette["surfaceContainerLow"])
+                comment_body.pack(side="left", fill="x", expand=True)
+                comment_title = str(comment.get("author") or "TXITY user")
+                timestamp = str(comment.get("timestamp") or "")
+                make_label(
+                    comment_body,
+                    f"{comment_title}  {timestamp}".strip(),
+                    font=("Segoe UI", 9, "bold"),
+                    background=palette["surfaceContainerLow"],
+                ).pack(anchor="w")
+                make_label(
+                    comment_body,
+                    str(comment.get("text") or ""),
+                    font=("Segoe UI", 9, "normal"),
+                    color=palette["onSurfaceVariant"],
+                    background=palette["surfaceContainerLow"],
+                    wraplength=790,
+                ).pack(anchor="w", pady=(3, 0))
+
+    def show_discord(parent: tk.Frame) -> None:
+        page = tk.Frame(parent, bg=palette["background"])
+        page.pack(fill="both", expand=True)
+
+        make_label(
+            page,
+            "Discord account",
+            font=("Segoe UI", 25, "bold"),
+            background=palette["background"],
+        ).pack(anchor="w", pady=(8, 18))
+
+        card = make_card(page, padding=16)
+        card.pack(fill="x")
+
+        make_label(
+            card,
+            variable=account_var,
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w")
+
+        make_label(
+            card,
+            variable=auth_status_var,
+            font=("Segoe UI", 10, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=780,
+        ).pack(anchor="w", pady=(10, 18))
+
+        buttons = tk.Frame(card, bg=palette["surfaceContainerLow"])
+        buttons.pack(anchor="w")
+        make_button(
+            buttons,
+            "Sign in with Discord",
+            on_sign_in,
+            kind="primary",
+        ).pack(side="left", padx=(0, 8))
+        make_button(
+            buttons,
+            "Disconnect Discord",
+            disconnect_discord,
+            kind="tonal",
+        ).pack(side="left")
+
+        description = (
+            "TXITPY uses TXITY's official Discord sign-in flow. Your website session "
+            "is kept in a separate browser profile and checked automatically when the "
+            "desktop app starts. The active session token remains in memory."
+        )
+        make_label(
+            card,
+            description,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=780,
+        ).pack(anchor="w", pady=(22, 0))
+
+        make_label(
+            page,
+            f"Server: {BASE_URL}",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["primary"],
+            background=palette["background"],
+        ).pack(anchor="w", pady=(18, 0))
+
+    def build_shell() -> None:
+        nonlocal shell_frame, content_frame, nav_frame, station_cards_frame, tx_transmit_button
+
+        nonlocal active_scroll_canvas
+        active_scroll_canvas = None
+        for child in root.winfo_children():
+            child.destroy()
+
+        station_cards_frame = None
+        nav_frame = None
+        tx_transmit_button = None
+        shell_frame = tk.Frame(root, bg=palette["background"])
+        shell_frame.pack(fill="both", expand=True)
+
+        topbar = SurfaceFrame(
+            shell_frame,
+            background=palette["surfaceContainerLow"],
+            outside=palette["background"],
+            outline=palette["outlineVariant"],
+            padding=10,
+            padding_x=28,
+            padding_y=8,
+        )
+        topbar.configure(height=64)
+        topbar.pack(fill="x", padx=18, pady=(12, 10))
+        topbar.pack_propagate(False)
+
+        make_label(
+            topbar,
+            "TXITPY",
+            font=("Segoe UI", 17, "bold"),
+            color=palette["primary"],
+            background=palette["surfaceContainerLow"],
+        ).pack(side="left", padx=(2, 12))
+
+        if discord_authenticated:
+            navigation = tk.Frame(topbar, bg=palette["surfaceContainerLow"])
+            navigation.pack(side="left", fill="y")
+
+            destinations = (
+                ("Transmit", "transmit"),
+                ("Stations", "stations"),
+                ("Discord", "discord"),
+            )
+            for label, destination in destinations:
+                selected = (
+                    current_page == destination
+                    or (destination == "stations" and current_page == "station_detail")
+                )
+                nav_button = FlatButton(
+                    navigation,
+                    label,
+                    lambda target=destination: navigate(target),
+                    background=(
+                        palette["primaryContainer"]
+                        if selected else palette["surfaceContainerLow"]
+                    ),
+                    foreground=(
+                        palette["onPrimaryContainer"]
+                        if selected else palette["onSurfaceVariant"]
+                    ),
+                    hover_background=(
+                        palette["primaryContainer"]
+                        if selected else palette["surfaceContainerHigh"]
+                    ),
+                    hover_foreground=palette["onPrimaryContainer"],
+                    outside=palette["surfaceContainerLow"],
+                    outline=(
+                        palette["primaryContainer"]
+                        if selected else palette["surfaceContainerLow"]
+                    ),
+                    focus_color=palette["primary"],
+                    font=("Segoe UI", 10, "bold" if selected else "normal"),
+                    padding_x=14,
+                    padding_y=9,
+                )
+                nav_button.pack(side="left", padx=2, pady=2)
+
+            make_button(
+                topbar,
+                "Open TXITY",
+                lambda: webbrowser.open(BASE_URL),
+                kind="text",
+                padx=10,
+                pady=8,
+            ).pack(side="left", padx=(8, 0))
+
+            make_button(
+                topbar,
+                "Light mode" if theme_mode == "dark" else "Dark mode",
+                toggle_theme,
+                kind="tonal",
+                padx=12,
+                pady=7,
+            ).pack(side="right", padx=(8, 2))
+
+            make_label(
+                topbar,
+                variable=connection_var,
+                font=("Segoe UI", 8, "normal"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).pack(side="right", padx=(6, 8))
+
+            content_frame = tk.Frame(
+                shell_frame,
+                bg=palette["background"],
+                padx=20,
+                pady=10,
+            )
+            content_frame.pack(fill="both", expand=True)
+
+            if current_page == "transmit":
+                show_transmit(content_frame)
+            elif current_page == "stations":
+                show_stations(content_frame)
+            elif current_page == "station_detail":
+                show_station_detail(content_frame)
+            elif current_page == "discord":
+                show_discord(content_frame)
+            else:
+                show_transmit(content_frame)
+        else:
+            make_button(
+                topbar,
+                "Light mode" if theme_mode == "dark" else "Dark mode",
+                toggle_theme,
+                kind="tonal",
+                padx=12,
+                pady=7,
+            ).pack(side="right")
+            content_frame = tk.Frame(
+                shell_frame,
+                bg=palette["background"],
+                padx=20,
+                pady=16,
+            )
+            content_frame.pack(fill="both", expand=True)
+            show_gate(content_frame)
+
+    def apply_status(data: dict[str, Any]) -> None:
+        nonlocal server_band_min_hz, server_band_max_hz
+        nonlocal tx_negative_status_reason, tx_negative_status_count
+        nonlocal tx_ptt_confirmed, tx_terminal_server_message
+        low, high = data.get("bandMinHz"), data.get("bandMaxHz")
+        if isinstance(low, (int, float)) and isinstance(high, (int, float)):
+            server_band_min_hz = int(low)
+            server_band_max_hz = int(high)
+        else:
+            server_band_min_hz = None
+            server_band_max_hz = None
+        update_frequency_check()
+
         if transmitter.is_busy and data.get("ptt") is True:
             if not tx_ptt_confirmed:
                 tx_ptt_confirmed = True
