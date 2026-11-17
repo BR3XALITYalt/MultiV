@@ -45,6 +45,7 @@ from drm_support import (
 )
 from transmitter import (
     TxityTransmitter,
+    apply_nfm_transport,
     build_frequency_candidates,
     build_transmit_config,
     find_frequency_overlaps,
@@ -1069,7 +1070,14 @@ def build_app() -> None:
         if str(value).strip()
     ][:7]
     tx_frequency_check_var = tk.StringVar(root, "Waiting for TXITY station data.")
-    tx_mode_var = tk.StringVar(root, saved_text("mode", "AM"))
+    saved_mode = saved_text("mode", "AM").strip().upper()
+    if saved_mode == "DRM [EXPERIMENTAL]":
+        saved_mode = "DRM"
+    tx_mode_var = tk.StringVar(root, saved_mode)
+    tx_mode_display_var = tk.StringVar(
+        root,
+        "DRM [EXPERIMENTAL]" if saved_mode == "DRM" else saved_mode,
+    )
     tx_mode_help_var = tk.StringVar(root, "AM uses a carrier with upper and lower sidebands.")
     tx_drm_service_label_var = tk.StringVar(root, saved_text("drm_service_label", ""))
     tx_drm_service_id_var = tk.StringVar(root, saved_text("drm_service_id", "0xB30001"))
@@ -2201,7 +2209,7 @@ def build_app() -> None:
                 tx_frequency_var.get(),
                 [variable.get() for variable in tx_frequency_fallback_vars],
             )
-            config["rfHz"] = candidates[0][1]
+            apply_nfm_transport(config, candidates[0][1])
             frequency_retry_context = {
                 "base_config": dict(config),
                 "candidates": candidates,
@@ -2250,7 +2258,7 @@ def build_app() -> None:
 
         display_text, frequency_hz = candidate
         retry_config = dict(context["base_config"])
-        retry_config["rfHz"] = frequency_hz
+        apply_nfm_transport(retry_config, frequency_hz)
         context["current_index"] = int(context["next_index"]) - 1
 
         tx_negative_status_reason = None
@@ -2713,8 +2721,8 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(0, 5))
         mode_picker = ttk.Combobox(
             mode_frame,
-            textvariable=tx_mode_var,
-            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "DRM", "CW"),
+            textvariable=tx_mode_display_var,
+            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "DRM [EXPERIMENTAL]", "CW"),
             state="readonly",
             height=8,
         )
@@ -2739,7 +2747,8 @@ def build_app() -> None:
                 "USB+C": "USB+C - upper sideband with carrier.",
                 "LSB+C": "LSB+C - lower sideband with carrier.",
                 "DSB": "DSB - double-sideband suppressed carrier.",
-                "DRM": "DRM30 - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Microphone and OGG, MP3, or FLAC playlists are supported.",
+                "NFM": "NFM - software-generated narrow FM with 2 kHz peak deviation and a 5 kHz IF. The entered frequency is the FM channel center; TXITY carries it through its existing USB or LSB transport.",
+                "DRM": "DRM [EXPERIMENTAL] - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Microphone and OGG, MP3, or FLAC playlists are supported.",
                 "CW": "CW - carrier only. The microphone and desktop audio sources are not used.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
@@ -2749,6 +2758,9 @@ def build_app() -> None:
         def restore_previous_mode() -> None:
             previous = str(drm_setup_state.get("previous_mode") or "AM")
             tx_mode_var.set(previous)
+            tx_mode_display_var.set(
+                "DRM [EXPERIMENTAL]" if previous == "DRM" else previous
+            )
             update_mode_help()
 
         def set_mode_picker_enabled(enabled: bool) -> None:
@@ -2780,6 +2792,9 @@ def build_app() -> None:
             drm_setup_state["running"] = True
             previous_mode = str(drm_setup_state.get("previous_mode") or "AM")
             tx_mode_var.set(previous_mode)
+            tx_mode_display_var.set(
+                "DRM [EXPERIMENTAL]" if previous_mode == "DRM" else previous_mode
+            )
             tx_mode_help_var.set("Setting up DRM30. Downloading and building its encoder...")
             tx_status_var.set("Preparing DRM dependencies...")
             set_drm_progress_visible(True)
@@ -2820,6 +2835,7 @@ def build_app() -> None:
                     set_drm_progress_visible(False)
                     drm_setup_state["previous_mode"] = "DRM"
                     tx_mode_var.set("DRM")
+                    tx_mode_display_var.set("DRM [EXPERIMENTAL]")
                     tx_status_var.set("DRM encoder is ready.")
                     update_mode_help()
                     set_mode_picker_enabled(True)
@@ -2840,7 +2856,9 @@ def build_app() -> None:
                 root.after(150, poll_drm_setup)
 
         def handle_mode_selection(_event=None) -> None:
-            selected = tx_mode_var.get().strip().upper()
+            selected_label = tx_mode_display_var.get().strip().upper()
+            selected = "DRM" if selected_label == "DRM [EXPERIMENTAL]" else selected_label
+            tx_mode_var.set(selected)
             if selected != "DRM":
                 if not drm_setup_state["running"]:
                     drm_setup_state["previous_mode"] = selected
