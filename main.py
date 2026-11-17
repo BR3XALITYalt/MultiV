@@ -44,6 +44,7 @@ from drm_support import (
 )
 from transmitter import (
     TxityTransmitter,
+    build_frequency_candidates,
     build_transmit_config,
     find_frequency_overlaps,
     list_audio_inputs,
@@ -1049,6 +1050,14 @@ def build_app() -> None:
     tx_station_name_var = tk.StringVar(root, saved_text("station_name", ""))
     tx_description_var = tk.StringVar(root, saved_text("description", ""))
     tx_frequency_var = tk.StringVar(root, saved_text("frequency", "7.250 MHz"))
+    saved_frequency_fallbacks = saved_tx_settings.get("frequency_fallbacks", [])
+    if not isinstance(saved_frequency_fallbacks, list):
+        saved_frequency_fallbacks = []
+    tx_frequency_fallback_vars = [
+        tk.StringVar(root, str(value))
+        for value in saved_frequency_fallbacks
+        if str(value).strip()
+    ][:7]
     tx_frequency_check_var = tk.StringVar(root, "Waiting for TXITY station data.")
     tx_mode_var = tk.StringVar(root, saved_text("mode", "AM"))
     tx_mode_help_var = tk.StringVar(root, "AM uses a carrier with upper and lower sidebands.")
@@ -1143,6 +1152,11 @@ def build_app() -> None:
             "station_name": tx_station_name_var.get(),
             "description": tx_description_var.get(),
             "frequency": tx_frequency_var.get(),
+            "frequency_fallbacks": [
+                variable.get().strip()
+                for variable in tx_frequency_fallback_vars
+                if variable.get().strip()
+            ],
             "mode": tx_mode_var.get(),
             "drm_service_label": tx_drm_service_label_var.get(),
             "drm_service_id": tx_drm_service_id_var.get(),
@@ -1258,6 +1272,8 @@ def build_app() -> None:
     )
     for setting_variable in tx_setting_variables:
         setting_variable.trace_add("write", schedule_tx_settings_save)
+    for fallback_variable in tx_frequency_fallback_vars:
+        fallback_variable.trace_add("write", schedule_tx_settings_save)
 
     def update_tx_power_readout(*_args) -> None:
         try:
@@ -1281,6 +1297,7 @@ def build_app() -> None:
     tx_negative_status_count = 0
     tx_ptt_confirmed = False
     tx_terminal_server_message: str | None = None
+    frequency_retry_context: dict[str, Any] | None = None
     station_search_var = tk.StringVar(root, "")
     station_cards_frame: tk.Frame | None = None
     selected_station_id = ""
@@ -2067,6 +2084,14 @@ def build_app() -> None:
         else:
             messages.append("Station overlap check will run when TXITY's live station list loads.")
 
+        fallback_count = sum(
+            1 for variable in tx_frequency_fallback_vars if variable.get().strip()
+        )
+        if fallback_count:
+            messages.append(
+                f"Automatic fallback is enabled with {fallback_count} alternate "
+                f"frequency{'ies' if fallback_count != 1 else ''}."
+            )
         messages.append("This is a client-side estimate; TXITY's server decides whether a shared frequency is accepted.")
         tx_frequency_check_var.set(" ".join(messages))
 
@@ -2087,7 +2112,9 @@ def build_app() -> None:
             pass
 
     def toggle_transmission() -> None:
+        nonlocal frequency_retry_context
         if transmitter.is_busy:
+            frequency_retry_context = None
             transmitter.stop()
             tx_status_var.set("Stopping transmission...")
             if tx_audio_source_var.get() == "Audio playlist":
@@ -2098,6 +2125,7 @@ def build_app() -> None:
             navigate("discord")
             return
 
+        frequency_retry_context = None
         try:
             config = build_transmit_config(
                 station_name=tx_station_name_var.get(),
@@ -2156,6 +2184,24 @@ def build_app() -> None:
                 raise ValueError("Select a desktop output device for loopback capture.")
             if audio_source == "playlist" and not playlist_files:
                 raise ValueError("Add at least one audio file or folder to the playlist.")
+
+            candidates = build_frequency_candidates(
+                tx_frequency_var.get(),
+                [variable.get() for variable in tx_frequency_fallback_vars],
+            )
+            config["rfHz"] = candidates[0][1]
+            frequency_retry_context = {
+                "base_config": dict(config),
+                "candidates": candidates,
+                "next_index": 1,
+                "current_index": 0,
+                "pending": False,
+                "input_device": selected_device,
+                "audio_source": audio_source,
+                "playlist_files": list(playlist_files),
+                "playlist_shuffle": tx_playlist_shuffle_var.get(),
+                "playlist_loop": tx_playlist_loop_var.get(),
+            }
             transmitter.start(
                 config,
                 input_device=selected_device,
@@ -2169,8 +2215,58 @@ def build_app() -> None:
                 tx_playlist_status_var.set("Preparing playlist...")
             update_transmit_button()
         except Exception as exc:
+            frequency_retry_context = None
             details = safe_error_text(str(exc), 500)
             tx_status_var.set(details)
+
+    def start_pending_frequency_retry() -> None:
+        nonlocal frequency_retry_context
+        nonlocal tx_negative_status_reason, tx_negative_status_count
+        nonlocal tx_ptt_confirmed, tx_terminal_server_message
+
+        context = frequency_retry_context
+        if not isinstance(context, dict) or not context.get("pending"):
+            return
+
+        candidate = context.pop("queued_candidate", None)
+        context["pending"] = False
+        if not isinstance(candidate, tuple) or len(candidate) != 2:
+            frequency_retry_context = None
+            tx_status_var.set("Could not prepare the alternate frequency.")
+            update_transmit_button()
+            return
+
+        display_text, frequency_hz = candidate
+        retry_config = dict(context["base_config"])
+        retry_config["rfHz"] = frequency_hz
+        context["current_index"] = int(context["next_index"]) - 1
+
+        tx_negative_status_reason = None
+        tx_negative_status_count = 0
+        tx_ptt_confirmed = False
+        tx_terminal_server_message = None
+        tx_status_var.set(
+            f"Trying frequency {context['current_index'] + 1} of "
+            f"{len(context['candidates'])}: {display_text}."
+        )
+        if context["audio_source"] == "playlist":
+            tx_playlist_status_var.set("Preparing playlist...")
+        try:
+            transmitter.start(
+                retry_config,
+                input_device=context["input_device"],
+                audio_source=context["audio_source"],
+                playlist_files=context["playlist_files"],
+                playlist_shuffle=context["playlist_shuffle"],
+                playlist_loop=context["playlist_loop"],
+            )
+        except Exception as exc:
+            frequency_retry_context = None
+            tx_status_var.set(
+                f"Could not start alternate frequency {display_text}: "
+                f"{safe_error_text(str(exc), 500)}"
+            )
+        update_transmit_button()
 
     def show_transmit(parent: tk.Frame) -> None:
         nonlocal tx_transmit_button, playlist_ui_refresh_callback
@@ -2284,7 +2380,104 @@ def build_app() -> None:
         station_fields.grid_columnconfigure(1, weight=1, uniform="station-fields")
         add_tx_entry(station_fields, "Station name (required)", tx_station_name_var, column=0, row=0)
         add_tx_entry(station_fields, "Short description", tx_description_var, column=1, row=0)
-        add_tx_entry(station_fields, "Transmit frequency", tx_frequency_var, column=0, row=1)
+
+        frequency_fields_frame = tk.Frame(
+            station_fields,
+            bg=palette["surfaceContainerLow"],
+        )
+        frequency_fields_frame.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=6,
+            pady=6,
+        )
+        frequency_fields_frame.grid_columnconfigure(0, weight=1)
+
+        def remove_frequency_fallback(variable: tk.StringVar) -> None:
+            if variable in tx_frequency_fallback_vars:
+                tx_frequency_fallback_vars.remove(variable)
+                render_frequency_fields()
+                schedule_tx_settings_save()
+                update_frequency_check()
+
+        def add_frequency_fallback() -> None:
+            if len(tx_frequency_fallback_vars) >= 7:
+                tx_status_var.set("You can add up to seven alternate frequencies.")
+                return
+            variable = tk.StringVar(root, "")
+            variable.trace_add("write", schedule_tx_settings_save)
+            variable.trace_add("write", lambda *_args: update_frequency_check())
+            tx_frequency_fallback_vars.append(variable)
+            render_frequency_fields()
+            schedule_tx_settings_save()
+            update_frequency_check()
+
+        def render_frequency_fields() -> None:
+            for child in frequency_fields_frame.winfo_children():
+                child.destroy()
+
+            frequency_rows = [
+                ("Transmit frequency", tx_frequency_var, None),
+                *[
+                    (f"Fallback frequency {index}", variable, variable)
+                    for index, variable in enumerate(tx_frequency_fallback_vars, start=1)
+                ],
+            ]
+            for index, (label_text, variable, removable) in enumerate(frequency_rows):
+                wrapper = tk.Frame(
+                    frequency_fields_frame,
+                    bg=palette["surfaceContainerLow"],
+                )
+                wrapper.pack(fill="x", pady=(0, 8 if index < len(frequency_rows) - 1 else 0))
+                make_label(
+                    wrapper,
+                    label_text,
+                    font=("Segoe UI", 9, "bold"),
+                    color=palette["onSurfaceVariant"],
+                    background=palette["surfaceContainerLow"],
+                ).pack(anchor="w", pady=(0, 4))
+
+                input_row = tk.Frame(wrapper, bg=palette["surfaceContainerLow"])
+                input_row.pack(fill="x")
+                entry = tk.Entry(
+                    input_row,
+                    textvariable=variable,
+                    font=("Segoe UI", 10),
+                    bg=palette["surfaceContainerLowest"],
+                    fg=palette["onSurface"],
+                    insertbackground=palette["onSurface"],
+                    selectbackground=palette["primaryContainer"],
+                    selectforeground=palette["onPrimaryContainer"],
+                    relief="flat",
+                    borderwidth=1,
+                    highlightthickness=1,
+                    highlightbackground=palette["outline"],
+                    highlightcolor=palette["primary"],
+                )
+                entry.pack(side="left", fill="x", expand=True, ipady=7)
+
+                if removable is None:
+                    make_button(
+                        input_row,
+                        "+",
+                        add_frequency_fallback,
+                        kind="tonal",
+                        padx=13,
+                        pady=6,
+                    ).pack(side="left", padx=(8, 0))
+                else:
+                    make_button(
+                        input_row,
+                        "−",
+                        lambda target=removable: remove_frequency_fallback(target),
+                        kind="text",
+                        padx=12,
+                        pady=6,
+                    ).pack(side="left", padx=(8, 0))
+
+        render_frequency_fields()
         make_label(
             station_card,
             variable=tx_frequency_check_var,
@@ -4011,7 +4204,7 @@ def build_app() -> None:
     def apply_status(data: dict[str, Any]) -> None:
         nonlocal server_band_min_hz, server_band_max_hz
         nonlocal tx_negative_status_reason, tx_negative_status_count
-        nonlocal tx_ptt_confirmed, tx_terminal_server_message
+        nonlocal tx_ptt_confirmed, tx_terminal_server_message, frequency_retry_context
         low, high = data.get("bandMinHz"), data.get("bandMaxHz")
         if isinstance(low, (int, float)) and isinstance(high, (int, float)):
             server_band_min_hz = int(low)
@@ -4022,12 +4215,20 @@ def build_app() -> None:
         update_frequency_check()
 
         if transmitter.is_busy and data.get("ptt") is True:
+            frequency_retry_context = None
             if not tx_ptt_confirmed:
                 tx_ptt_confirmed = True
             tx_negative_status_reason = None
             tx_negative_status_count = 0
             tx_status_var.set("TXITY confirms that the station is transmitting.")
         elif transmitter.is_busy and data.get("ptt") is False:
+            if frequency_retry_context is not None and frequency_retry_context.get("pending"):
+                candidate = frequency_retry_context.get("queued_candidate")
+                if isinstance(candidate, tuple) and len(candidate) == 2:
+                    tx_status_var.set(
+                        f"Frequency denied. Switching to {candidate[0]}..."
+                    )
+                return
             queue_position = data.get("queuePosition")
             if isinstance(queue_position, int) and queue_position >= 0:
                 tx_negative_status_reason = None
@@ -4066,9 +4267,39 @@ def build_app() -> None:
                                 "TXITY did not confirm the PTT request: "
                                 f"{reason_text} (reason code {reason_key})."
                             )
-                        tx_terminal_server_message = message
-                        tx_status_var.set(message)
-                        transmitter.stop()
+                        context = frequency_retry_context
+                        can_retry_frequency = (
+                            reason_key == "3"
+                            and not tx_ptt_confirmed
+                            and isinstance(context, dict)
+                            and not context.get("pending")
+                            and int(context.get("next_index", 0)) < len(context.get("candidates", []))
+                        )
+                        if can_retry_frequency:
+                            next_index = int(context["next_index"])
+                            candidate = context["candidates"][next_index]
+                            context["next_index"] = next_index + 1
+                            context["queued_candidate"] = candidate
+                            context["pending"] = True
+                            current_index = int(context.get("current_index", 0))
+                            current_text = context["candidates"][current_index][0]
+                            tx_terminal_server_message = None
+                            tx_status_var.set(
+                                f"TXITY denied {current_text}. Trying alternate "
+                                f"frequency {next_index + 1} of {len(context['candidates'])}: "
+                                f"{candidate[0]}..."
+                            )
+                            transmitter.stop()
+                        else:
+                            if reason_key == "3" and isinstance(context, dict) and len(context.get("candidates", [])) > 1:
+                                message = (
+                                    f"TXITY rejected all {len(context['candidates'])} configured "
+                                    f"frequencies. {reason_text} (reason code {reason_key})."
+                                )
+                            tx_terminal_server_message = message
+                            frequency_retry_context = None
+                            tx_status_var.set(message)
+                            transmitter.stop()
             else:
                 tx_negative_status_reason = None
                 tx_negative_status_count = 0
@@ -4127,6 +4358,11 @@ def build_app() -> None:
 
             elif kind == "tx_state":
                 state = str(event.get("state") or "")
+                retry_after_stop = (
+                    state == "stopped"
+                    and isinstance(frequency_retry_context, dict)
+                    and bool(frequency_retry_context.get("pending"))
+                )
                 if state == "starting":
                     tx_negative_status_reason = None
                     tx_negative_status_count = 0
@@ -4149,6 +4385,8 @@ def build_app() -> None:
                         or tx_playlist_status_var.get().startswith("Connected")
                     ):
                         tx_playlist_status_var.set("Playlist stopped before completion.")
+                if retry_after_stop:
+                    start_pending_frequency_retry()
                 update_transmit_button()
 
             elif kind == "tx_error":
@@ -4171,6 +4409,7 @@ def build_app() -> None:
                     )
                     tx_status_var.set(f"TXITY: {server_text}")
                     if message_type in {"kicked", "banned"}:
+                        frequency_retry_context = None
                         transmitter.stop()
 
             elif kind == "playlist_refresh":
