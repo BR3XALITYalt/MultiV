@@ -1,6 +1,6 @@
 import unittest
 
-from main import (
+from station_directory import (
     describe_status_socket_error,
     format_duration,
     format_frequency,
