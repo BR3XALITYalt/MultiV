@@ -267,7 +267,7 @@ class StationParserTests(unittest.TestCase):
             def read(self, _limit):
                 return b"<html>Not an image</html>"
 
-        with patch("main.urlopen", return_value=FakeResponse()):
+        with patch("station_directory.urlopen", return_value=FakeResponse()):
             with self.assertRaisesRegex(ValueError, "HTTP 200.*Content-Type: text/html"):
                 fetch_station_image("https://txity.radiodiscussion.org/uploads/test.jpg")
 
