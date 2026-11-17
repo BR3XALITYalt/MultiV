@@ -152,6 +152,25 @@ class StationImageUploadTests(unittest.TestCase):
                 "data:image/png;base64,aGVsbG8=",
             )
 
+    def test_client_aborts_upload_when_discord_session_changes(self):
+        client = TxityClient()
+        client.set_discord_auth("test-session-token-value", {"id": "123456789012345678"})
+
+        def change_session(_path):
+            client.set_discord_auth(None, None)
+            return "data:image/png;base64,aGVsbG8="
+
+        with (
+            patch("txity_client.image_file_to_data_url", side_effect=change_session),
+            patch("txity_client.post_station_image") as mocked,
+        ):
+            client.upload_station_image_file("logo.png")
+            event = client.events.get(timeout=3)
+
+        self.assertEqual(event["kind"], "station_image_upload_error")
+        self.assertIn("session changed", event["text"])
+        mocked.assert_not_called()
+
     def test_client_uses_its_active_session_and_auth_token(self):
         client = TxityClient()
         token = "test-session-token-value"
