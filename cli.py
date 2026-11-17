@@ -17,6 +17,7 @@ from typing import Any, Callable
 
 from audio_playlist import build_playlist_snapshot, normalize_audio_sources
 from discord_auth import auth_token_path, is_auth_token, safe_error_text
+from service_stop import WindowsServiceStopWindow
 from transmitter import (
     SUPPORTED_MODES,
     build_frequency_candidates,
@@ -742,6 +743,17 @@ def run_headless(
 
         shutdown_event = threading.Event()
         old_handlers = _install_shutdown_handlers(shutdown_event, logger)
+        service_stop_window = None
+        if os.name == "nt":
+            try:
+                service_stop_window = WindowsServiceStopWindow(shutdown_event, logger)
+                service_stop_window.start()
+            except Exception as exc:
+                logger.warning(
+                    "NSSM window-message shutdown support is unavailable: %s",
+                    safe_error_text(str(exc), 800),
+                )
+                service_stop_window = None
 
         client = None
         transmitter = None
@@ -828,6 +840,14 @@ def run_headless(
             try:
                 _shutdown_headless(transmitter, client, logger)
             finally:
+                if service_stop_window is not None:
+                    try:
+                        service_stop_window.close()
+                    except Exception as exc:
+                        logger.warning(
+                            "Could not close the hidden service-stop window: %s",
+                            safe_error_text(str(exc), 800),
+                        )
                 for signum, previous in old_handlers.items():
                     try:
                         signal.signal(signum, previous)
