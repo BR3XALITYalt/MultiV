@@ -40,13 +40,6 @@ PLAYLIST_PREROLL_FRAMES = 256
 DRM_PREROLL_FRAMES = 94
 PLAYLIST_READ_FRAMES = 8_192
 AUDIO_FRAME_INTERVAL_SECONDS = BATCH_SAMPLES / SAMPLE_RATE_HZ
-
-
-def audio_queue_capacity(audio_source: str, drm_mode: bool = False) -> int:
-    """Return enough queue space for any source that uses startup preroll."""
-    if drm_mode or audio_source in {"playlist", "test_tone"}:
-        return PLAYLIST_AUDIO_QUEUE_FRAMES
-    return AUDIO_QUEUE_FRAMES
 LIVE_AUDIO_SILENCE_GRACE_SECONDS = 0.1
 RECONNECT_INITIAL_DELAY_SECONDS = 1.0
 RECONNECT_MAX_DELAY_SECONDS = 15.0
@@ -154,7 +147,7 @@ DEFAULT_MODE_BANDWIDTH_HZ = {
     "LSB+C": 10_000,
     "CW": 500,
 }
-SUPPORTED_AUDIO_SOURCES = ("mic", "loopback", "playlist", "test_tone")
+SUPPORTED_AUDIO_SOURCES = ("mic", "loopback", "playlist")
 
 
 def parse_rf_frequency(value: Any) -> int:
@@ -774,7 +767,11 @@ class TxityTransmitter:
             if self._starting or self._active or (self._thread and self._thread.is_alive()):
                 raise RuntimeError("A transmission is already starting or active.")
             self._stop_event.clear()
-            queue_frames = audio_queue_capacity(selected_source, drm_mode)
+            queue_frames = (
+                PLAYLIST_AUDIO_QUEUE_FRAMES
+                if selected_source == "playlist" or drm_mode
+                else AUDIO_QUEUE_FRAMES
+            )
             self._audio_queue = queue.Queue(maxsize=queue_frames)
             self._starting = True
             self._active = False
@@ -946,25 +943,6 @@ class TxityTransmitter:
                         audio_queue.put_nowait(queued_frame)
                     except queue.Full:
                         pass
-
-        def start_test_tone_worker() -> threading.Thread:
-            """Queue a continuous, phase-coherent 1 kHz sine wave for RF testing."""
-            def generate() -> None:
-                import numpy as np
-                phase = 0
-                amplitude = 0.25
-                samples_per_cycle = SAMPLE_RATE_HZ // 1_000
-                try:
-                    while not self._stop_event.is_set():
-                        indices = (np.arange(BATCH_SAMPLES, dtype=np.int64) + phase) % samples_per_cycle
-                        samples = (amplitude * np.sin(2.0 * np.pi * indices / samples_per_cycle)).astype(np.float32)
-                        phase = (phase + BATCH_SAMPLES) % samples_per_cycle
-                        enqueue_pcm_samples(samples, wait_for_space=True)
-                except Exception as exc:
-                    audio_thread_error[:] = [_safe_error(exc)]
-            thread = threading.Thread(target=generate, daemon=True, name="txitpy-1khz-test-tone")
-            thread.start()
-            return thread
 
         def report_audio_warning(status: Any) -> None:
             nonlocal last_callback_warning
@@ -1524,19 +1502,12 @@ class TxityTransmitter:
                         "text": "Microphone opened at 48 kHz, mono Float32; sending 512-sample batches.",
                     })
 
-            if needs_audio and audio_source in {"playlist", "test_tone"} and not drm_mode:
+            if needs_audio and audio_source == "playlist" and not drm_mode:
                 audio_timer_resolution = begin_windows_audio_timer_resolution()
-                playlist_thread = (
-                    start_test_tone_worker() if audio_source == "test_tone"
-                    else start_playlist_worker()
-                )
+                playlist_thread = start_playlist_worker()
                 self.events.put({
                     "kind": "tx_log",
-                    "text": (
-                        "Buffering the 1 kHz test tone before starting transmission."
-                        if audio_source == "test_tone"
-                        else "Buffering a few seconds of playlist audio before starting transmission."
-                    ),
+                    "text": "Buffering a few seconds of playlist audio before starting transmission.",
                 })
                 buffer_deadline = time.monotonic() + 12.0
                 while not self._stop_event.is_set():
@@ -1548,13 +1519,8 @@ class TxityTransmitter:
                     ):
                         break
                     if time.monotonic() >= buffer_deadline:
-                        source_label = (
-                            "1 kHz test tone"
-                            if audio_source == "test_tone"
-                            else "Playlist audio"
-                        )
                         raise TimeoutError(
-                            f"{source_label} did not fill its startup buffer within 12 seconds."
+                            "Playlist audio did not fill its startup buffer within 12 seconds."
                         )
                     self._stop_event.wait(0.02)
 
@@ -1671,7 +1637,6 @@ class TxityTransmitter:
             source_name = "DRM30" if drm_mode else {
                 "loopback": "desktop audio",
                 "playlist": "playlist audio",
-                "test_tone": "1 kHz test tone",
             }.get(audio_source, "microphone audio")
             while not self._stop_event.is_set():
                 drain_secondary_events()
@@ -1862,7 +1827,7 @@ class TxityTransmitter:
                         queued_frame = audio_queue.get(
                             timeout=(
                                 0.05
-                                if audio_source in {"playlist", "test_tone"} or drm_mode
+                                if audio_source == "playlist" or drm_mode
                                 else AUDIO_FRAME_INTERVAL_SECONDS
                             )
                         )
@@ -1875,8 +1840,6 @@ class TxityTransmitter:
                                 playlist_reached_end = True
                                 break
                             raise RuntimeError("The DRM encoder stopped before the audio source finished.")
-                        continue
-                    if audio_source == "test_tone":
                         continue
                     if audio_source == "playlist" and audio_finished.is_set():
                         if audio_thread_error:
@@ -1924,15 +1887,6 @@ class TxityTransmitter:
                         break
                 else:
                     frame = queued_frame
-
-                if audio_source == "test_tone":
-                    wait_seconds = playlist_frame_wait_seconds(
-                        playlist_next_frame_deadline, time.perf_counter()
-                    )
-                    if wait_seconds > 0 and self._stop_event.wait(wait_seconds):
-                        break
-                    if self._stop_event.is_set():
-                        break
 
                 if drm_mode:
                     wait_seconds = playlist_frame_wait_seconds(
@@ -1996,9 +1950,7 @@ class TxityTransmitter:
                         })
                     last_audio_progress_at = progress_now
                 elif progress_now - last_audio_progress_at >= (
-                    5.0
-                    if secondary_client is not None or audio_source == "test_tone"
-                    else 30.0
+                    5.0 if secondary_client is not None else 30.0
                 ):
                     audio_duration = audio_frames_sent * AUDIO_FRAME_INTERVAL_SECONDS
                     if secondary_client is not None:
@@ -2007,17 +1959,6 @@ class TxityTransmitter:
                             f"({audio_duration:.1f} s); latest USB-to-LSB send skew="
                             f"{last_pair_send_skew_us:.1f} us, maximum observed skew="
                             f"{max_pair_send_skew_us:.1f} us."
-                        )
-                    elif audio_source == "test_tone":
-                        generator_state = (
-                            "running"
-                            if playlist_thread is not None and playlist_thread.is_alive()
-                            else "stopped"
-                        )
-                        progress_text = (
-                            f"1 kHz test tone active: {audio_frames_sent} frames sent "
-                            f"({audio_duration:.1f} s); queued frames={audio_queue.qsize()}; "
-                            f"tone generator={generator_state}."
                         )
                     else:
                         progress_text = (
@@ -2034,7 +1975,7 @@ class TxityTransmitter:
                         time.perf_counter(),
                         catch_up_after_delay=True,
                     )
-                elif audio_source in {"playlist", "test_tone"}:
+                elif audio_source == "playlist":
                     playlist_next_frame_deadline = next_audio_frame_deadline(
                         playlist_next_frame_deadline,
                         time.perf_counter(),
