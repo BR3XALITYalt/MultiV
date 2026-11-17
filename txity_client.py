@@ -170,6 +170,15 @@ class TxityClient:
         def worker() -> None:
             try:
                 data_url = image_file_to_data_url(path)
+                with self.auth_lock:
+                    session_is_current = (
+                        self.session_id == session_id
+                        and self.auth_token == auth_token
+                    )
+                if not session_is_current:
+                    raise RuntimeError(
+                        "The Discord session changed during the upload. Sign in again."
+                    )
                 image_url = post_station_image(
                     session_id,
                     auth_token,
