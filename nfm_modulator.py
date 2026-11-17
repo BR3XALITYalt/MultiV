@@ -17,6 +17,17 @@ NFM_OUTPUT_LEVEL = 0.70
 NFM_BASE_INPUT_GAIN = 1.0
 
 
+def soft_clip(samples: np.ndarray, knee: float = 0.8) -> np.ndarray:
+    """Soft-limit peaks while keeping signals below the knee unchanged."""
+    values = np.asarray(samples, dtype=np.float64)
+    limit_range = 1.0 - knee
+    magnitude = np.abs(values)
+    softened = knee + limit_range * np.tanh(
+        np.maximum(magnitude - knee, 0.0) / limit_range
+    )
+    return np.sign(values) * np.where(magnitude <= knee, magnitude, softened)
+
+
 class StreamingNFMModulator:
     """Convert mono voice audio into a continuous real NFM intermediate-frequency signal."""
 
@@ -94,14 +105,7 @@ class StreamingNFMModulator:
         self._previous_high_pass = previous_high_pass
         self._previous_low_pass = previous_low_pass
 
-        # Preserve the linear region, then smoothly compress peaks toward +/-1.
-        magnitude = np.abs(voice)
-        knee = 0.8
-        limit_range = 1.0 - knee
-        softened = knee + limit_range * np.tanh(
-            np.maximum(magnitude - knee, 0.0) / limit_range
-        )
-        voice = np.sign(voice) * np.where(magnitude <= knee, magnitude, softened)
+        voice = soft_clip(voice)
 
         phase_steps = (
             2.0 * math.pi
