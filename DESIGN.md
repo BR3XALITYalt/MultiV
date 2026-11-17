@@ -23,7 +23,7 @@ Reading this as: a desktop operations client for TXITY users, using native Tkint
 - **Transmit page:** group controls by the settings they affect. Keep the transmission action and its current status together so the operator can check the result of a start or stop. The audio source section offers microphone, desktop loopback, and playlist modes; playlist actions stay beside the track list and its shuffle and loop checkboxes.
 - **Simplified transmit view:** keep the primary Start/Stop action in the page header so it stays reachable without scrolling. Hide signal fading and audio-processing controls under a collapsed **Advanced settings** section; those controls remain available without competing with station, signal, and audio-source setup.
 - **Spacing:** use compact spacing inside related fields and larger gaps between sections. This keeps the settings page dense without merging unrelated controls.
-- **Assets:** display station images only when TXITY or Discord supplies an approved URL. Use the station name as text when no image is available; do not invent station logos or profile images.
+- **Assets:** display station images only when TXITY or Discord supplies an approved URL. Use the station name as text when no image is available; do not invent station logos or profile images. The Settings page lets the user upload a PNG, JPEG, WebP, or GIF logo and keeps the returned TXITY URL beside the manual URL field.
 
 ## Accessibility
 
