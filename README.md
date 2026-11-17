@@ -43,7 +43,7 @@ First configure the station, mode, and audio settings in TXITPY's desktop app an
 ```powershell
 nssm install TXITPY "C:\Python312\python.exe"
 nssm set TXITPY AppDirectory "C:\TXITPY"
-nssm set TXITPY AppParameters "\"C:\TXITPY\main.py\" --no-gui --auth-token-file \"C:\ProgramData\TXITPY\discord-token.txt\" --log-file \"C:\ProgramData\TXITPY\logs\txitpy.log\""
+nssm set TXITPY AppParameters '"C:\TXITPY\main.py" --no-gui --auth-token-file "C:\ProgramData\TXITPY\discord-token.txt" --log-file "C:\ProgramData\TXITPY\logs\txitpy.log"'
 nssm set TXITPY AppExit Default Restart
 nssm set TXITPY Start SERVICE_AUTO_START
 nssm start TXITPY
@@ -51,7 +51,7 @@ nssm start TXITPY
 
 Set the service's **Log on** account to the Windows user that owns the audio devices. Running under LocalSystem can make user audio devices unavailable. Desktop-audio loopback also requires a logged-in interactive audio session, so a playlist or microphone is generally more suitable for a background service. For a playlist that should run continuously, enable **Loop playlist** in the desktop app or pass `--loop`.
 
-If a custom settings file is used, add `--config "C:\ProgramData\TXITPY\transmit-settings.json"` to `AppParameters`. Use `--list-inputs` or `--list-loopback-devices` to inspect device IDs before choosing `--audio-device`.
+DRM service mode does not open the desktop setup prompts. Install the required Rust, Git, CMake, and C/C++ build tools before selecting DRM for a headless service. If a custom settings file is used, add `--config "C:\ProgramData\TXITPY\transmit-settings.json"` to `AppParameters`. Use `--list-inputs` or `--list-loopback-devices` to inspect device IDs before choosing `--audio-device`.
 
 ## Transmit
 
