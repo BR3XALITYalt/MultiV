@@ -1011,7 +1011,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(14, 6))
         make_label(
             card,
-            "Your Discord account is required to use the TXITPY desktop app. "
+            "Sign in with Discord to use the TXITPY desktop app. "
             "TXITPY checks your saved session automatically on later launches.",
             font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
@@ -1222,7 +1222,7 @@ def build_app() -> None:
             messages.append(
                 f"Automatic fallback is enabled with {fallback_count} alternate {frequency_word}."
             )
-        messages.append("This is a client-side estimate; TXITY's server decides whether a shared frequency is accepted.")
+        messages.append("TXITPY estimates overlap from the station list. TXITY makes the final decision about shared frequencies.")
         tx_frequency_check_var.set(" ".join(messages))
 
     tx_frequency_var.trace_add("write", lambda *_args: update_frequency_check())
@@ -2062,7 +2062,7 @@ def build_app() -> None:
                     "and a 6 kHz IF. The NFM transport-width slider requests a 1-20 kHz TXITY USB/LSB "
                     "passband. Settings narrower than the generated signal may clip it."
                 ),
-                "DRM": "DRM [EXPERIMENTAL] - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Microphone and OGG, MP3, or FLAC playlists are supported.",
+                "DRM": "DRM [EXPERIMENTAL] - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Use a microphone or OGG, MP3, or FLAC playlists.",
                 "CW": "CW - carrier only. The microphone and desktop audio sources are not used.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
@@ -2573,7 +2573,7 @@ def build_app() -> None:
         am_pre_emphasis.pack(anchor="w", padx=6, pady=(7, 0))
         make_label(
             audio_filter_card,
-            "These processing values are sent with the TXITY virtual-service configuration when transmission starts.",
+            "TXITPY sends these processing values with your TXITY station configuration when you start transmission.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3390,7 +3390,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(0, 6))
         make_label(
             profile_card,
-            "These values are sent to TXITY as your public station logo and station-page details.",
+            "TXITPY sends these values to TXITY as your public station logo and station-page details.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3513,7 +3513,7 @@ def build_app() -> None:
         password_entry.pack(side="left", fill="x", expand=True, ipady=7, padx=(0, 8))
         make_label(
             web_card,
-            "Use at least 12 characters. The password is stored as a salted PBKDF2 hash.",
+            "Use at least 12 characters. TXITPY stores a salted PBKDF2 hash of your password.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3596,7 +3596,7 @@ def build_app() -> None:
         description = (
             "TXITPY uses TXITY's official Discord sign-in flow. Your website session "
             "is kept in a separate browser profile and checked automatically when the "
-            "desktop app starts. The TXITY session token is saved in the TXITPY AppData "
+            "desktop app starts. TXITPY saves the TXITY session token in its AppData "
             "folder so headless mode can use it."
         )
         make_label(
@@ -3841,11 +3841,11 @@ def build_app() -> None:
                     2: "transmitter capacity is currently full",
                     3: "frequency sharing must be enabled by both stations",
                     4: "the total transmitter limit has been reached",
-                    5: "a station name is required",
+                    5: "enter a station name",
                     "2": "transmitter capacity is currently full",
                     "3": "frequency sharing must be enabled by both stations",
                     "4": "the total transmitter limit has been reached",
-                    "5": "a station name is required",
+                    "5": "enter a station name",
                 }
                 reason_text = reasons.get(reason, "TXITY did not accept the transmission request")
                 reason_key = str(reason if reason is not None else "txStartUsable=false")
