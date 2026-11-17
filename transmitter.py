@@ -1285,7 +1285,7 @@ class TxityTransmitter:
                                 3: "TXITY rejected frequency sharing or overlap",
                                 4: "the total transmitter limit was reached",
                                 5: "enter a station name",
-                                "2": "transmitter capacity is currently full",
+                                "2": "TXITY's transmitter capacity is full",
                                 "3": "TXITY rejected frequency sharing or overlap",
                                 "4": "the total transmitter limit was reached",
                                 "5": "enter a station name",
@@ -1338,7 +1338,7 @@ class TxityTransmitter:
                 })
                 if audio_source == "loopback":
                     raise RuntimeError(
-                        "DRM mode currently supports microphone and playlist inputs, not desktop audio loopback."
+                        "DRM mode supports microphone and playlist inputs. It does not support desktop audio loopback."
                     )
                 encoder_path = ensure_drm_encoder()
                 drm_temp_dir = tempfile.TemporaryDirectory(prefix="txitpy-drm-")
