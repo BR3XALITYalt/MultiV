@@ -43,7 +43,7 @@ jobs:
 
       - name: Cross-compile RADE V1 for Windows x64
         run: |
-          cmake -S rade_c -B rade_c/build-win -DCMAKE_TOOLCHAIN_FILE=rade_c/cmake/toolchain-mingw64.cmake -DCMAKE_BUILD_TYPE=Release
+          cmake -S rade_c -B rade_c/build-win -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/rade_c/cmake/toolchain-mingw64.cmake" -DCMAKE_BUILD_TYPE=Release
           cmake --build rade_c/build-win --target freedv_rade_tx --parallel 2
 
       - name: Package the encoder and runtime dependencies
