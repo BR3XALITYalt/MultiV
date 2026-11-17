@@ -142,7 +142,7 @@ def save_auth_token(token: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
     try:
-        temporary_path.write_text(token + "\\n", encoding="utf-8")
+        temporary_path.write_text(token + "\n", encoding="utf-8")
         os.replace(temporary_path, path)
     finally:
         try:
