@@ -4495,8 +4495,7 @@ def build_app() -> None:
                 if traceback_text:
                     print(
                         "\n[TXITPY transmission error]\n"
-                        + traceback_text
-                        + "\\n",
+                        + traceback_text,
                         file=sys.stderr,
                         flush=True,
                     )
