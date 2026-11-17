@@ -52,13 +52,13 @@ class SystemTrayTests(unittest.TestCase):
                 on_quit=lambda: quit_requested.append(True),
             )
 
-        self.assertEqual(icon.name, "TXITPY")
-        self.assertEqual(icon.title, "TXITPY")
+        self.assertEqual(icon.name, "MultiV")
+        self.assertEqual(icon.title, "MultiV")
         open_item, separator, quit_item = icon.menu.items
-        self.assertEqual(open_item.text, "Open TXITPY")
+        self.assertEqual(open_item.text, "Open MultiV")
         self.assertTrue(open_item.options["default"])
         self.assertIs(separator, FakeMenu.SEPARATOR)
-        self.assertEqual(quit_item.text, "Quit TXITPY")
+        self.assertEqual(quit_item.text, "Quit MultiV")
 
         open_item.action(icon, open_item)
         quit_item.action(icon, quit_item)
