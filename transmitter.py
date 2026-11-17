@@ -1995,7 +1995,11 @@ class TxityTransmitter:
                             "text": f"First audio frame sent to TXITY ({len(frame)} bytes).",
                         })
                     last_audio_progress_at = progress_now
-                elif progress_now - last_audio_progress_at >= (5.0 if secondary_client is not None else 30.0):
+                elif progress_now - last_audio_progress_at >= (
+                    5.0
+                    if secondary_client is not None or audio_source == "test_tone"
+                    else 30.0
+                ):
                     audio_duration = audio_frames_sent * AUDIO_FRAME_INTERVAL_SECONDS
                     if secondary_client is not None:
                         progress_text = (
@@ -2003,6 +2007,17 @@ class TxityTransmitter:
                             f"({audio_duration:.1f} s); latest USB-to-LSB send skew="
                             f"{last_pair_send_skew_us:.1f} us, maximum observed skew="
                             f"{max_pair_send_skew_us:.1f} us."
+                        )
+                    elif audio_source == "test_tone":
+                        generator_state = (
+                            "running"
+                            if playlist_thread is not None and playlist_thread.is_alive()
+                            else "stopped"
+                        )
+                        progress_text = (
+                            f"1 kHz test tone active: {audio_frames_sent} frames sent "
+                            f"({audio_duration:.1f} s); queued frames={audio_queue.qsize()}; "
+                            f"tone generator={generator_state}."
                         )
                     else:
                         progress_text = (
