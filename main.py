@@ -4407,6 +4407,19 @@ def build_app() -> None:
 
 
 if __name__ == "__main__":
+    from cli import build_argument_parser, run_headless
+
+    arguments = build_argument_parser().parse_args()
+    if arguments.no_gui or arguments.list_inputs or arguments.list_loopback_devices:
+        raise SystemExit(
+            run_headless(
+                arguments,
+                client_factory=TxityClient,
+                transmitter_factory=TxityTransmitter,
+                default_settings_path=tx_settings_file(),
+            )
+        )
+
     try:
         build_app()
     except Exception as exc:
