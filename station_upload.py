@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from discord_auth import is_auth_token, safe_error_text
 from station_directory import BASE_URL, normalize_media_url
@@ -42,11 +42,20 @@ URL_KEYS = (
 CONTAINER_KEYS = ("data", "image", "file", "result", "upload")
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+
 def image_file_to_data_url(path: str | Path) -> str:
     """Validate a supported image and encode its original bytes as a data URL."""
     image_path = Path(path).expanduser()
     try:
+        if image_path.stat().st_size > MAX_UPLOAD_BYTES:
+            raise ValueError("Choose an image smaller than 5 MB.")
         image_bytes = image_path.read_bytes()
+    except ValueError:
+        raise
     except OSError as exc:
         raise ValueError(f"Could not read the selected image: {exc}") from exc
 
@@ -147,7 +156,8 @@ def upload_station_image(
     )
 
     try:
-        with urlopen(request, timeout=UPLOAD_TIMEOUT) as response:
+        opener = build_opener(_NoRedirectHandler())
+        with opener.open(request, timeout=UPLOAD_TIMEOUT) as response:
             response_body = response.read(1024 * 1024 + 1)
             if len(response_body) > 1024 * 1024:
                 raise ValueError("TXITY returned an oversized image-upload response.")
