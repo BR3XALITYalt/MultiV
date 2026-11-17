@@ -63,8 +63,8 @@ class StreamingNFMModulatorTests(unittest.TestCase):
         output = np.concatenate(chunks)[SAMPLE_RATE_HZ:]
         spectrum = np.abs(np.fft.rfft(output))
 
-        lower_sideband = float(spectrum[5_000])
-        upper_sideband = float(spectrum[7_000])
+        lower_sideband = float(spectrum[4_000])
+        upper_sideband = float(spectrum[6_000])
         self.assertGreater(lower_sideband, 0.01)
         self.assertAlmostEqual(
             lower_sideband,
@@ -84,15 +84,15 @@ class StreamingNFMModulatorTests(unittest.TestCase):
     def test_audio_high_pass_cutoff_preserves_deep_bass(self):
         self.assertEqual(NFM_AUDIO_LOW_HZ, 30)
 
-    def test_wider_nfm_profile_fits_the_configured_ssb_transport(self):
-        self.assertEqual(NFM_IF_HZ, 6_000)
+    def test_corrected_nfm_profile_keeps_spectral_guard_at_dc(self):
+        self.assertEqual(NFM_IF_HZ, 5_000)
         self.assertEqual(NFM_DEVIATION_HZ, 2_500)
         self.assertEqual(NFM_AUDIO_LOW_HZ, 30)
-        self.assertEqual(NFM_AUDIO_HIGH_HZ, 3_000)
-        self.assertEqual(NFM_CHANNEL_BANDWIDTH_HZ, 11_000)
+        self.assertEqual(NFM_AUDIO_HIGH_HZ, 2_000)
+        self.assertEqual(NFM_CHANNEL_BANDWIDTH_HZ, 9_000)
         self.assertLess(
-            NFM_IF_HZ + NFM_DEVIATION_HZ + NFM_AUDIO_HIGH_HZ,
-            12_000,
+            NFM_IF_HZ - NFM_DEVIATION_HZ - NFM_AUDIO_HIGH_HZ,
+            500,
         )
 
     def test_soft_limiter_preserves_quiet_audio_and_rounds_peaks(self):
