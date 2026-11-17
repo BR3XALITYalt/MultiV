@@ -231,6 +231,8 @@ def build_app() -> None:
     tx_cw_loop_var = tk.BooleanVar(root, saved_bool("cw_loop", True))
     tx_allow_overlap_var = tk.BooleanVar(root, saved_bool("allow_overlap", False))
     tx_logo_url_var = tk.StringVar(root, saved_text("station_logo_url", ""))
+    tx_logo_upload_status_var = tk.StringVar(root, "")
+    station_logo_upload_button: Any = None
     tx_details_var = tk.StringVar(root, saved_text("station_details", ""))
     tx_page_layout_var = tk.StringVar(root, saved_text("station_page_layout", ""))
 
@@ -552,6 +554,20 @@ def build_app() -> None:
             padding_x=padx,
             padding_y=pady,
         )
+
+    def set_station_logo_upload_button_enabled(enabled: bool) -> None:
+        nonlocal station_logo_upload_button
+        if station_logo_upload_button is None:
+            return
+        try:
+            if station_logo_upload_button.winfo_exists():
+                station_logo_upload_button.configure(
+                    state="normal" if enabled else "disabled"
+                )
+            else:
+                station_logo_upload_button = None
+        except tk.TclError:
+            station_logo_upload_button = None
 
     def make_card(
         parent: tk.Misc,
@@ -3372,6 +3388,7 @@ def build_app() -> None:
                 ).pack(anchor="w", pady=(3, 0))
 
     def show_settings(parent: tk.Frame) -> None:
+        nonlocal station_logo_upload_button
         page, _canvas = create_scrollable_page(parent)
         make_label(
             page,
@@ -3418,7 +3435,50 @@ def build_app() -> None:
             highlightbackground=palette["outline"],
             highlightcolor=palette["primary"],
         )
-        logo_entry.pack(fill="x", ipady=7)
+        logo_input_row = tk.Frame(logo_frame, bg=palette["surfaceContainerLow"])
+        logo_input_row.pack(fill="x")
+        logo_entry.pack(in_=logo_input_row, side="left", fill="x", expand=True, ipady=7)
+
+        def choose_station_logo() -> None:
+            selected_path = filedialog.askopenfilename(
+                parent=root,
+                title="Choose station logo",
+                filetypes=(
+                    ("Image files", "*.png *.jpg *.jpeg *.webp *.gif"),
+                    ("All files", "*.*"),
+                ),
+            )
+            if not selected_path:
+                return
+            try:
+                client.upload_station_image_file(selected_path, kind="logo")
+            except Exception as exc:
+                tx_logo_upload_status_var.set(safe_error_text(str(exc), 300))
+                return
+
+            tx_logo_upload_status_var.set(f"Uploading {Path(selected_path).name}...")
+            set_station_logo_upload_button_enabled(False)
+
+        station_logo_upload_button = make_button(
+            logo_input_row,
+            "Upload image",
+            choose_station_logo,
+            kind="tonal",
+            padx=14,
+            pady=8,
+        )
+        station_logo_upload_button.pack(side="left", padx=(8, 0))
+        if client.station_image_uploading:
+            station_logo_upload_button.configure(state="disabled")
+
+        make_label(
+            logo_frame,
+            variable=tx_logo_upload_status_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=820,
+        ).pack(anchor="w", pady=(5, 0))
 
         make_label(
             profile_card,
@@ -4093,6 +4153,27 @@ def build_app() -> None:
             elif kind == "tx_playlist_error":
                 details = safe_error_text(str(event.get("text") or "Unknown audio decoder error."), 500)
                 tx_playlist_status_var.set(f"Playlist error: {details}")
+
+            elif kind == "station_image_upload_success":
+                uploaded_url = str(event.get("url") or "").strip()
+                if uploaded_url:
+                    tx_logo_url_var.set(uploaded_url[:512])
+                    tx_logo_upload_status_var.set(
+                        "Logo uploaded. TXITPY saved the hosted image URL."
+                    )
+                else:
+                    tx_logo_upload_status_var.set(
+                        "TXITY did not return a usable image URL."
+                    )
+                set_station_logo_upload_button_enabled(True)
+
+            elif kind == "station_image_upload_error":
+                details = safe_error_text(
+                    str(event.get("text") or "Station logo upload failed."),
+                    500,
+                )
+                tx_logo_upload_status_var.set(details)
+                set_station_logo_upload_button_enabled(True)
 
             elif kind == "config":
                 config = event.get("data", {})
