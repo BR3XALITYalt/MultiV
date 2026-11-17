@@ -20,6 +20,7 @@ from transmitter import (
     end_windows_system_awake,
     should_send_live_audio_silence,
     next_playlist_frame_deadline,
+    next_drm_frame_deadline,
     playlist_frame_wait_seconds,
     build_audio_socket_url,
     build_transmit_config,
@@ -67,6 +68,30 @@ class TransmitterProtocolTests(unittest.TestCase):
         next_deadline = next_playlist_frame_deadline(first_deadline, late_now)
         self.assertAlmostEqual(
             next_deadline,
+            late_now + AUDIO_FRAME_INTERVAL_SECONDS,
+        )
+
+    def test_drm_deadline_keeps_the_sample_clock_after_small_delays(self):
+        first_deadline = next_drm_frame_deadline(None, 10.0)
+        second_deadline = next_drm_frame_deadline(
+            first_deadline,
+            first_deadline + 0.001,
+        )
+        self.assertAlmostEqual(
+            second_deadline,
+            first_deadline + AUDIO_FRAME_INTERVAL_SECONDS,
+        )
+
+    def test_drm_deadline_does_not_add_a_second_interval_after_a_late_send(self):
+        first_deadline = next_drm_frame_deadline(None, 10.0)
+        late_now = first_deadline + 2 * AUDIO_FRAME_INTERVAL_SECONDS + 0.05
+        next_deadline = next_drm_frame_deadline(first_deadline, late_now)
+        self.assertEqual(next_deadline, late_now)
+        self.assertEqual(playlist_frame_wait_seconds(next_deadline, late_now), 0.0)
+
+        following_deadline = next_drm_frame_deadline(next_deadline, late_now)
+        self.assertAlmostEqual(
+            following_deadline,
             late_now + AUDIO_FRAME_INTERVAL_SECONDS,
         )
 

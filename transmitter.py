@@ -64,6 +64,16 @@ def next_playlist_frame_deadline(
     return next_deadline
 
 
+def next_drm_frame_deadline(current_deadline: float | None, now: float) -> float:
+    """Keep DRM packet pacing on its sample clock after a late send."""
+    if current_deadline is None:
+        return now + AUDIO_FRAME_INTERVAL_SECONDS
+    next_deadline = current_deadline + AUDIO_FRAME_INTERVAL_SECONDS
+    # A late packet has already consumed its missed slot. Do not add another
+    # full packet interval before sending the next queued audio block.
+    return now if now >= next_deadline else next_deadline
+
+
 def begin_windows_audio_timer_resolution():
     """Request 1 ms timer granularity while playlist audio is being streamed."""
     if os.name != "nt":
@@ -718,6 +728,10 @@ class TxityTransmitter:
         drm_send_slow_count = 0
         drm_send_max_ms = 0.0
         drm_send_reconnects = 0
+        drm_send_interval_count = 0
+        drm_send_interval_total_ms = 0.0
+        drm_send_interval_max_ms = 0.0
+        drm_last_send_at: float | None = None
         last_drm_transport_report = time.monotonic()
         last_slow_send_log_at = 0.0
         control_configured = False
@@ -1554,12 +1568,28 @@ class TxityTransmitter:
                     control_configured = False
                     self._stop_event.wait(delay)
                     continue
+                if drm_mode:
+                    sent_at = time.perf_counter()
+                    if drm_last_send_at is not None:
+                        interval_ms = (sent_at - drm_last_send_at) * 1000.0
+                        drm_send_interval_count += 1
+                        drm_send_interval_total_ms += interval_ms
+                        drm_send_interval_max_ms = max(
+                            drm_send_interval_max_ms,
+                            interval_ms,
+                        )
+                    drm_last_send_at = sent_at
                 pending_frame = None
                 audio_reconnect_attempt = 0
                 send_count += 1
                 if audio_source in {"mic", "loopback"} and not using_silence_frame:
                     last_audio_frame_at = time.monotonic()
-                if audio_source == "playlist" or drm_mode:
+                if drm_mode:
+                    playlist_next_frame_deadline = next_drm_frame_deadline(
+                        playlist_next_frame_deadline,
+                        time.perf_counter(),
+                    )
+                elif audio_source == "playlist":
                     playlist_next_frame_deadline = next_playlist_frame_deadline(
                         playlist_next_frame_deadline,
                         time.perf_counter(),
@@ -1586,6 +1616,13 @@ class TxityTransmitter:
 
                 if drm_mode and now - last_drm_transport_report >= 5.0:
                     queue_depth = audio_queue.qsize()
+                    report_elapsed = max(now - last_drm_transport_report, 0.001)
+                    send_rate = drm_send_interval_count / report_elapsed
+                    average_interval_ms = (
+                        drm_send_interval_total_ms / drm_send_interval_count
+                        if drm_send_interval_count
+                        else 0.0
+                    )
                     self.events.put({
                         "kind": "tx_log",
                         "text": (
@@ -1593,13 +1630,20 @@ class TxityTransmitter:
                             f"({queue_depth * AUDIO_FRAME_INTERVAL_SECONDS:.2f} s), "
                             f"low-water={drm_queue_min_frames} blocks, "
                             f"underruns={drm_queue_underruns}, "
+                            f"send_rate={send_rate:.1f} blocks/s, "
+                            f"avg_interval={average_interval_ms:.2f} ms, "
+                            f"max_interval={drm_send_interval_max_ms:.1f} ms, "
                             f"slow_sends={drm_send_slow_count}, "
                             f"max_send={drm_send_max_ms:.1f} ms, "
                             f"reconnects={drm_send_reconnects}."
                         ),
                     })
                     drm_queue_min_frames = queue_depth
+                    drm_send_slow_count = 0
                     drm_send_max_ms = 0.0
+                    drm_send_interval_count = 0
+                    drm_send_interval_total_ms = 0.0
+                    drm_send_interval_max_ms = 0.0
                     last_drm_transport_report = now
 
         except Exception as exc:
