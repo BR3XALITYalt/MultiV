@@ -2,7 +2,7 @@
 
 ## Product
 
-MultiV is a multi-source streaming client for virtual radio simulators. Users select microphone, desktop-audio, or playlist input, configure a virtual station, choose a signal mode, and transmit through a supported simulator backend. TXITY is the active backend. SimTX support remains in development.
+MultiV is a multi-source, multi-stream client for virtual radio simulators. Users select microphone, desktop-audio, or playlist input, configure a virtual station, choose a signal mode, and transmit through a simulator backend. See [ROADMAP.md](ROADMAP.md) for supported providers and integration status.
 
 ## Design dials
 
