@@ -2,14 +2,14 @@
 
 ## Project
 
-MultiV is a multi-source streaming client for virtual radio simulators. The desktop app uses Tkinter and supports microphone, desktop-audio, and playlist inputs. TXITY is the active simulator backend; SimTX integration is in development. `web_gui.py` serves a password-protected browser control panel on the local network.
+MultiV is a multi-source, multi-stream client for virtual radio simulators. The desktop app uses Tkinter and supports microphone, desktop-audio, and playlist inputs. See [ROADMAP.md](ROADMAP.md) for the current supported simulator providers and integration status. `web_gui.py` serves a password-protected browser control panel on the local network.
 
 Call the application **MultiV**. Use **TXITY** for the service, website, station directory, and remote protocol.
 
 ## Before editing
 
 - Read [DESIGN.md](DESIGN.md) before changing either interface.
-- Read [PRODUCT.md](PRODUCT.md) before changing product positioning or marketing copy. Keep the supported provider list accurate.
+- Read [PRODUCT.md](PRODUCT.md) before changing product positioning or marketing copy. Keep [ROADMAP.md](ROADMAP.md) as the source of truth for supported providers and integration status; do not duplicate provider lists elsewhere.
 - Inspect the current implementation and nearby tests before changing behavior.
 - Keep changes limited to the requested outcome. Do not replace working code to impose a personal style.
 - Run `python -m compileall -q .` and `python -m unittest discover -s tests -v` after Python changes.
