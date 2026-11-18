@@ -162,7 +162,7 @@ button {
 </head>
 <body>
 <header class="topbar"><div class="brand">MultiV</div><nav><a href="/">Transmit</a></nav></header>
-<main><h1>MultiV control panel</h1><p>Sign in to manage your MultiV transmitter and station profile.</p>
+<main><h1>MultiV control panel</h1><p>Sign in to manage your MultiV connection to TXITY and your station profile.</p>
 <section class="card panel"><h2>Local control login</h2><form method="post" action="/login">
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
 <button type="submit">Sign in</button></form>
