@@ -11,6 +11,12 @@ python -m unittest discover -s tests -v
 
 Run `python main.py` to inspect the desktop application. Test browser-control changes through the local Web GUI as well. Unit tests do not verify audio hardware, live TXITY sessions, or receiver decoding.
 
+## Product direction
+
+MultiV is intended to provide one desktop workflow for several virtual radio simulators. Keep audio-source selection separate from simulator-specific connection code as additional backends are developed.
+
+The current application accepts microphone, desktop-audio, or playlist input and runs one active TXITY transmission. SimTX account and protocol code exists in `simtx_api.py`, but the desktop transmitter does not use it. Do not describe SimTX as a working transmitter or claim simultaneous multi-simulator output.
+
 ## Main modules
 
 - `main.py`: Tkinter desktop application and settings UI.
