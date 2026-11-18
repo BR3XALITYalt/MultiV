@@ -16,7 +16,7 @@ Users of virtual radio simulators who want one client for station setup, audio i
 
 - **Multiple audio sources:** microphone, desktop audio, and playlists.
 - **Radio signal modes:** AM, sideband, NFM, FreeDV RADE V1, DRM (experimental), and CW.
-- **Multiple simulator backends:** one client direction for simulator-specific connections.
+- **Multi-simulator support:** one desktop client is intended to connect to multiple virtual radio platforms; TXITY is the only connected backend today.
 - **Station workflow:** station identity, frequency, power, profile details, and transmission state.
 
 ## Availability
