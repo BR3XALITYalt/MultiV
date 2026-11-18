@@ -98,7 +98,7 @@ jobs:
         working-directory: decdrm
         run: cargo build --release -p txitpy-drm-bridge
 
-      - name: Validate the one-service 4.5 kHz configuration
+      - name: Validate robust and high-quality DRM configurations
         working-directory: decdrm
         run: |
           python - <<'PY'
@@ -195,4 +195,62 @@ jobs:
               print(xhe_result.stderr, end="")
           if xhe_result.returncode != 0:
               raise SystemExit("The xHE-AAC test-tone configuration did not validate.")
+
+          quality_config = xhe_config.replace(
+              "occupancy = 0",
+              "occupancy = 2",
+          ).replace(
+              "msc_mode = \"64-QAM\"",
+              "msc_mode = \"16-QAM\"",
+          )
+          Path("drm-validation.toml").write_text(quality_config, encoding="utf-8")
+          quality_result = subprocess.run(
+              [
+                  "cargo", "run", "--release", "-q",
+                  "-p", "txitpy-drm-bridge", "--",
+                  "--check", "drm-validation.toml",
+              ],
+              text=True,
+              capture_output=True,
+              check=False,
+          )
+          print("9 kHz 16-QAM mono xHE-AAC profile validation:")
+          if quality_result.stdout:
+              print(quality_result.stdout, end="")
+          if quality_result.stderr:
+              print(quality_result.stderr, end="")
+          if quality_result.returncode != 0:
+              raise SystemExit("The 9 kHz 16-QAM mono xHE-AAC profile did not validate.")
+
+          wide_stereo_config = base.replace(
+              "occupancy = 0",
+              "occupancy = 2",
+          ).replace(
+              'codec = "he-aac"\\ncore_rate = 12000',
+              'codec = "xhe-aac"',
+          ).replace(
+              "stereo = false",
+              "stereo = true",
+          ).replace(
+              "protection_b = 0",
+              "protection_b = 1",
+          )
+          Path("drm-validation.toml").write_text(wide_stereo_config, encoding="utf-8")
+          wide_stereo_result = subprocess.run(
+              [
+                  "cargo", "run", "--release", "-q",
+                  "-p", "txitpy-drm-bridge", "--",
+                  "--check", "drm-validation.toml",
+              ],
+              text=True,
+              capture_output=True,
+              check=False,
+          )
+          print("9 kHz 64-QAM stereo xHE-AAC profile validation:")
+          if wide_stereo_result.stdout:
+              print(wide_stereo_result.stdout, end="")
+          if wide_stereo_result.stderr:
+              print(wide_stereo_result.stderr, end="")
+          if wide_stereo_result.returncode != 0:
+              raise SystemExit("The 9 kHz 64-QAM stereo xHE-AAC profile did not validate.")
           PY
