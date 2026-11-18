@@ -499,7 +499,7 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["_txitpyMode"], "DRM")
         self.assertEqual(config["mode"], "DSB")
 
-    def test_rade_builds_a_centred_ssb_transport_configuration(self):
+    def test_rade_uses_the_requested_frequency_as_its_usb_carrier_reference(self):
         config = build_transmit_config(
             station_name="Example RADE",
             description="FreeDV RADE V1",
@@ -513,7 +513,7 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertIn("RADE", SUPPORTED_MODES)
         self.assertEqual(config["_txitpyMode"], "RADE")
         self.assertEqual(config["mode"], "USB")
-        self.assertEqual(config["rfHz"], 7_248_500)
+        self.assertEqual(config["rfHz"], 7_250_000)
         self.assertEqual(config["_txitpyRadeCenterHz"], 1_500)
         self.assertEqual(config["_txitpyRadeChannelBandwidthHz"], 1_500)
         self.assertEqual(config["ssbBandwidthHz"], 3_000)
@@ -522,14 +522,14 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["micGainDb"], 0)
         self.assertEqual(config["drive"], 0)
 
-    def test_rade_transport_centres_the_audio_at_room_edges(self):
-        self.assertEqual(rade_transport_settings("7.000 MHz"), ("LSB", 7_001_500))
-        self.assertEqual(rade_transport_settings("8.000 MHz"), ("USB", 7_998_500))
+    def test_rade_keeps_the_requested_usb_carrier_at_room_edges(self):
+        self.assertEqual(rade_transport_settings("7.000 MHz"), ("USB", 7_000_000))
+        self.assertEqual(rade_transport_settings("8.000 MHz"), ("USB", 8_000_000))
 
-        config = {"_txitpyMode": "RADE", "mode": "USB"}
+        config = {"_txitpyMode": "RADE", "mode": "LSB"}
         apply_rade_transport(config, "7.000 MHz")
-        self.assertEqual(config["mode"], "LSB")
-        self.assertEqual(config["rfHz"], 7_001_500)
+        self.assertEqual(config["mode"], "USB")
+        self.assertEqual(config["rfHz"], 7_000_000)
 
         with self.assertRaises(ValueError):
             rade_transport_settings("6.999 MHz")
