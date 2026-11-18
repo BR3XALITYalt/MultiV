@@ -230,20 +230,12 @@ def apply_nfm_transport(
 
 
 def rade_transport_settings(target_frequency_hz: Any) -> tuple[str, int]:
-    """Place the RADE audio centre at the requested channel centre."""
+    """Use the requested frequency directly as the USB suppressed-carrier reference."""
     target_hz = parse_rf_frequency(target_frequency_hz)
     if not TXITY_RF_ROOM_MIN_HZ <= target_hz <= TXITY_RF_ROOM_MAX_HZ:
         raise ValueError("FreeDV RADE runs only in TXITY's 7.000-8.000 MHz room.")
 
-    upper_carrier_hz = target_hz - RADE_AUDIO_CENTER_HZ
-    if TXITY_RF_ROOM_MIN_HZ <= upper_carrier_hz <= TXITY_RF_ROOM_MAX_HZ:
-        return "USB", upper_carrier_hz
-
-    lower_carrier_hz = target_hz + RADE_AUDIO_CENTER_HZ
-    if TXITY_RF_ROOM_MIN_HZ <= lower_carrier_hz <= TXITY_RF_ROOM_MAX_HZ:
-        return "LSB", lower_carrier_hz
-
-    raise ValueError("FreeDV RADE needs 1.5 kHz of tuning room around the requested channel centre.")
+    return "USB", target_hz
 
 
 def apply_rade_transport(
