@@ -1,84 +1,85 @@
 # Repository instructions
 
-## End-user-facing code
+## Project
 
-- Keep all user-facing text focused on the application and its use. Do not expose internal development notes, implementation chatter, contributor instructions, or project-management details in application UI, dialogs, notifications, logs intended for users, or other user-facing output.
-- Do not refer users to internal development workflows, version-control history, repository organization, or wikis. Link to public user documentation only when it is genuinely useful.
-- Comments in public-facing code must explain what the code does or why the behavior is necessary. Do not use comments to describe project organization, development history, or instructions to future contributors.
-- Keep developer-facing guidance in developer documentation such as `AGENTS.md`, not in application strings or end-user documentation.
-## Interface direction
+MultiV is a Windows desktop client for TXITY's simulated radio service. The desktop app uses Tkinter. `web_gui.py` serves a password-protected browser control panel on the local network.
 
-- Read [DESIGN.md](DESIGN.md) before changing the desktop interface.
-- Refer to the desktop application as **MultiV**. Use **TXITY** only for the website or the simulated service it connects to.
-- Keep the existing Material 3-inspired palette, native Tkinter controls, rectangular panels, and horizontal navigation unless the task calls for a change.
-- Follow the documented ENERGY, RHYTHM, and MOTION dials. Record a reason in DESIGN.md when a major visual decision changes.
+Call the application **MultiV**. Use **TXITY** for the service, website, station directory, and remote protocol.
 
-## Antislop
----
-name: stop-slop
-description: Remove AI writing patterns from prose. Use when drafting, editing, or reviewing text to eliminate predictable AI tells.
-metadata:
-  trigger: Writing prose, editing drafts, reviewing content for AI patterns
-  author: Hardik Pandya (https://hvpandya.com)
----
+## Before editing
 
-# Stop Slop
+- Read [DESIGN.md](DESIGN.md) before changing either interface.
+- Inspect the current implementation and nearby tests before changing behavior.
+- Keep changes limited to the requested outcome. Do not replace working code to impose a personal style.
+- Run `python -m compileall -q .` and `python -m unittest discover -s tests -v` after Python changes.
+- Launch the relevant interface to check visual changes when a runtime is available. A passing unit test does not prove that a desktop or browser UI works.
 
-Eliminate predictable AI writing patterns from prose.
+## Project interface rules
 
-## Core Rules
+- Keep the desktop app's Material 3-inspired palette, native Tkinter controls, rectangular panels, and horizontal navigation unless a task requires a change.
+- Keep the browser panel consistent with its existing layout. Do not add gradients, decorative animation, fake activity, or extra panels without a task-based reason.
+- Keep the ENERGY, RHYTHM, and MOTION dials in [DESIGN.md](DESIGN.md). Record the reason in that file when a major visual decision changes.
+- Keep controls keyboard-accessible. Give every input a visible label, preserve visible focus, maintain readable contrast, and do not communicate status through color alone.
+- Use semantic HTML and native controls in the browser panel. Provide status updates through accessible status regions.
 
-1. **Cut filler phrases.** Remove throat-clearing openers, emphasis crutches, and all adverbs. See [references/phrases.md](references/phrases.md).
+## Anti-slop standard
 
-2. **Break formulaic structures.** Avoid binary contrasts, negative listings, dramatic fragmentation, rhetorical setups, false agency. See [references/structures.md](references/structures.md).
+This standard applies to the README, developer documentation, design notes, code comments, docstrings, CLI help, dialogs, notifications, logs shown to users, desktop controls, and browser controls.
 
-3. **Use active voice.** Every sentence needs a human subject doing something. No passive constructions. No inanimate objects performing human actions ("the complaint becomes a fix").
+### Writing
 
-4. **Be specific.** No vague declaratives ("The reasons are structural"). Name the specific thing. No lazy extremes ("every," "always," "never") doing vague work.
+- State the fact, action, result, or limitation directly. Use concrete nouns, specific verbs, and measurable details.
+- Remove filler introductions, canned summaries, marketing claims, empty praise, and phrases that announce what the next paragraph will say.
+- Avoid formulaic contrasts, forced groups of three, slogan-like endings, rhetorical questions, dramatic fragments, and repeated sentence patterns.
+- Use active voice when it makes the actor clearer. Use passive voice when the actor is unknown or irrelevant.
+- Remove adverbs when they add no useful meaning. Do not mechanically ban adverbs, passive voice, repetition, or technical terminology when accuracy needs them.
+- Do not use vague claims such as "high quality", "robust", "seamless", or "intuitive" without a concrete, relevant measure.
+- Keep claims verifiable. State supported formats, frequency ranges, defaults, limitations, and prerequisites instead of promising behavior the code does not guarantee.
+- Use natural sentence rhythm. Do not force a tone, sentence length, or checklist score to make prose appear human.
+- Do not add references to AI, language models, prompts, or the writing process to user-facing content.
 
-5. **Put the reader in the room.** No narrator-from-a-distance voice. "You" beats "People." Specifics beat abstractions.
+### Documentation
 
-6. **Vary rhythm.** Mix sentence lengths. Two items beat three. End paragraphs differently. No em dashes.
+- Write user documentation around tasks: prerequisites, steps, expected result, and relevant limitations.
+- Keep README content focused on installing, configuring, and using MultiV. Put architecture notes, unfinished integrations, test commands, and implementation status in developer documentation.
+- Keep examples runnable. Use the actual command, option, path, control label, unit, and supported format.
+- Describe current behavior. Mark experimental features and unverified signal paths plainly. Do not describe planned or partial work as a usable feature.
+- Remove historical implementation comparisons from user instructions unless they explain a current compatibility constraint.
 
-7. **Trust readers.** State facts directly. Skip softening, justification, hand-holding.
+### Code comments and docstrings
 
-8. **Cut quotables.** If it sounds like a pull-quote, rewrite it.
+- Comment on non-obvious intent: protocol requirements, invariants, units, lifecycle rules, concurrency constraints, or reasons for a workaround.
+- Do not narrate obvious control flow or translate the next line of code into English.
+- Write docstrings around the function's contract: what it returns, important inputs or units, side effects, and errors when those details are not clear from the signature.
+- Keep comments valid as the code changes. Remove comments that describe deleted behavior, old implementations, or development history.
+- Preserve required license and SPDX notices.
 
-## Quick Checks
+### Interface copy
 
-Before delivering prose:
+- Use the same name for the same control or feature throughout the app and its documentation.
+- Use sentence case. Make labels short and specific. Name the action on buttons, such as "Start transmission" or "Save station profile".
+- Write status text for the state the app has actually reached. Do not report a connection, save, upload, or transmission as successful before it succeeds.
+- For errors, name the failed operation and give the next useful action when one exists. Do not hide a limitation behind a generic failure message.
+- Keep explanations beside the control they describe. Do not put implementation details, release notes, or developer instructions in the UI.
+- Prefer "you" for user actions. Refer to controls by their visible labels, not by widget or component type.
 
-- Any adverbs? Kill them.
-- Any passive voice? Find the actor, make them the subject.
-- Inanimate thing doing a human verb ("the decision emerges")? Name the person.
-- Sentence starts with a Wh- word? Restructure it.
-- Any "here's what/this/that" throat-clearing? Cut to the point.
-- Any "not X, it's Y" contrasts? State Y directly.
-- Three consecutive sentences match length? Break one.
-- Paragraph ends with punchy one-liner? Vary it.
-- Em-dash anywhere? Remove it.
-- Vague declarative ("The implications are significant")? Name the specific implication.
-- Narrator-from-a-distance ("Nobody designed this")? Put the reader in the scene.
-- Meta-joiners ("The rest of this essay...")? Delete. Let the essay move.
+### Code quality
 
-## Scoring
+- Optimize for correctness, readability, and simple control flow. Remove complexity only when the change preserves behavior.
+- Do not add an abstraction for a single use case without a clear need. Avoid speculative frameworks, unnecessary dependencies, dead code, and compatibility branches without a supported use case.
+- Add or update tests for changed behavior, especially error paths and boundary conditions.
+- Review each change for correctness, readability, architecture, security, and performance. Tests are necessary; they do not replace reading the changed code.
+- Do not claim that tests, builds, receiver checks, or GUI launches passed unless they ran and passed.
 
-Rate 1-10 on each dimension:
+## Source guidelines
 
-| Dimension | Question |
-|-----------|----------|
-| Directness | Statements or announcements? |
-| Rhythm | Varied or metronomic? |
-| Trust | Respects reader intelligence? |
-| Authenticity | Sounds human? |
-| Density | Anything cuttable? |
+These sources informed the project rules. Apply their useful principles to MultiV's stack; do not copy general advice mechanically.
 
-Below 35/50: revise.
-
-## Examples
-
-See [references/examples.md](references/examples.md) for before/after transformations.
-
-## License
-
-MIT
+- [Stop Slop by Hardik Pandya](https://github.com/hardikpandya/stop-slop) (MIT): remove filler, vague statements, canned structures, and artificial prose patterns. The rules above adapt the writing guidance rather than applying blanket bans.
+- [Writing a good CLAUDE.md, HumanLayer](https://www.humanlayer.dev/blog/writing-a-good-claude-md): keep agent instructions concise, broadly applicable, and link to task-specific documentation instead of loading every detail into the root file.
+- [GitHub: How to write a great AGENTS.md](https://github.blog/ai-and-ml/github-copilot/how-to-write-a-great-agents-md-lessons-from-over-2500-repositories/): include concrete project context, commands, tests, examples, and boundaries.
+- [Anthropic: Best practices for Claude Code](https://code.claude.com/docs/en/best-practices): give agents useful repository context, refine instructions, and verify changes with appropriate tools.
+- [Addy Osmani: Agentic Code Quality](https://addyosmani.com/blog/agentic-code-quality/): use quality gates for correctness, security, performance, accessibility, maintainability, and comprehensibility.
+- [Addy Osmani's Code Review and Quality skill](https://github.com/addyosmani/agent-skills/blob/main/skills/code-review-and-quality/SKILL.md): review correctness, readability, architecture, security, and performance; avoid unnecessary abstractions and dead code.
+- [Google Material communication principles](https://codelabs.developers.google.com/codelabs/material-communication-guidance): keep interface copy concise, direct, user-focused, and limited to the information needed for the current task.
+- [W3C Web Content Accessibility Guidelines 2.2](https://www.w3.org/TR/WCAG22/): check text alternatives, keyboard operation, focus, contrast, and accessible control names.
