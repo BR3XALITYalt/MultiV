@@ -18,14 +18,23 @@ from urllib.parse import urlencode
 
 from audio_playlist import build_playlist_order, collect_audio_files
 from playlist_decoder import iter_playlist_audio_blocks
-from drm_support import LocalDRMPlaylistServer, ensure_drm_encoder, write_drm_station_config
+from drm_support import (
+    DRM_DEFAULT_QUALITY_PROFILE,
+    LocalDRMPlaylistServer,
+    drm_quality_profile_settings,
+    ensure_drm_encoder,
+    write_drm_station_config,
+)
 from nfm_modulator import (
     NFM_AUDIO_HIGH_HZ,
+    NFM_DEFAULT_PROFILE,
+    NFM_PROFILES,
     NFM_AUDIO_LOW_HZ,
     NFM_CHANNEL_BANDWIDTH_HZ,
     NFM_DEVIATION_HZ,
     NFM_IF_HZ,
     StreamingNFMModulator,
+    nfm_profile_settings,
 )
 from freedv_rade import (
     FreeDVRadeEncoder,
@@ -212,21 +221,28 @@ TXITY_RF_ROOM_MIN_HZ = 7_000_000
 TXITY_RF_ROOM_MAX_HZ = 8_000_000
 
 
-def nfm_transport_settings(target_frequency_hz: Any) -> tuple[str, int]:
-    """Place a 5 kHz NFM IF at the requested channel centre using TXITY SSB."""
+def nfm_transport_settings(
+    target_frequency_hz: Any,
+    *,
+    if_hz: int = NFM_IF_HZ,
+) -> tuple[str, int]:
+    """Place the selected NFM IF at the requested channel centre using TXITY SSB."""
     target_hz = parse_rf_frequency(target_frequency_hz)
     if not TXITY_RF_ROOM_MIN_HZ <= target_hz <= TXITY_RF_ROOM_MAX_HZ:
         raise ValueError("NFM runs only in TXITY's 7.000-8.000 MHz room.")
+    intermediate_frequency = int(if_hz)
+    if intermediate_frequency <= 0:
+        raise ValueError("NFM intermediate frequency must be positive.")
 
-    upper_carrier_hz = target_hz - NFM_IF_HZ
+    upper_carrier_hz = target_hz - intermediate_frequency
     if TXITY_RF_ROOM_MIN_HZ <= upper_carrier_hz <= TXITY_RF_ROOM_MAX_HZ:
         return "USB", upper_carrier_hz
 
-    lower_carrier_hz = target_hz + NFM_IF_HZ
+    lower_carrier_hz = target_hz + intermediate_frequency
     if TXITY_RF_ROOM_MIN_HZ <= lower_carrier_hz <= TXITY_RF_ROOM_MAX_HZ:
         return "LSB", lower_carrier_hz
 
-    raise ValueError("NFM needs 5 kHz of tuning room around the requested frequency.")
+    raise ValueError("NFM needs enough tuning room for its selected intermediate frequency.")
 
 
 def apply_nfm_transport(
@@ -235,7 +251,10 @@ def apply_nfm_transport(
 ) -> dict[str, Any]:
     """Apply a selected RF channel center to the underlying TXITY transport."""
     if str(config.get("_txitpyMode") or "").strip().upper() == "NFM":
-        sideband, carrier_hz = nfm_transport_settings(target_frequency_hz)
+        sideband, carrier_hz = nfm_transport_settings(
+            target_frequency_hz,
+            if_hz=int(config.get("_txitpyNfmIfHz", NFM_IF_HZ)),
+        )
         config["mode"] = sideband
         config["rfHz"] = carrier_hz
         config["_txitpyNfmSideband"] = sideband
@@ -293,7 +312,12 @@ def build_frequency_candidates(
     return candidates
 
 
-def mode_bandwidth_hz(mode: Any, station: dict[str, Any] | None = None) -> int:
+def mode_bandwidth_hz(
+    mode: Any,
+    station: dict[str, Any] | None = None,
+    *,
+    nfm_profile: str = NFM_DEFAULT_PROFILE,
+) -> int:
     """Return a TXITY channel-width estimate, preferring station-reported values."""
     station = station if isinstance(station, dict) else {}
     mode_name = str(mode or "AM").strip().upper()
@@ -312,6 +336,8 @@ def mode_bandwidth_hz(mode: Any, station: dict[str, Any] | None = None) -> int:
         if isinstance(candidate, (int, float)) and not isinstance(candidate, bool):
             if math.isfinite(float(candidate)) and 0 < float(candidate) <= 2_000_000:
                 return int(round(candidate))
+    if mode_name == "NFM":
+        return int(nfm_profile_settings(nfm_profile)["channel_bandwidth_hz"])
     return DEFAULT_MODE_BANDWIDTH_HZ.get(mode_name, DEFAULT_MODE_BANDWIDTH_HZ["AM"])
 
 
@@ -320,10 +346,12 @@ def find_frequency_overlaps(
     frequency: Any,
     mode: Any,
     stations: list[dict[str, Any]],
+    *,
+    nfm_profile: str = NFM_DEFAULT_PROFILE,
 ) -> list[dict[str, Any]]:
     """Find estimated channel overlaps with the supplied TXITY station records."""
     target_hz = parse_rf_frequency(frequency)
-    target_width = mode_bandwidth_hz(mode)
+    target_width = mode_bandwidth_hz(mode, nfm_profile=nfm_profile)
     target_low = target_hz - target_width / 2
     target_high = target_hz + target_width / 2
     overlaps: list[dict[str, Any]] = []
@@ -420,8 +448,11 @@ def build_transmit_config(
     drm_iso_language: str = "",
     drm_iso_country: str = "",
     drm_audio_codec: str = "xHE-AAC",
-    drm_msc_mode: str = "16-QAM",
+    drm_msc_mode: str | None = None,
     drm_interleaving: str = "long",
+    drm_quality_profile: str = DRM_DEFAULT_QUALITY_PROFILE,
+    drm_stereo: bool | None = None,
+    nfm_profile: str = NFM_DEFAULT_PROFILE,
 ) -> dict[str, Any]:
     """Create the TXITY config message using the website's currentConfig schema."""
     name = str(station_name or "").strip()
@@ -442,8 +473,21 @@ def build_transmit_config(
     else:
         server_mode = selected_mode
     server_frequency_hz = parse_rf_frequency(frequency)
+    selected_nfm_profile = (
+        nfm_profile_settings(nfm_profile)
+        if selected_mode == "NFM"
+        else None
+    )
+    selected_drm_profile = (
+        drm_quality_profile_settings(drm_quality_profile)
+        if selected_mode == "DRM"
+        else None
+    )
     if selected_mode == "NFM":
-        server_mode, server_frequency_hz = nfm_transport_settings(server_frequency_hz)
+        server_mode, server_frequency_hz = nfm_transport_settings(
+            server_frequency_hz,
+            if_hz=selected_nfm_profile["if_hz"],
+        )
     elif selected_mode == "RADE":
         server_mode, server_frequency_hz = rade_transport_settings(server_frequency_hz)
 
@@ -539,6 +583,15 @@ def build_transmit_config(
         "amPreEmphasis": False if selected_mode == "DRM" else bool(am_pre_emphasis),
     }
     if selected_mode == "DRM":
+        assert selected_drm_profile is not None
+        selected_drm_msc_mode = str(
+            drm_msc_mode or selected_drm_profile["msc_mode"]
+        ).strip().upper()
+        selected_drm_stereo = (
+            bool(selected_drm_profile["stereo"])
+            if drm_stereo is None
+            else bool(drm_stereo)
+        )
         configuration["_txitpyMode"] = "DRM"
         configuration.update({
             "fadeMs": 0,
@@ -555,8 +608,11 @@ def build_transmit_config(
             "_txitpyDrmIsoLanguage": str(drm_iso_language or "").strip(),
             "_txitpyDrmIsoCountry": str(drm_iso_country or "").strip(),
             "_txitpyDrmAudioCodec": str(drm_audio_codec or "xHE-AAC").strip(),
-            "_txitpyDrmMscMode": str(drm_msc_mode or "16-QAM").strip().upper(),
+            "_txitpyDrmMscMode": selected_drm_msc_mode,
             "_txitpyDrmInterleaving": str(drm_interleaving or "long").strip().casefold(),
+            "_txitpyDrmQualityProfile": str(drm_quality_profile),
+            "_txitpyDrmOccupancy": int(selected_drm_profile["occupancy"]),
+            "_txitpyDrmStereo": selected_drm_stereo,
         })
     elif selected_mode == "RADE":
         configuration.update({
@@ -575,12 +631,15 @@ def build_transmit_config(
             "ssbHighCutHz": 0,
         })
     elif selected_mode == "NFM":
+        assert selected_nfm_profile is not None
         configuration.update({
             "_txitpyMode": "NFM",
-            "_txitpyNfmIfHz": NFM_IF_HZ,
-            "_txitpyNfmDeviationHz": NFM_DEVIATION_HZ,
-            "_txitpyNfmInputLowCutHz": NFM_AUDIO_LOW_HZ,
-            "_txitpyNfmInputHighCutHz": NFM_AUDIO_HIGH_HZ,
+            "_txitpyNfmProfile": str(nfm_profile),
+            "_txitpyNfmIfHz": int(selected_nfm_profile["if_hz"]),
+            "_txitpyNfmDeviationHz": int(selected_nfm_profile["deviation_hz"]),
+            "_txitpyNfmInputLowCutHz": int(selected_nfm_profile["audio_low_hz"]),
+            "_txitpyNfmInputHighCutHz": int(selected_nfm_profile["audio_high_hz"]),
+            "_txitpyNfmChannelBandwidthHz": int(selected_nfm_profile["channel_bandwidth_hz"]),
             "_txitpyNfmInputGainDb": mic_gain_value,
             "_txitpyNfmSideband": server_mode,
             "fadeMs": 0,
@@ -1280,6 +1339,8 @@ class TxityTransmitter:
                     "audio_codec": config.get("_txitpyDrmAudioCodec", "xHE-AAC"),
                     "msc_mode": config.get("_txitpyDrmMscMode", "16-QAM"),
                     "interleaving": config.get("_txitpyDrmInterleaving", "long"),
+                    "occupancy": int(config.get("_txitpyDrmOccupancy", 0)),
+                    "stereo": bool(config.get("_txitpyDrmStereo", False)),
                 }
 
                 if audio_source == "playlist":
