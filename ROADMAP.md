@@ -1,10 +1,12 @@
 # Roadmap
 
-## Providers
+## Simulator providers
 
- - [x] TXITY
- - [ ] SimTX (in progress)
-## Modes
- - [x] All TXITY Default Modes
- - [x] NFM
- - [x] DRM (Experimental)
+- [x] TXITY
+- [ ] SimTX (in progress)
+
+## Signal modes
+
+- [x] TXITY default modes
+- [x] NFM
+- [x] DRM (experimental)
