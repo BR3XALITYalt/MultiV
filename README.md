@@ -1,6 +1,12 @@
 ![MultiV](assets/banner.svg)
 
-MultiV connects to TXITY. Sign in with Discord to browse stations, edit your station profile, and send audio to your virtual station.
+**A multi-source streaming client for virtual radio simulators.**
+
+MultiV brings audio sources, radio modes, station settings, and simulator connections into one desktop client. Choose a microphone, desktop audio, or playlist as the source for a transmission.
+
+TXITY is the active simulator connection today. SimTX integration is in development and is not connected to the desktop transmitter yet. MultiV currently runs one active simulator transmission at a time; simultaneous output to several simulators is not available.
+
+Sign in with Discord to connect to TXITY, browse stations, edit your station profile, and transmit audio.
 
 ## Install
 
