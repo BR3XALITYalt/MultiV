@@ -180,7 +180,7 @@
       align-items: center;
       flex-wrap: wrap;
       gap: 12px 24px;
-      margin: 30px 0 30px;
+      margin: 30px 0;
     }
 
     .action-link {
@@ -197,15 +197,16 @@
       text-decoration: none;
     }
 
-    .action-link:hover {
+    .action-link:hover,
+    .action-link:active {
       border-color: #d0b3f0;
       background: #d0b3f0;
       color: #21152d;
     }
 
     .text-link {
-      min-height: 44px;
       display: inline-flex;
+      min-height: 44px;
       align-items: center;
       color: var(--text);
       font-size: 0.9rem;
@@ -418,12 +419,15 @@
       line-height: 1.75;
     }
 
+    .provider-wrap {
+      background: var(--surface);
+    }
+
     .provider-section {
       display: grid;
       grid-template-columns: minmax(230px, 0.85fr) minmax(0, 1.15fr);
       gap: clamp(34px, 7vw, 100px);
       align-items: center;
-      background: var(--surface);
     }
 
     .provider-section h2 {
@@ -765,7 +769,7 @@
       </div>
     </section>
 
-    <section class="section provider-section" id="providers" aria-labelledby="providers-title">
+    <section class="section provider-wrap" id="providers" aria-labelledby="providers-title">
       <div class="shell provider-section">
         <div>
           <p class="section-index"><span class="frequency-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span> 04 / Simulator providers</p>
