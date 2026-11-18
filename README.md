@@ -35,11 +35,13 @@ MultiV reconnects when its control or audio connection drops. It restores the st
 
 ### NFM
 
-MultiV generates NFM with a 5 kHz intermediate frequency, 2.5 kHz peak deviation, and a 30-2,000 Hz audio band. The estimated Carson-rule bandwidth is 9 kHz. The 500 Hz clearance between the IF and the deviation-plus-audio limit keeps the generated spectrum above DC.
+MultiV provides two NFM profiles. **Standard (9 kHz)** retains a 5 kHz IF, 2.5 kHz peak deviation, and a 30-2,000 Hz voice band. **Wide (11 kHz)** uses a 6 kHz IF, the same peak deviation, and a 100-3,000 Hz voice band. Both keep a 500 Hz clearance between the IF and the deviation-plus-audio limit.
 
-The **NFM transport bandwidth** control requests a TXITY USB/LSB passband from 1 to 20 kHz. It defaults to 12 kHz. This control changes the transport passband, not FM deviation or the audio filter. A narrower passband can clip the signal.
+Both profiles use second-order Butterworth high-pass and low-pass filters with streaming state, followed by the existing soft limiter. This gives a steeper, more controlled voice-band response than the earlier one-pole filters.
 
-TXITY does not offer native NFM. MultiV sends its generated FM signal through the existing USB or LSB transport. To correct the observed passband asymmetry, MultiV moves the NFM IF down by 1 kHz (6 kHz to 5 kHz) and moves the TXITY carrier reference up by 1 kHz. These offsets cancel, so the entered channel center does not change. The station directory shows the underlying sideband transport with its reference 5 kHz below the selected center for USB, or 5 kHz above it for LSB.
+The **NFM transport bandwidth** control requests a TXITY USB/LSB passband from 1 to 20 kHz. It defaults to 12 kHz, which accommodates either profile. A narrower passband can clip the generated FM signal.
+
+TXITY does not offer native NFM. MultiV sends its generated FM signal through the existing USB or LSB transport. The selected profile's IF determines the carrier-reference offset, so the entered channel center remains fixed.
 
 NFM runs only in TXITY's 7.000-8.000 MHz room. An independent receiver test has not verified this signal path. TXITY filtering and receiver settings can affect the result.
 
@@ -56,9 +58,9 @@ Source: [FreeDV RADE](https://freedv.org/radio-autoencoder/) and [RADE C](https:
 
 ### DRM [EXPERIMENTAL]
 
-DRM builds one mono xHE-AAC programme in a 4.5 kHz DRM30 channel. Choose 16-QAM or 64-QAM for MSC modulation; SDC uses 16-QAM. The default 16-QAM setting improves robustness and carries less audio data. Use 64-QAM when reception is strong and you need more audio capacity.
+DRM provides three channel profiles: **Robust** uses 4.5 kHz occupancy, 16-QAM, and mono audio; **Quality** uses 9 kHz occupancy, 16-QAM, and mono audio; **Maximum quality** uses 9 kHz occupancy, 64-QAM, and stereo audio. The SDC remains 16-QAM. 64-QAM and stereo provide more capacity but need better reception conditions. The maximum-quality profile is not guaranteed to sound better on a weak or fading channel.
 
-Long MSC interleaving (2 seconds) improves resistance to fading. Short interleaving (400 ms) reduces delay. Choose xHE-AAC or legacy HE-AAC for audio. Choose HE-AAC when your receiver does not support xHE-AAC.
+Long MSC interleaving (2 seconds) improves resistance to fading. Short interleaving (400 ms) reduces delay. Choose xHE-AAC or legacy HE-AAC for audio. Choose HE-AAC when your receiver does not support xHE-AAC. The codec uses the available service capacity; MultiV does not force a fixed encoder bitrate.
 
 DRM supports microphone input and OGG, MP3, or FLAC playlists. It does not support desktop-audio loopback. WAV and AIFF playlist entries do not play in DRM mode.
 
