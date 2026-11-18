@@ -87,6 +87,21 @@ def next_audio_frame_deadline(
     return next_deadline
 
 
+def unpack_queued_audio_frame(item: Any) -> tuple[bytes, tuple[str, int, int] | None]:
+    """Separate PCM bytes from optional playlist metadata before WebSocket sending."""
+    if (
+        isinstance(item, tuple)
+        and len(item) == 2
+        and isinstance(item[0], bytes)
+    ):
+        return item[0], item[1]
+    if isinstance(item, bytes):
+        return item, None
+    raise TypeError(
+        f"Audio queue item must contain PCM bytes, received {type(item).__name__}."
+    )
+
+
 def begin_windows_audio_timer_resolution():
     """Request 1 ms timer granularity while playlist audio is being streamed."""
     if os.name != "nt":
@@ -1761,32 +1776,28 @@ class TxityTransmitter:
                     else:
                         continue
 
-                if audio_source == "playlist" and not drm_mode:
-                    if rade_mode:
-                        if isinstance(queued_frame, tuple):
-                            frame, playlist_info = queued_frame
-                        else:
-                            frame, playlist_info = queued_frame, None
-                    else:
-                        frame, playlist_info = queued_frame
+                if audio_source == "playlist":
+                    frame, playlist_info = unpack_queued_audio_frame(queued_frame)
                     playlist_underrun_active = False
-                    if playlist_info != playlist_current_track:
-                        playlist_current_track = playlist_info
-                        track_path, track_index, track_count = playlist_info
-                        self.events.put({
-                            "kind": "tx_playlist_track",
-                            "path": track_path,
-                            "index": track_index,
-                            "count": track_count,
-                        })
-                    wait_seconds = playlist_frame_wait_seconds(
-                        playlist_next_frame_deadline,
-                        time.perf_counter(),
-                    )
-                    if wait_seconds > 0 and self._stop_event.wait(wait_seconds):
-                        break
-                    if self._stop_event.is_set():
-                        break
+                    if not drm_mode:
+                        if playlist_info != playlist_current_track:
+                            playlist_current_track = playlist_info
+                            if playlist_info is not None:
+                                track_path, track_index, track_count = playlist_info
+                                self.events.put({
+                                    "kind": "tx_playlist_track",
+                                    "path": track_path,
+                                    "index": track_index,
+                                    "count": track_count,
+                                })
+                        wait_seconds = playlist_frame_wait_seconds(
+                            playlist_next_frame_deadline,
+                            time.perf_counter(),
+                        )
+                        if wait_seconds > 0 and self._stop_event.wait(wait_seconds):
+                            break
+                        if self._stop_event.is_set():
+                            break
                 else:
                     frame = queued_frame
 
