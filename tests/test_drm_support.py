@@ -199,7 +199,7 @@ class DRMConfigurationTests(unittest.TestCase):
         self.assertEqual(config["channel"]["protection_b"], 1)
         self.assertEqual(config["output"]["sample_format"], "float32")
         self.assertEqual(config["output"]["format"], "real")
-        self.assertEqual(config["output"]["if_hz"], 1500.0)
+        self.assertNotIn("if_hz", config["output"])
         self.assertEqual(len(config["service"]), 1)
         service = config["service"][0]
         self.assertEqual(service["language"], "English")
@@ -236,6 +236,7 @@ class DRMConfigurationTests(unittest.TestCase):
             config = tomllib.loads(path.read_text(encoding="utf-8"))
 
         self.assertEqual(config["channel"]["occupancy"], 2)
+        self.assertNotIn("if_hz", config["output"])
         self.assertEqual(config["channel"]["msc_mode"], "64-QAM")
         self.assertTrue(config["service"][0]["audio"]["stereo"])
 
