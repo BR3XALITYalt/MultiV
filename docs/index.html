@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#100b1d">
+  <meta name="description" content="MultiV is a desktop client for audio sources, radio signal modes, station settings, and virtual radio simulator connections.">
+  <title>MultiV - One Client To Rule Them All</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --page: #100b1d;
+      --surface: rgba(25, 17, 43, 0.78);
+      --surface-strong: rgba(20, 13, 36, 0.94);
+      --line: rgba(226, 207, 255, 0.16);
+      --text: #f7f1ff;
+      --muted: #c1b5d4;
+      --soft: #9b8cac;
+      --purple: #b78cff;
+      --violet: #8957e5;
+      --blue: #8bcaff;
+      --max-width: 1160px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--page);
+    }
+
+    body {
+      min-width: 320px;
+      margin: 0;
+      color: var(--text);
+      background:
+        linear-gradient(118deg, rgba(12, 7, 24, 0.94) 3%, rgba(25, 12, 43, 0.84) 48%, rgba(12, 10, 30, 0.93) 100%),
+        url("https://images.unsplash.com/photo-1557682250-33bd709cbe85?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3wxMTY5OTZ8MHwxfHNlYXJjaHw0N3x8Z3JhZGllbnR8ZW58MXx8fHwxNzk0Nzg5NTA5fDA&ixlib=rb-4.1.0&q=80&w=1080") center / cover fixed;
+      line-height: 1.6;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    a:hover {
+      color: #d9c2ff;
+    }
+
+    a:focus-visible,
+    summary:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 4px;
+      border-radius: 4px;
+    }
+
+    .shell {
+      width: min(var(--max-width), calc(100% - 48px));
+      margin-inline: auto;
+    }
+
+    .site-header {
+      position: relative;
+      z-index: 5;
+      border-bottom: 1px solid var(--line);
+      background: rgba(13, 8, 24, 0.74);
+      backdrop-filter: blur(18px);
+    }
+
+    .header-inner {
+      display: flex;
+      min-height: 76px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .wordmark {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+      font-size: 1.08rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+    }
+
+    .wordmark-mark {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border: 1px solid rgba(194, 155, 255, 0.55);
+      border-radius: 10px;
+      background: linear-gradient(145deg, rgba(156, 96, 241, 0.32), rgba(91, 54, 155, 0.18));
+      color: #e5d5ff;
+      font-size: 0.9rem;
+      letter-spacing: 0;
+    }
+
+    .header-actions,
+    .main-nav {
+      display: flex;
+      align-items: center;
+      gap: 26px;
+    }
+
+    .main-nav a,
+    .brand-dropdown summary {
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .main-nav a:hover,
+    .brand-dropdown summary:hover {
+      color: var(--text);
+    }
+
+    .brand-dropdown {
+      position: relative;
+    }
+
+    .brand-dropdown summary {
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+
+    .brand-dropdown summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .brand-dropdown summary::after {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      margin: 0 0 3px 9px;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      content: "";
+      transform: rotate(45deg);
+    }
+
+    .brand-panel {
+      position: absolute;
+      top: calc(100% + 18px);
+      right: 0;
+      width: min(420px, calc(100vw - 40px));
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface-strong);
+      box-shadow: 0 22px 70px rgba(0, 0, 0, 0.48);
+    }
+
+    .brand-panel img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      background: #171020;
+    }
+
+    .brand-panel p {
+      margin: 10px 2px 0;
+      color: var(--soft);
+      font-size: 0.78rem;
+    }
+
+    .hero {
+      display: grid;
+      min-height: 660px;
+      grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+      align-items: center;
+      gap: 64px;
+      padding-block: 92px 104px;
+    }
+
+    .eyebrow {
+      margin: 0 0 20px;
+      color: #d3b5ff;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 760px;
+      margin-bottom: 24px;
+      font-size: clamp(3.2rem, 7.3vw, 6.5rem);
+      font-weight: 850;
+      letter-spacing: -0.075em;
+      line-height: 0.98;
+    }
+
+    .gradient-text {
+      background: linear-gradient(105deg, #f6eeff 5%, #c59aff 55%, #8bcaff 100%);
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-copy {
+      max-width: 600px;
+      margin-bottom: 32px;
+      color: #d1c6df;
+      font-size: 1.12rem;
+      line-height: 1.8;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .button {
+      display: inline-flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: center;
+      padding: 0 20px;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      font-size: 0.9rem;
+      font-weight: 750;
+      transition: background-color 120ms ease, border-color 120ms ease;
+    }
+
+    .button-primary {
+      background: #a878f1;
+      color: #180d29;
+    }
+
+    .button-primary:hover {
+      background: #c39cff;
+      color: #180d29;
+    }
+
+    .button-secondary {
+      border-color: rgba(220, 199, 255, 0.28);
+      background: rgba(23, 15, 39, 0.45);
+      color: var(--text);
+    }
+
+    .button-secondary:hover {
+      border-color: rgba(220, 199, 255, 0.65);
+      background: rgba(74, 48, 111, 0.48);
+      color: var(--text);
+    }
+
+    .hero-visual {
+      position: relative;
+      padding: 22px;
+      border: 1px solid rgba(223, 204, 255, 0.2);
+      border-radius: 20px;
+      background: linear-gradient(150deg, rgba(41, 28, 65, 0.88), rgba(17, 13, 31, 0.9));
+      box-shadow: 0 30px 100px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(18px);
+    }
+
+    .visual-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .visual-heading strong {
+      font-size: 0.9rem;
+      letter-spacing: 0.03em;
+    }
+
+    .visual-label {
+      color: var(--soft);
+      font-size: 0.72rem;
+    }
+
+    .source-list {
+      display: grid;
+      gap: 9px;
+    }
+
+    .source-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 14px;
+      border: 1px solid rgba(229, 214, 255, 0.12);
+      border-radius: 10px;
+      background: rgba(8, 5, 17, 0.28);
+      color: #d6cbe5;
+      font-size: 0.88rem;
+    }
+
+    .source-row.selected {
+      border-color: rgba(183, 140, 255, 0.7);
+      background: rgba(137, 87, 229, 0.2);
+      color: #fff;
+    }
+
+    .source-icon {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      flex: 0 0 auto;
+      place-items: center;
+      border-radius: 8px;
+      background: rgba(188, 151, 255, 0.13);
+      color: #d9c2ff;
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+
+    .selected-tag {
+      margin-left: auto;
+      color: #d9c2ff;
+      font-size: 0.7rem;
+    }
+
+    .flow-line {
+      width: 1px;
+      height: 26px;
+      margin: 0 auto;
+      background: linear-gradient(var(--purple), rgba(183, 140, 255, 0.12));
+    }
+
+    .signal-box {
+      padding: 17px;
+      border: 1px solid rgba(139, 202, 255, 0.26);
+      border-radius: 12px;
+      background: rgba(62, 102, 149, 0.12);
+    }
+
+    .signal-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #dff2ff;
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .signal-sub {
+      margin: 5px 0 13px;
+      color: #aebbd0;
+      font-size: 0.74rem;
+    }
+
+    .waveform {
+      display: flex;
+      height: 34px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 3px;
+    }
+
+    .waveform span {
+      width: 4px;
+      min-height: 5px;
+      border-radius: 5px;
+      background: linear-gradient(180deg, #c8a4ff, #7b9be9);
+    }
+
+    .visual-note {
+      margin: 14px 0 0;
+      color: var(--soft);
+      font-size: 0.72rem;
+      text-align: center;
+    }
+
+    .section {
+      padding-block: 82px;
+      border-top: 1px solid var(--line);
+    }
+
+    .section-heading {
+      max-width: 680px;
+      margin-bottom: 38px;
+    }
+
+    .section-heading h2 {
+      margin-bottom: 14px;
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      letter-spacing: -0.055em;
+      line-height: 1.1;
+    }
+
+    .section-heading p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.8;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .feature-card {
+      min-height: 220px;
+      padding: 25px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(19, 13, 32, 0.69);
+      backdrop-filter: blur(12px);
+    }
+
+    .feature-index {
+      display: inline-block;
+      margin-bottom: 30px;
+      color: #c49aff;
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+    }
+
+    .feature-card h3 {
+      margin-bottom: 9px;
+      font-size: 1.08rem;
+    }
+
+    .feature-card p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.7;
+    }
+
+    .modes-layout {
+      display: grid;
+      grid-template-columns: 0.75fr 1.25fr;
+      align-items: start;
+      gap: 52px;
+    }
+
+    .mode-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .mode-item {
+      padding: 17px 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(20, 13, 35, 0.7);
+    }
+
+    .mode-item strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.91rem;
+    }
+
+    .mode-item span {
+      color: var(--soft);
+      font-size: 0.76rem;
+    }
+
+    .mode-footnote {
+      margin-top: 15px;
+      color: var(--soft);
+      font-size: 0.8rem;
+    }
+
+    .roadmap-panel {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 32px;
+      padding: 32px;
+      border: 1px solid rgba(190, 153, 255, 0.3);
+      border-radius: 16px;
+      background: linear-gradient(120deg, rgba(112, 67, 173, 0.26), rgba(26, 20, 48, 0.72));
+    }
+
+    .roadmap-panel h2 {
+      margin-bottom: 9px;
+      font-size: 1.65rem;
+      letter-spacing: -0.04em;
+    }
+
+    .roadmap-panel p {
+      max-width: 680px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .install-grid {
+      display: grid;
+      grid-template-columns: 0.8fr 1.2fr;
+      gap: 32px;
+      align-items: start;
+    }
+
+    .install-copy p {
+      color: var(--muted);
+    }
+
+    .requirements {
+      margin: 18px 0 0;
+      padding-left: 19px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .requirements li + li {
+      margin-top: 7px;
+    }
+
+    pre {
+      overflow-x: auto;
+      margin: 0;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(8, 6, 16, 0.82);
+      color: #e7d8ff;
+      font-size: 0.88rem;
+      line-height: 1.8;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    .site-footer {
+      padding-block: 28px;
+      border-top: 1px solid var(--line);
+      color: var(--soft);
+      font-size: 0.82rem;
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+    }
+
+    @media (max-width: 900px) {
+      .hero {
+        min-height: auto;
+        grid-template-columns: 1fr;
+        gap: 42px;
+        padding-block: 76px;
+      }
+
+      .hero-visual {
+        width: min(100%, 560px);
+      }
+
+      .modes-layout,
+      .install-grid {
+        grid-template-columns: 1fr;
+        gap: 28px;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .shell {
+        width: min(100% - 32px, var(--max-width));
+      }
+
+      .header-inner {
+        min-height: 68px;
+      }
+
+      .main-nav {
+        gap: 14px;
+      }
+
+      .main-nav a {
+        display: none;
+      }
+
+      .brand-dropdown summary {
+        font-size: 0.82rem;
+      }
+
+      .hero {
+        padding-block: 68px;
+      }
+
+      h1 {
+        font-size: clamp(3rem, 15vw, 4.6rem);
+      }
+
+      .feature-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .feature-card {
+        min-height: 0;
+      }
+
+      .feature-index {
+        margin-bottom: 18px;
+      }
+
+      .mode-list {
+        grid-template-columns: 1fr;
+      }
+
+      .roadmap-panel,
+      .footer-inner {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .roadmap-panel {
+        padding: 24px;
+      }
+
+      .section {
+        padding-block: 64px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      .button {
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="wordmark" href="#top" aria-label="MultiV home">
+        <span class="wordmark-mark" aria-hidden="true">MV</span>
+        <span>MULTIV</span>
+      </a>
+
+      <div class="header-actions">
+        <nav class="main-nav" aria-label="Main navigation">
+          <a href="#features">Features</a>
+          <a href="#modes">Signal modes</a>
+          <a href="#install">Install</a>
+        </nav>
+
+        <details class="brand-dropdown">
+          <summary>README artwork</summary>
+          <div class="brand-panel">
+            <img src="../assets/banner.svg" alt="MultiV banner artwork from the project README">
+            <p>Project banner · assets/banner.svg</p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="shell hero" aria-labelledby="hero-title">
+      <div>
+        <p class="eyebrow">Virtual radio, one desktop client</p>
+        <h1 id="hero-title"><span class="gradient-text">One Client</span><br>To Rule Them All.</h1>
+        <p class="hero-copy">
+          MultiV brings audio input, signal configuration, station settings, and virtual radio simulator connections into one desktop workflow.
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#features">Explore MultiV</a>
+          <a class="button button-secondary" href="https://github.com/BR3XALITYalt/MultiV">View source</a>
+        </div>
+      </div>
+
+      <aside class="hero-visual" aria-label="Illustration of the MultiV audio workflow">
+        <div class="visual-heading">
+          <strong>Transmission setup</strong>
+          <span class="visual-label">MULTIV CLIENT</span>
+        </div>
+
+        <div class="source-list" aria-label="Audio source options">
+          <div class="source-row">
+            <span class="source-icon" aria-hidden="true">MIC</span>
+            <span>Microphone</span>
+          </div>
+          <div class="source-row">
+            <span class="source-icon" aria-hidden="true">PC</span>
+            <span>Desktop audio</span>
+          </div>
+          <div class="source-row selected">
+            <span class="source-icon" aria-hidden="true">PL</span>
+            <span>Playlist</span>
+            <span class="selected-tag">Selected source</span>
+          </div>
+        </div>
+
+        <div class="flow-line" aria-hidden="true"></div>
+
+        <div class="signal-box">
+          <div class="signal-top">
+            <span>Signal processing</span>
+            <span>›</span>
+          </div>
+          <p class="signal-sub">Configure the signal before transmission</p>
+          <div class="waveform" aria-hidden="true">
+            <span style="height: 8px"></span><span style="height: 17px"></span><span style="height: 27px"></span>
+            <span style="height: 13px"></span><span style="height: 32px"></span><span style="height: 22px"></span>
+            <span style="height: 11px"></span><span style="height: 29px"></span><span style="height: 16px"></span>
+            <span style="height: 34px"></span><span style="height: 20px"></span><span style="height: 9px"></span>
+            <span style="height: 25px"></span><span style="height: 15px"></span><span style="height: 31px"></span>
+            <span style="height: 10px"></span><span style="height: 23px"></span><span style="height: 14px"></span>
+            <span style="height: 28px"></span><span style="height: 7px"></span><span style="height: 19px"></span>
+          </div>
+        </div>
+        <p class="visual-note">Choose one audio source for each transmission.</p>
+      </aside>
+    </section>
+
+    <section class="section" id="features" aria-labelledby="features-title">
+      <div class="shell">
+        <div class="section-heading">
+          <p class="eyebrow">The workflow</p>
+          <h2 id="features-title">The controls belong together.</h2>
+          <p>Set up a station, choose an input, configure its signal, and control the transmission from the same application.</p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span class="feature-index">01 / INPUT</span>
+            <h3>Choose an audio source</h3>
+            <p>Use a microphone, Windows desktop audio, or a playlist. Select the source that fits the transmission.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-index">02 / SIGNAL</span>
+            <h3>Configure the signal</h3>
+            <p>Set the station frequency and signal mode, then adjust the available audio and transmission controls.</p>
+          </article>
+
+          <article class="feature-card">
+            <span class="feature-index">03 / STATION</span>
+            <h3>Manage station details</h3>
+            <p>Edit station identity and profile information, browse the station directory, and control transmission state.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="modes" aria-labelledby="modes-title">
+      <div class="shell modes-layout">
+        <div class="section-heading">
+          <p class="eyebrow">Signal modes</p>
+          <h2 id="modes-title">More than a play button.</h2>
+          <p>MultiV includes conventional transmission controls alongside software-generated digital and narrowband modes.</p>
+        </div>
+
+        <div>
+          <div class="mode-list">
+            <div class="mode-item">
+              <strong>NFM</strong>
+              <span>Standard and wide profiles</span>
+            </div>
+            <div class="mode-item">
+              <strong>FreeDV RADE V1</strong>
+              <span>Digital voice transmission</span>
+            </div>
+            <div class="mode-item">
+              <strong>DRM</strong>
+              <span>Experimental digital radio</span>
+            </div>
+            <div class="mode-item">
+              <strong>CW</strong>
+              <span>Message and speed controls</span>
+            </div>
+          </div>
+          <p class="mode-footnote">Signal paths and receiver support vary by mode. See the project documentation for mode-specific requirements and limitations.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="providers-title">
+      <div class="shell">
+        <div class="roadmap-panel">
+          <div>
+            <p class="eyebrow">Simulator integrations</p>
+            <h2 id="providers-title">One client. Multiple simulator targets.</h2>
+            <p>MultiV is designed to bring virtual radio simulator connections into one desktop workflow. The roadmap is the source of truth for provider support and integration status.</p>
+          </div>
+          <a class="button button-secondary" href="https://github.com/BR3XALITYalt/MultiV/blob/main/ROADMAP.md">View roadmap</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="install" aria-labelledby="install-title">
+      <div class="shell install-grid">
+        <div class="install-copy">
+          <p class="eyebrow">Getting started</p>
+          <h2 id="install-title">Run MultiV locally.</h2>
+          <p>Install the required Python version, install the project dependencies, and launch the desktop client from the project directory.</p>
+          <ul class="requirements">
+            <li>Python 3.12 or newer</li>
+            <li>Microsoft Edge WebView2 Runtime on Windows</li>
+            <li>A simulator account supported by your configured provider</li>
+          </ul>
+        </div>
+
+        <pre><code>python -m pip install -r requirements.txt
+python main.py</code></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-inner">
+      <span>MultiV · A BR3XALITY project</span>
+      <nav class="footer-links" aria-label="Footer navigation">
+        <a href="https://github.com/BR3XALITYalt/MultiV">GitHub</a>
+        <a href="https://github.com/BR3XALITYalt/MultiV/blob/main/README.md">Documentation</a>
+        <a href="https://github.com/BR3XALITYalt/MultiV/blob/main/ROADMAP.md">Roadmap</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>
