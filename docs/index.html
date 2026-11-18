@@ -106,6 +106,14 @@
       object-position: left center;
     }
 
+    .brand:hover img {
+      opacity: 0.88;
+    }
+
+    .brand:active img {
+      opacity: 0.72;
+    }
+
     .main-nav {
       display: flex;
       align-items: center;
@@ -126,6 +134,10 @@
 
     .main-nav a:hover {
       color: var(--text);
+    }
+
+    .main-nav a:active {
+      color: var(--accent);
     }
 
     .hero {
@@ -238,7 +250,7 @@
     }
 
     .hero-art figcaption span:last-child {
-      color: var(--accent);
+      color: var(--muted);
       text-align: right;
     }
 
@@ -252,7 +264,7 @@
       align-items: center;
       gap: 12px;
       margin-bottom: 18px;
-      color: var(--accent);
+      color: var(--muted);
       font-size: 0.78rem;
       font-weight: 700;
     }
@@ -321,7 +333,7 @@
     }
 
     .source-number {
-      color: var(--accent);
+      color: var(--muted);
       font-size: 0.82rem;
       font-variant-numeric: tabular-nums;
     }
