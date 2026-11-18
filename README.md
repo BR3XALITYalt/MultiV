@@ -48,7 +48,7 @@ NFM runs only in TXITY's 7.000-8.000 MHz room. An independent receiver test has 
 
 FreeDV RADE V1 encodes microphone, desktop-audio, or playlist speech using the open-source RADE C modem and LPCNet/FARGAN speech encoder. MultiV uses the stable V1 waveform, not the experimental V2 path.
 
-The generated modem signal is converted to a real 8 kHz audio waveform, resampled to 48 kHz, and sent through TXITY's USB or LSB audio transport. MultiV places the 1.5 kHz RADE audio centre at the frequency you enter. The selected transport carrier is offset by 1.5 kHz to keep the channel centred. The transport passband is set to 3 kHz.
+The generated modem signal is converted to a real 8 kHz audio waveform, resampled to 48 kHz, and sent through TXITY's USB audio transport. The frequency you enter is used directly as the USB suppressed-carrier reference. The RADE audio signal sits above that reference, with its audio centre at 1.5 kHz. The transport passband is set to 3 kHz.
 
 The first start downloads a Windows x64 encoder package from the MultiV release and verifies its SHA-256 checksum before installation. RADE encoding is CPU-intensive. MultiV buffers audio before keying and stops with an error if the encoder cannot keep up. TXITY does not expose a RADE decoder or receive-audio stream to this client, so this mode currently supports transmission only.
 
