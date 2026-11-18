@@ -1,10 +1,10 @@
 ![MultiV](assets/banner.svg)
 
-**A multi-source streaming client for virtual radio simulators.**
+**A multi-source, multi-stream client for virtual radio simulators.**
 
-MultiV brings audio sources, radio modes, station settings, and simulator connections into one desktop client. Choose a microphone, desktop audio, or playlist as the source for a transmission.
+MultiV is being developed around one desktop workflow for audio sources, radio modes, station settings, and simulator connections. Choose a microphone, desktop audio, or playlist as the source for a transmission.
 
-TXITY is the active simulator connection today. SimTX integration is in development and is not connected to the desktop transmitter yet. MultiV currently runs one active simulator transmission at a time; simultaneous output to several simulators is not available.
+TXITY is the active simulator connection today. SimTX integration is in development and is not connected to the desktop transmitter yet. The current release runs one active TXITY transmission at a time. Simultaneous multi-stream output to several simulators is a development goal, not an available feature.
 
 Sign in with Discord to connect to TXITY, browse stations, edit your station profile, and transmit audio.
 
