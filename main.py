@@ -2629,7 +2629,7 @@ def build_app() -> None:
             0,
         )
         nfm_profile_frame = tk.Frame(audio_filter_card, bg=palette["surfaceContainerLow"])
-        nfm_profile_frame.grid(row=6, column=0, sticky="ew", padx=6, pady=6)
+        nfm_profile_frame.pack(fill="x", padx=6, pady=6)
         make_label(
             nfm_profile_frame,
             "NFM audio profile",
@@ -2658,10 +2658,10 @@ def build_app() -> None:
         def update_nfm_bandwidth_visibility(*_args) -> None:
             if tx_mode_var.get().strip().upper() == "NFM":
                 nfm_bandwidth_control.grid()
-                nfm_profile_frame.grid()
+                nfm_profile_frame.pack(fill="x", padx=6, pady=6)
             else:
                 nfm_bandwidth_control.grid_remove()
-                nfm_profile_frame.grid_remove()
+                nfm_profile_frame.pack_forget()
 
         tx_mode_var.trace_add("write", update_nfm_bandwidth_visibility)
         update_nfm_bandwidth_visibility()
