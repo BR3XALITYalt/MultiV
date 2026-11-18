@@ -1,33 +1,34 @@
 # MultiV product positioning
 
-## One-line description
+## Product description
 
 MultiV is a multi-source, multi-stream client for virtual radio simulators.
 
-## Core message
+## Primary use
 
-Manage virtual radio transmissions from one desktop client. Select an audio source, configure the signal, and connect through a supported simulator backend.
+Use one desktop client to configure a virtual radio transmission. Select an audio source, set the station and signal parameters, and connect through a supported simulator backend.
 
 ## Audience
 
-Users of virtual radio simulators who want one client for station setup, audio input, signal configuration, and transmission control.
+Users of virtual radio simulators who need controls for audio input, station setup, signal configuration, and transmission.
 
-## Product pillars
+## Product areas
 
-- **Multiple audio sources:** microphone, desktop audio, and playlists.
-- **Radio signal modes:** AM, sideband, NFM, FreeDV RADE V1, DRM (experimental), and CW.
-- **Multi-simulator support:** one desktop client is intended to connect to multiple virtual radio platforms.
-- **Station workflow:** station identity, frequency, power, profile details, and transmission state.
+- **Audio input:** microphone, desktop audio, and playlists.
+- **Signal modes:** AM, sideband, NFM, FreeDV RADE V1, DRM (experimental), and CW.
+- **Simulator integrations:** one desktop client is intended to connect to multiple virtual radio platforms.
+- **Station controls:** station identity, frequency, power, profile details, and transmission state.
 
-## Provider reference
+## Provider status
 
-See [ROADMAP.md](ROADMAP.md) for the current list of supported simulator providers and integration status. Keep provider names and support status there rather than duplicating them in this document.
+See [ROADMAP.md](ROADMAP.md) for the current provider list and integration status. Keep provider names and availability there.
 
 ## Messaging rules
 
-- Lead with the multi-source, multi-simulator product direction.
-- Explain that one application is intended to handle audio sources, radio modes, station configuration, and simulator connections.
-- Direct provider-support and integration-status questions to [ROADMAP.md](ROADMAP.md).
-- Do not present concurrent streams, simultaneous simulator targets, or unsupported backends as current features.
-- Use "multi-source" for input choices and "multi-stream" for concurrent output sessions. Do not treat those terms as interchangeable.
-- Do not invent supported simulator names, user counts, performance figures, testimonials, or receiver-test results.
+- Describe the product as one client for multiple audio sources and virtual radio simulators.
+- Explain the work the app handles: audio selection, signal configuration, station details, and simulator connections.
+- Link to [ROADMAP.md](ROADMAP.md) for provider availability.
+- Do not describe concurrent streams, simultaneous simulator targets, or unfinished backends as current features.
+- Use **multi-source** for input choices and **multi-stream** for concurrent output sessions. They are not interchangeable.
+- The current transmitter uses one audio source for a transmission. Do not imply that MultiV mixes several inputs.
+- Do not invent provider names, user counts, performance figures, testimonials, or receiver-test results.
