@@ -31,9 +31,12 @@ from drm_support import (
     DRM_PROGRAMME_TYPES,
     DRM_AUDIO_CODECS,
     DRM_MSC_MODES,
+    DRM_QUALITY_PROFILES,
+    drm_quality_profile_settings,
     drm_setup_status,
     prepare_drm_encoder,
 )
+from nfm_modulator import NFM_PROFILES, NFM_DEFAULT_PROFILE
 from transmitter import (
     TxityTransmitter,
     apply_nfm_transport,
@@ -178,8 +181,16 @@ def build_app() -> None:
     tx_drm_programme_type_var = tk.StringVar(root, saved_text("drm_programme_type", "No programme type"))
     tx_drm_iso_language_var = tk.StringVar(root, saved_text("drm_iso_language", ""))
     tx_drm_iso_country_var = tk.StringVar(root, saved_text("drm_iso_country", ""))
+    saved_drm_quality_profile = saved_text(
+        "drm_quality_profile",
+        DRM_QUALITY_PROFILES[0],
+    )
+    if saved_drm_quality_profile not in DRM_QUALITY_PROFILES:
+        saved_drm_quality_profile = DRM_QUALITY_PROFILES[0]
+    tx_drm_quality_profile_var = tk.StringVar(root, saved_drm_quality_profile)
     tx_drm_audio_codec_var = tk.StringVar(root, saved_text("drm_audio_codec", "xHE-AAC"))
     tx_drm_msc_mode_var = tk.StringVar(root, saved_text("drm_msc_mode", "16-QAM"))
+    tx_drm_stereo_var = tk.BooleanVar(root, saved_bool("drm_stereo", False))
     tx_drm_interleaving_var = tk.StringVar(root, saved_text("drm_interleaving", "Long (2 s)"))
     drm_setup_state: dict[str, Any] = {
         "running": False,
@@ -262,6 +273,10 @@ def build_app() -> None:
     tx_nfm_transport_bandwidth_var = tk.StringVar(
         root, saved_text("nfm_transport_bandwidth_hz", "12000")
     )
+    saved_nfm_profile = saved_text("nfm_profile", NFM_DEFAULT_PROFILE)
+    if saved_nfm_profile not in NFM_PROFILES:
+        saved_nfm_profile = NFM_DEFAULT_PROFILE
+    tx_nfm_profile_var = tk.StringVar(root, saved_nfm_profile)
     tx_ssb_bandwidth_var = tk.StringVar(root, saved_text("ssb_bandwidth_hz", "10000"))
     tx_ssb_low_cut_var = tk.StringVar(root, saved_text("ssb_low_cut_hz", "325"))
     tx_ssb_high_cut_var = tk.StringVar(root, saved_text("ssb_high_cut_hz", "0"))
@@ -290,8 +305,10 @@ def build_app() -> None:
             "drm_programme_type": tx_drm_programme_type_var.get(),
             "drm_iso_language": tx_drm_iso_language_var.get(),
             "drm_iso_country": tx_drm_iso_country_var.get(),
+            "drm_quality_profile": tx_drm_quality_profile_var.get(),
             "drm_audio_codec": tx_drm_audio_codec_var.get(),
             "drm_msc_mode": tx_drm_msc_mode_var.get(),
+            "drm_stereo": tx_drm_stereo_var.get(),
             "drm_interleaving": tx_drm_interleaving_var.get(),
             "station_dbm": tx_power_var.get(),
             "audio_source": tx_audio_source_var.get(),
@@ -323,6 +340,7 @@ def build_app() -> None:
             "presence_db": tx_presence_var.get(),
             "drive": tx_drive_var.get(),
             "nfm_transport_bandwidth_hz": tx_nfm_transport_bandwidth_var.get(),
+            "nfm_profile": tx_nfm_profile_var.get(),
             "ssb_bandwidth_hz": tx_ssb_bandwidth_var.get(),
             "ssb_low_cut_hz": tx_ssb_low_cut_var.get(),
             "ssb_high_cut_hz": tx_ssb_high_cut_var.get(),
@@ -389,7 +407,8 @@ def build_app() -> None:
         tx_station_name_var, tx_description_var, tx_frequency_var, tx_mode_var,
         tx_drm_service_label_var, tx_drm_service_id_var, tx_drm_language_var,
         tx_drm_programme_type_var, tx_drm_iso_language_var, tx_drm_iso_country_var,
-        tx_drm_audio_codec_var, tx_drm_interleaving_var,
+        tx_drm_quality_profile_var, tx_drm_audio_codec_var, tx_drm_stereo_var,
+        tx_drm_interleaving_var,
         tx_power_var, tx_audio_source_var, tx_audio_device_var,
         tx_playlist_shuffle_var, tx_playlist_loop_var, tx_cw_text_var,
         tx_cw_wpm_var, tx_cw_loop_var, tx_allow_overlap_var, tx_logo_url_var,
@@ -397,6 +416,7 @@ def build_app() -> None:
         tx_fade_seconds_var, tx_fade_min_dbm_var, tx_fade_shape_var,
         tx_agc_enabled_var, tx_agc_target_var, tx_mic_gain_var, tx_bass_var,
         tx_treble_var, tx_presence_var, tx_drive_var, tx_nfm_transport_bandwidth_var,
+        tx_nfm_profile_var,
         tx_ssb_bandwidth_var,
         tx_ssb_low_cut_var, tx_ssb_high_cut_var, tx_am_bandwidth_var,
         tx_am_pre_emphasis_var,
@@ -1205,6 +1225,7 @@ def build_app() -> None:
             tx_frequency_var.get(),
             tx_mode_var.get(),
             other_stations,
+            nfm_profile=tx_nfm_profile_var.get(),
         )
 
         if overlaps:
@@ -1303,6 +1324,7 @@ def build_app() -> None:
                 presence_db=tx_presence_var.get(),
                 drive=tx_drive_var.get(),
                 nfm_transport_bandwidth_hz=tx_nfm_transport_bandwidth_var.get(),
+                nfm_profile=tx_nfm_profile_var.get(),
                 ssb_bandwidth_hz=tx_ssb_bandwidth_var.get(),
                 ssb_low_cut_hz=tx_ssb_low_cut_var.get(),
                 ssb_high_cut_hz=tx_ssb_high_cut_var.get(),
@@ -1314,8 +1336,10 @@ def build_app() -> None:
                 drm_programme_type=tx_drm_programme_type_var.get(),
                 drm_iso_language=tx_drm_iso_language_var.get(),
                 drm_iso_country=tx_drm_iso_country_var.get(),
+                drm_quality_profile=tx_drm_quality_profile_var.get(),
                 drm_audio_codec=tx_drm_audio_codec_var.get(),
                 drm_msc_mode=tx_drm_msc_mode_var.get(),
+                drm_stereo=tx_drm_stereo_var.get(),
                 drm_interleaving=tx_drm_interleaving_var.get().split(" ", 1)[0].casefold(),
             )
             if config["mode"] == "CW":
@@ -1993,6 +2017,72 @@ def build_app() -> None:
             wraplength=400,
         ).pack(anchor="w", pady=(4, 0))
 
+        def apply_drm_quality_profile(_event=None) -> None:
+            try:
+                profile = drm_quality_profile_settings(tx_drm_quality_profile_var.get())
+            except ValueError:
+                return
+            tx_drm_msc_mode_var.set(str(profile["msc_mode"]))
+            tx_drm_stereo_var.set(bool(profile["stereo"]))
+            tx_drm_interleaving_var.set("Long (2 s)")
+
+        drm_profile_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        drm_profile_frame.grid(row=2, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            drm_profile_frame,
+            "Quality profile",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        drm_profile_picker = ttk.Combobox(
+            drm_profile_frame,
+            textvariable=tx_drm_quality_profile_var,
+            values=DRM_QUALITY_PROFILES,
+            state="readonly",
+            height=5,
+        )
+        drm_profile_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_profile_picker)
+        drm_profile_picker.bind("<<ComboboxSelected>>", apply_drm_quality_profile)
+        make_label(
+            drm_profile_frame,
+            "Presets set channel width and modulation. You can still adjust MSC modulation and stereo separately.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
+        stereo_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        stereo_frame.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
+        drm_stereo_check = tk.Checkbutton(
+            stereo_frame,
+            text="Stereo audio",
+            variable=tx_drm_stereo_var,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerHighest"],
+            highlightthickness=2,
+            highlightbackground=palette["surfaceContainerLow"],
+            highlightcolor=palette["primary"],
+            cursor="hand2",
+            takefocus=True,
+            bd=0,
+            anchor="w",
+        )
+        drm_stereo_check.pack(anchor="w", padx=6, pady=(8, 4))
+        make_label(
+            stereo_frame,
+            "Stereo consumes more of the available audio capacity. Mono is usually clearer at the same low bitrate.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=400,
+        ).pack(anchor="w", padx=6, pady=(4, 0))
+
         def update_drm_metadata_visibility() -> None:
             if tx_mode_var.get().strip().upper() == "DRM":
                 if not drm_metadata_card.winfo_manager():
@@ -2049,15 +2139,15 @@ def build_app() -> None:
                 "LSB+C": "LSB+C - lower sideband with carrier.",
                 "DSB": "DSB - double-sideband suppressed carrier.",
                 "NFM": (
-                    "NFM - software-generated narrow FM with 2.5 kHz peak deviation, a 30-2,000 Hz audio band, "
-                    "and a 5 kHz IF. MultiV shifts the USB reference down 1 kHz and the carrier reference up "
-                    "1 kHz to keep the entered channel center fixed. Estimated occupied bandwidth: 9 kHz."
+                    "NFM - software-generated narrow FM with Standard (9 kHz) and Wide (11 kHz) profiles. "
+                    "Wide uses a 6 kHz IF, 2.5 kHz peak deviation, and a 100-3,000 Hz voice band. "
+                    "Both profiles use second-order Butterworth input filters and a 12 kHz TXITY transport."
                 ),
                 "RADE": (
                     "FreeDV RADE V1 - neural digital voice over TXITY's USB or LSB audio transport. "
                     "Uses a 1.5 kHz audio centre and channel. The first start downloads a verified Windows x64 encoder."
                 ),
-                "DRM": "DRM [EXPERIMENTAL] - one audio service in a 4.5 kHz OFDM channel. Choose xHE-AAC or legacy HE-AAC and long or short interleaving in DRM settings. Use a microphone or OGG, MP3, or FLAC playlists.",
+                "DRM": "DRM [EXPERIMENTAL] - one xHE-AAC or HE-AAC audio service. Choose 4.5 kHz robust, 9 kHz quality, or 9 kHz 64-QAM stereo maximum-quality profiles in DRM settings. Use a microphone or OGG, MP3, or FLAC playlists.",
                 "CW": "CW - carrier only. MultiV sends the configured CW message instead of microphone or desktop audio.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
@@ -2538,12 +2628,40 @@ def build_app() -> None:
             5,
             0,
         )
+        nfm_profile_frame = tk.Frame(audio_filter_card, bg=palette["surfaceContainerLow"])
+        nfm_profile_frame.grid(row=6, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            nfm_profile_frame,
+            "NFM audio profile",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        nfm_profile_picker = ttk.Combobox(
+            nfm_profile_frame,
+            textvariable=tx_nfm_profile_var,
+            values=NFM_PROFILES,
+            state="readonly",
+            height=4,
+        )
+        nfm_profile_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(nfm_profile_picker)
+        make_label(
+            nfm_profile_frame,
+            "Wide opens the voice band to 3 kHz and increases the estimated occupied bandwidth to 11 kHz.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
 
         def update_nfm_bandwidth_visibility(*_args) -> None:
             if tx_mode_var.get().strip().upper() == "NFM":
                 nfm_bandwidth_control.grid()
+                nfm_profile_frame.grid()
             else:
                 nfm_bandwidth_control.grid_remove()
+                nfm_profile_frame.grid_remove()
 
         tx_mode_var.trace_add("write", update_nfm_bandwidth_visibility)
         update_nfm_bandwidth_visibility()
