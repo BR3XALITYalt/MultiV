@@ -17,6 +17,8 @@ from drm_support import (
     DRM_AUDIO_CODECS,
     DRM_INTERLEAVING_OPTIONS,
     DRM_MSC_MODES,
+    DRM_QUALITY_PROFILES,
+    drm_quality_profile_settings,
     VISUAL_STUDIO_BUILD_TOOLS_LABEL,
     VISUAL_STUDIO_BUILD_TOOLS_URL,
     VISUAL_STUDIO_WORKLOAD,
@@ -210,6 +212,33 @@ class DRMConfigurationTests(unittest.TestCase):
             "http://127.0.0.1:12345/playlist.m3u",
         )
 
+    def test_drm_quality_profiles_select_occupancy_modulation_and_stereo(self):
+        robust = drm_quality_profile_settings(DRM_QUALITY_PROFILES[0])
+        quality = drm_quality_profile_settings(DRM_QUALITY_PROFILES[1])
+        maximum = drm_quality_profile_settings(DRM_QUALITY_PROFILES[2])
+
+        self.assertEqual(robust, {"occupancy": 0, "msc_mode": "16-QAM", "stereo": False})
+        self.assertEqual(quality, {"occupancy": 2, "msc_mode": "16-QAM", "stereo": False})
+        self.assertEqual(maximum, {"occupancy": 2, "msc_mode": "64-QAM", "stereo": True})
+        with self.assertRaises(ValueError):
+            drm_quality_profile_settings("Unknown profile")
+
+    def test_writes_9khz_64qam_stereo_drm_channel(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = write_drm_station_config(
+                Path(folder) / "station.toml",
+                station_name="Wide DRM station",
+                input_device_name="default",
+                msc_mode="64-QAM",
+                occupancy=2,
+                stereo=True,
+            )
+            config = tomllib.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(config["channel"]["occupancy"], 2)
+        self.assertEqual(config["channel"]["msc_mode"], "64-QAM")
+        self.assertTrue(config["service"][0]["audio"]["stereo"])
+
     def test_can_select_64_qam_for_higher_capacity(self):
         with tempfile.TemporaryDirectory() as folder:
             path = write_drm_station_config(
@@ -269,6 +298,7 @@ class DRMConfigurationTests(unittest.TestCase):
             {"language": "Klingon"},
             {"programme_type": "Dubstep"},
             {"msc_mode": "256-QAM"},
+            {"occupancy": 6},
             {"iso_language": "english"},
             {"iso_country": "USA"},
         )
