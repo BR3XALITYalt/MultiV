@@ -27,6 +27,29 @@ DRM_PLAYLIST_EXTENSIONS = frozenset({".flac", ".mp3", ".ogg"})
 DRM_AUDIO_CODECS = ("xHE-AAC", "HE-AAC")
 DRM_INTERLEAVING_OPTIONS = ("long", "short")
 DRM_MSC_MODES = ("16-QAM", "64-QAM")
+DRM_QUALITY_PROFILES = (
+    "Robust (4.5 kHz, 16-QAM mono)",
+    "Quality (9 kHz, 16-QAM mono)",
+    "Maximum quality (9 kHz, 64-QAM stereo)",
+)
+DRM_DEFAULT_QUALITY_PROFILE = DRM_QUALITY_PROFILES[0]
+_DRM_QUALITY_PROFILE_SETTINGS = {
+    DRM_QUALITY_PROFILES[0]: {"occupancy": 0, "msc_mode": "16-QAM", "stereo": False},
+    DRM_QUALITY_PROFILES[1]: {"occupancy": 2, "msc_mode": "16-QAM", "stereo": False},
+    DRM_QUALITY_PROFILES[2]: {"occupancy": 2, "msc_mode": "64-QAM", "stereo": True},
+}
+
+
+def drm_quality_profile_settings(profile: str) -> dict[str, object]:
+    """Return a copy of the selected DRM channel-quality preset."""
+    selected = str(profile or DRM_DEFAULT_QUALITY_PROFILE).strip()
+    try:
+        return dict(_DRM_QUALITY_PROFILE_SETTINGS[selected])
+    except KeyError as exc:
+        raise ValueError(
+            f"Unknown DRM quality profile: {selected}. "
+            f"Choose one of: {', '.join(DRM_QUALITY_PROFILES)}."
+        ) from exc
 
 DRM_LANGUAGES = (
     "No language specified",
@@ -789,8 +812,10 @@ def write_drm_station_config(
     audio_codec: str = "xHE-AAC",
     msc_mode: str = "16-QAM",
     interleaving: str = "long",
+    occupancy: int = 0,
+    stereo: bool = False,
 ) -> Path:
-    """Write a one-service, 4.5 kHz DRM30 station configuration."""
+    """Write a one-service DRM30 station configuration."""
     input_count = sum((bool(input_device_name), bool(playlist_url)))
     if input_count != 1:
         raise ValueError("Choose exactly one DRM audio input: microphone or playlist.")
@@ -838,11 +863,15 @@ def write_drm_station_config(
     selected_msc_mode = str(msc_mode or "").strip().upper()
     if selected_msc_mode not in DRM_MSC_MODES:
         raise ValueError("DRM MSC modulation must be 16-QAM or 64-QAM.")
+    if isinstance(occupancy, bool) or not isinstance(occupancy, int) or not 0 <= occupancy <= 5:
+        raise ValueError("DRM spectrum occupancy must be an integer from 0 to 5.")
+    if not isinstance(stereo, bool):
+        raise ValueError("DRM stereo must be a boolean value.")
 
     lines = [
         "[channel]",
         'mode = "B"',
-        "occupancy = 0",
+        f"occupancy = {occupancy}",
         f'msc_mode = "{selected_msc_mode}"',
         'sdc_mode = "16-QAM"',
         f'interleaving = "{selected_interleaving}"',
@@ -874,7 +903,7 @@ def write_drm_station_config(
     if selected_codec == "he-aac":
         lines.append("core_rate = 12000")
     lines.extend([
-        "stereo = false",
+        f"stereo = {'true' if stereo else 'false'}",
         'part = "B"',
         "share = 1.0",
         "",
