@@ -1,23 +1,23 @@
-![MultiV](assets/banner.svg)   
+![MultiV](assets/banner.svg)
 
-MultiV connects to TXITY. Sign in with Discord to browse stations, configure your station, and stream audio to the virtual service.
+MultiV connects to TXITY. Sign in with Discord to browse stations, edit your station profile, and send audio to your virtual station.
 
 ## Install
 
-Install Python 3.12 or newer. Windows also needs the Microsoft Edge WebView2 Runtime.
+Install Python 3.12 or newer. Windows also requires the Microsoft Edge WebView2 Runtime.
 
-Open a terminal in the project folder:
+Open a terminal in the project folder and run:
 
 ```bash
 python -m pip install -r requirements.txt
 python main.py
 ```
 
-Sign in with Discord when MultiV opens. TXITY must enable secure Discord sign-in.
+Sign in with Discord when MultiV opens. TXITY must have secure Discord sign-in enabled.
 
 ## Transmit
 
-Open **Transmit**. Enter your station name, frequency, and signal type. The Start/Stop button stays in the page header.
+Open **Transmit**. Enter your station name, frequency, and signal type. Use **Start transmission** in the page header to start or stop.
 
 Choose an audio source:
 
@@ -25,60 +25,72 @@ Choose an audio source:
 - **Desktop audio:** Select a Windows playback device.
 - **Playlist:** Add audio files or folders.
 
-MultiV supports MP3, WAV, FLAC, OGG, Opus, M4A, and AIFF. It decodes each track and converts it to 48 kHz mono audio before transmission. Use **Shuffle playlist** or **Loop playlist** beside the playlist. MultiV refreshes imported folders when their contents change. Playlist edits take effect when you start playback again.
+MultiV supports MP3, WAV, FLAC, OGG, Opus, M4A, and AIFF playlists. It decodes tracks before sending them to TXITY. **Shuffle playlist** and **Loop playlist** sit beside the playlist controls. MultiV refreshes imported folders when files change. Playlist edits take effect the next time you start playback.
 
-Open **Advanced settings** for signal fading, server AGC, microphone gain, tone controls, compression, and bandwidth filters. These controls start collapsed.
+Open **Advanced settings** for signal fading, server AGC, microphone gain, tone controls, compression, and bandwidth filters. The section starts collapsed.
 
-MultiV reconnects when its control or audio connection drops. It restores the station configuration and PTT state after reconnecting. It keeps retrying until you stop the transmission. MultiV also keeps Windows awake during a transmission. When microphone or desktop audio pauses, it keeps the connection open and sends silence until audio returns.
+MultiV reconnects if its control or audio connection drops. It restores the station configuration and PTT state after reconnecting, then keeps trying until you stop transmission. During a transmission, MultiV keeps Windows awake. If microphone or desktop audio pauses, MultiV keeps the audio connection open and sends silence until audio returns.
 
 ## Signal modes
 
 ### NFM
 
-MultiV provides two NFM profiles. **Standard (9 kHz)** retains a 5 kHz IF, 2.5 kHz peak deviation, and a 30-2,000 Hz voice band. **Wide (11 kHz)** uses a 6 kHz IF, the same peak deviation, and a 100-3,000 Hz voice band. Both keep a 500 Hz clearance between the IF and the deviation-plus-audio limit.
+MultiV has two NFM profiles:
 
-Both profiles use second-order Butterworth high-pass and low-pass filters with streaming state, followed by the existing soft limiter. This gives a steeper, more controlled voice-band response than the earlier one-pole filters.
+- **Standard (9 kHz):** 5 kHz IF, 2.5 kHz peak deviation, and a 30-2,000 Hz voice band.
+- **Wide (11 kHz):** 6 kHz IF, 2.5 kHz peak deviation, and a 100-3,000 Hz voice band.
 
-The **NFM transport bandwidth** control requests a TXITY USB/LSB passband from 1 to 20 kHz. It defaults to 12 kHz, which accommodates either profile. A narrower passband can clip the generated FM signal.
+Each profile leaves 500 Hz between the IF and the sum of peak deviation and the upper voice-band limit.
 
-TXITY does not offer native NFM. MultiV sends its generated FM signal through the existing USB or LSB transport. The selected profile's IF determines the carrier-reference offset, so the entered channel center remains fixed.
+TXITY does not provide native NFM. MultiV generates the FM signal and sends it through TXITY's USB or LSB audio transport. The selected IF offsets the transport so the entered frequency remains the channel centre.
 
-NFM runs only in TXITY's 7.000-8.000 MHz room. An independent receiver test has not verified this signal path. TXITY filtering and receiver settings can affect the result.
+The **NFM transport bandwidth** setting requests a TXITY passband from 1 to 20 kHz. It defaults to 12 kHz. A narrower passband can clip the generated FM signal.
 
+NFM works only in TXITY's 7.000-8.000 MHz room. An independent receiver test has not verified this signal path. TXITY filtering and receiver settings can change the result.
 
 ### FreeDV RADE V1
 
-FreeDV RADE V1 encodes microphone, desktop-audio, or playlist speech using the open-source RADE C modem and LPCNet/FARGAN speech encoder. MultiV uses the stable V1 waveform, not the experimental V2 path.
+FreeDV RADE V1 encodes speech with the RADE C modem and LPCNet/FARGAN speech encoder. MultiV uses the V1 waveform.
 
-The generated modem signal is converted to a real 8 kHz audio waveform, resampled to 48 kHz, and sent through TXITY's USB audio transport. The frequency you enter is used directly as the USB suppressed-carrier reference. The RADE audio signal sits above that reference, with its audio centre at 1.5 kHz. The transport passband is set to 3 kHz.
+MultiV converts the generated modem signal to a real 8 kHz audio waveform, resamples it to 48 kHz, and sends it through TXITY's USB audio transport. The entered frequency is the USB suppressed-carrier reference. The RADE audio centre is 1.5 kHz, and the transport passband is 3 kHz.
 
-The first start downloads a Windows x64 encoder package from the MultiV release and verifies its SHA-256 checksum before installation. RADE encoding is CPU-intensive. MultiV buffers audio before keying and stops with an error if the encoder cannot keep up. TXITY does not expose a RADE decoder or receive-audio stream to this client, so this mode currently supports transmission only.
+The first start downloads a Windows x64 encoder package from the MultiV release. MultiV verifies its SHA-256 checksum before installation. RADE encoding uses significant CPU time. MultiV buffers audio before keying and stops with an error if the encoder cannot keep up.
 
-Source: [FreeDV RADE](https://freedv.org/radio-autoencoder/) and [RADE C](https://github.com/freedv/rade_c). BSD and Opus notices are included in the runtime package.
+TXITY does not provide a RADE decoder or receive-audio stream to MultiV. RADE mode supports transmission only.
+
+Sources: [FreeDV RADE](https://freedv.org/radio-autoencoder/) and [RADE C](https://github.com/freedv/rade_c). The runtime package includes BSD and Opus notices.
 
 ### DRM [EXPERIMENTAL]
 
-DRM provides three channel profiles: **Robust** uses 4.5 kHz occupancy, 16-QAM, and mono audio; **Quality** uses 9 kHz occupancy, 16-QAM, and mono audio; **Maximum quality** uses 9 kHz occupancy, 64-QAM, and stereo audio. The SDC remains 16-QAM. 64-QAM and stereo provide more capacity but need better reception conditions. The maximum-quality profile is not guaranteed to sound better on a weak or fading channel.
+DRM offers three profiles:
 
-Long MSC interleaving (2 seconds) improves resistance to fading. Short interleaving (400 ms) reduces delay. Choose xHE-AAC or legacy HE-AAC for audio. Choose HE-AAC when your receiver does not support xHE-AAC. The codec uses the available service capacity; MultiV does not force a fixed encoder bitrate.
+- **Robust:** 4.5 kHz occupancy, 16-QAM, mono audio.
+- **Quality:** 9 kHz occupancy, 16-QAM, mono audio.
+- **Maximum quality:** 9 kHz occupancy, 64-QAM, stereo audio.
 
-DRM supports microphone input and OGG, MP3, or FLAC playlists. It does not support desktop-audio loopback. WAV and AIFF playlist entries do not play in DRM mode.
+The SDC uses 16-QAM in all profiles. 64-QAM and stereo carry more data but require better reception. The Maximum quality profile may perform worse on a weak or fading channel.
 
-When you select DRM, MultiV checks for its encoder and asks before installing missing dependencies. On Windows, setup can install the official Rust toolchain, fetch DecDRM 0.7.1 and its codec dependencies, and build the encoder. MultiV verifies the Rust installer checksum before running it. The source build needs Git, CMake, and Microsoft C++ Build Tools with the **Desktop development with C++** workload. Setup may ask for administrator approval. Other platforms need Rust and a working C/C++ compiler.
+Long MSC interleaving adds about 2 seconds of interleaving delay and improves resistance to fading. Short interleaving uses about 400 ms and reduces delay. Choose xHE-AAC or HE-AAC. Use HE-AAC when your receiver does not support xHE-AAC. The encoder selects a bitrate that fits the available service capacity.
 
-TXITY does not offer native DRM. MultiV sends the generated DRM waveform through TXITY's DSB audio transport. An independent DRM receiver test has not verified this path.
+DRM supports microphone input and OGG, MP3, or FLAC playlists. It does not support desktop-audio loopback. WAV and AIFF playlist entries are skipped in DRM mode.
+
+When you select DRM, MultiV checks for the encoder and asks before installing missing dependencies. On Windows, setup can install the official Rust toolchain, download DecDRM 0.7.1 and its codec dependencies, and build the encoder. MultiV checks the Rust installer checksum before running it. The build requires Git, CMake, and Microsoft C++ Build Tools with the **Desktop development with C++** workload. Setup may request administrator approval. Other platforms need Rust and a working C/C++ compiler.
+
+TXITY does not provide native DRM. MultiV sends the generated DRM waveform through TXITY's DSB audio transport. An independent DRM receiver test has not verified this path.
 
 ### CW
 
-Choose **CW** as the signal type. Enter a message and speed in the **CW message** section. Select **Repeat CW message** to send it continuously.
+Choose **CW** as the signal type. Enter a message and speed in **CW message**. Select **Repeat CW message** to send it continuously.
 
-## Station profile and browser control
+## Station profile
 
-Open **Settings** to set your station logo and station page details. Paste an approved image URL into **Station logo URL**, or select **Upload image** to send a PNG, JPEG, WebP, or GIF file up to 5 MB to TXITY. MultiV uses the signed-in Discord session for the upload and fills the URL field with the hosted image URL. MultiV sends the logo URL and station details to TXITY as `stationLogoUrl` and `stationDetails`. Station page details support up to 1,200 characters.
+Open **Settings** to edit your station logo and station page details. Enter a public URL in **Station logo URL**, or select **Upload image** to upload a PNG, JPEG, WebP, or GIF file up to 5 MB. MultiV uses your signed-in Discord session to upload the image and fills in the hosted URL.
 
-### Browser control panel
+Station page details support up to 1,200 characters.
 
-Set a password of at least 12 characters in **Settings**, then enable **Web GUI**. MultiV listens on `0.0.0.0:23234`.
+## Browser control panel
+
+Set a password of at least 12 characters in **Settings**, then enable **Web GUI**. MultiV listens on port `23234` on all network interfaces.
 
 Open the panel on this computer:
 
@@ -86,9 +98,9 @@ Open the panel on this computer:
 http://127.0.0.1:23234
 ```
 
-Other devices on your local network can use this computer's LAN IP and port `23234`. The panel follows TXITY's transmit and station-profile layout. It can update station settings and request transmission start or stop. Select audio devices and playlist files in the desktop app.
+Other devices on your local network can connect using this computer's LAN IP and port `23234`. Use the desktop app to select audio devices and playlist files. The browser panel can edit station settings and start or stop transmission.
 
-MultiV stores a salted PBKDF2 password hash and keeps authenticated browser sessions in memory. The panel uses HTTP, not HTTPS. Use it on a trusted local network. Do not expose port `23234` to the public internet or forward it through your router. Keep MultiV running while you use the panel.
+MultiV stores a salted PBKDF2 password hash and keeps authenticated browser sessions in memory. The panel uses HTTP, not HTTPS. Use it only on a trusted local network. Do not expose port `23234` to the public internet or forward it through your router. Keep MultiV running while you use the panel.
 
 ## Stations
 
@@ -96,7 +108,7 @@ Open **Stations** to browse TXITY's station directory. Select a station to view 
 
 ## Discord and settings
 
-MultiV keeps your Discord session between launches. Select **Disconnect Discord** to clear the saved browser session and remove the saved token.
+MultiV saves your Discord session between launches. Select **Disconnect Discord** to clear the saved browser session and token.
 
 MultiV stores station and transmission preferences here:
 
@@ -105,28 +117,13 @@ MultiV stores station and transmission preferences here:
 
 On Windows, MultiV stores the Discord session token separately at `%PROGRAMDATA%\\TXITPY\\token.txt`. On Linux and macOS, it uses the application configuration directory.
 
-## SimTX API foundation
+## Command line
 
-MultiV includes an initial SimTX integration module in `simtx_api.py`. It follows the documented SimTX account API and game protocol v25:
+Run `python main.py --help` to list command-line options.
 
-- Device-code authorization and rotating access/refresh credentials.
-- Online server and persistent-station discovery.
-- Single-use, station-bound game-ticket requests.
-- TLS connection setup, the v25 protocol preface, protobuf frame encoding/decoding, and the initial audio-transmitter messages.
+Use `--no-gui` (or `--nogui`) to start a transmission from saved settings without opening the desktop window. Options such as `--station-name`, `--frequency`, `--mode`, `--power`, `--audio-source`, `--audio-device`, and `--playlist` override saved settings.
 
-This is an integration foundation, not a finished SimTX transmitter. The desktop controls do not use it yet. Audio capture, real-time sample pacing, continuous telemetry handling, reconnect behavior, and secure credential-store integration still need to be connected to MultiV's application lifecycle. The existing TXITY client remains unchanged.
-
-The account client keeps credentials in memory. The caller must store refresh credentials in an operating-system credential store; do not put them in settings files or logs.
-
-Documentation: [SimTX API reference](https://wiki.simtx.net/index.php/SimTX_API) · [Device login](https://wiki.simtx.net/index.php/SimTX_API/Device_login) · [Transmitter session](https://wiki.simtx.net/index.php/SimTX_API/Transmitter_session).
-
-## Command-line and service mode
-
-Run `python main.py --help` to see all command-line options.
-
-Use `--no-gui` (or `--nogui`) to start a transmission from saved settings without opening the desktop window. Options such as `--station-name`, `--frequency`, `--mode`, `--power`, `--audio-source`, `--audio-device`, and `--playlist` override saved values.
-
-The headless client reads the saved token on startup. Use `--auth-token-file` to choose another token file, or set `TXITPY_DISCORD_AUTH_TOKEN` to provide the token through an environment variable.
+The headless client reads the saved token on startup. Use `--auth-token-file` to select another token file, or set `TXITPY_DISCORD_AUTH_TOKEN` to provide the token through an environment variable.
 
 Examples:
 
@@ -137,6 +134,6 @@ python main.py --list-inputs
 # Start with saved settings
 python main.py --no-gui
 
-# Override the mode and play a folder
-python main.py --no-gui --mode DRM --audio-source playlist --playlist "D:\Radio\Playlist"
+# Start DRM mode with a playlist folder
+python main.py --no-gui --mode DRM --audio-source playlist --playlist "D:\\Radio\\Playlist"
 ```
