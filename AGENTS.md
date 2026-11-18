@@ -9,7 +9,7 @@ Call the application **MultiV**. Use **TXITY** for the service, website, station
 ## Before editing
 
 - Read [DESIGN.md](DESIGN.md) before changing either interface.
-- Read [PRODUCT.md](PRODUCT.md) before changing product positioning or marketing copy. Keep the capability matrix accurate.
+- Read [PRODUCT.md](PRODUCT.md) before changing product positioning or marketing copy. Keep the supported provider list accurate.
 - Inspect the current implementation and nearby tests before changing behavior.
 - Keep changes limited to the requested outcome. Do not replace working code to impose a personal style.
 - Run `python -m compileall -q .` and `python -m unittest discover -s tests -v` after Python changes.
