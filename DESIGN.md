@@ -2,7 +2,7 @@
 
 ## Product
 
-MultiV is a Windows desktop client for TXITY's simulated radio service. Users check service status, browse stations, manage Discord sign-in, edit station details, and configure a virtual audio stream.
+MultiV is a multi-source streaming client for virtual radio simulators. Users select microphone, desktop-audio, or playlist input, configure a virtual station, choose a signal mode, and transmit through a supported simulator backend. TXITY is the active backend. SimTX support remains in development.
 
 ## Design dials
 
