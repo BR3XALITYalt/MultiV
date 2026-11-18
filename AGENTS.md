@@ -2,7 +2,7 @@
 
 ## Project
 
-MultiV is a Windows desktop client for TXITY's simulated radio service. The desktop app uses Tkinter. `web_gui.py` serves a password-protected browser control panel on the local network.
+MultiV is a multi-source streaming client for virtual radio simulators. The desktop app uses Tkinter and supports microphone, desktop-audio, and playlist inputs. TXITY is the active simulator backend; SimTX integration is in development. `web_gui.py` serves a password-protected browser control panel on the local network.
 
 Call the application **MultiV**. Use **TXITY** for the service, website, station directory, and remote protocol.
 
@@ -35,6 +35,8 @@ This standard applies to the README, developer documentation, design notes, code
 - Remove adverbs when they add no useful meaning. Do not mechanically ban adverbs, passive voice, repetition, or technical terminology when accuracy needs them.
 - Do not use vague claims such as "high quality", "robust", "seamless", or "intuitive" without a concrete, relevant measure.
 - Keep claims verifiable. State supported formats, frequency ranges, defaults, limitations, and prerequisites instead of promising behavior the code does not guarantee.
+- Distinguish selectable audio sources from concurrent streams. Multi-source input does not imply that MultiV can mix or transmit several sources at once.
+- Distinguish a simulator backend that works from one under development. Do not claim multiple active simulator connections or simultaneous multi-destination streaming until the code supports and tests those behaviors.
 - Use natural sentence rhythm. Do not force a tone, sentence length, or checklist score to make prose appear human.
 - Do not add references to AI, language models, prompts, or the writing process to user-facing content.
 
