@@ -468,6 +468,63 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(config["micGainDb"], 0)
         self.assertEqual(config["drive"], 0)
 
+    def test_wide_nfm_profile_uses_6khz_if_and_correct_frequency_translation(self):
+        config = build_transmit_config(
+            station_name="Example Wide NFM",
+            description="Wide NFM test",
+            frequency="7.250 MHz",
+            mode="NFM",
+            station_dbm=40,
+            allow_overlap=False,
+            auth_token="test-token",
+            nfm_profile="Wide (11 kHz)",
+        )
+
+        self.assertEqual(config["mode"], "USB")
+        self.assertEqual(config["rfHz"], 7_244_000)
+        self.assertEqual(config["_txitpyNfmIfHz"], 6_000)
+        self.assertEqual(config["_txitpyNfmDeviationHz"], 2_500)
+        self.assertEqual(config["_txitpyNfmInputLowCutHz"], 100)
+        self.assertEqual(config["_txitpyNfmInputHighCutHz"], 3_000)
+        self.assertEqual(config["_txitpyNfmChannelBandwidthHz"], 11_000)
+        self.assertEqual(config["ssbBandwidthHz"], 12_000)
+
+        apply_nfm_transport(config, "7.300 MHz")
+        self.assertEqual(config["rfHz"], 7_294_000)
+
+        self.assertEqual(
+            mode_bandwidth_hz("NFM", nfm_profile="Wide (11 kHz)"),
+            11_000,
+        )
+
+    def test_drm_quality_profile_is_encoded_in_station_config(self):
+        robust = build_transmit_config(
+            station_name="Robust DRM",
+            description="",
+            frequency="7.250 MHz",
+            mode="DRM",
+            station_dbm=40,
+            allow_overlap=False,
+            auth_token="test-token",
+        )
+        maximum = build_transmit_config(
+            station_name="Maximum DRM",
+            description="",
+            frequency="7.250 MHz",
+            mode="DRM",
+            station_dbm=40,
+            allow_overlap=False,
+            auth_token="test-token",
+            drm_quality_profile="Maximum quality (9 kHz, 64-QAM stereo)",
+        )
+
+        self.assertEqual(robust["_txitpyDrmOccupancy"], 0)
+        self.assertEqual(robust["_txitpyDrmMscMode"], "16-QAM")
+        self.assertFalse(robust["_txitpyDrmStereo"])
+        self.assertEqual(maximum["_txitpyDrmOccupancy"], 2)
+        self.assertEqual(maximum["_txitpyDrmMscMode"], "64-QAM")
+        self.assertTrue(maximum["_txitpyDrmStereo"])
+
     def test_nfm_transport_bandwidth_accepts_one_to_twenty_khz(self):
         for bandwidth_hz in (1_000, 5_000, 12_000, 20_000):
             with self.subTest(bandwidth_hz=bandwidth_hz):
