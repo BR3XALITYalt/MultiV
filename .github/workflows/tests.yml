@@ -226,7 +226,7 @@ jobs:
               "occupancy = 0",
               "occupancy = 2",
           ).replace(
-              'codec = "he-aac"\\ncore_rate = 12000',
+              'codec = "he-aac"\ncore_rate = 12000',
               'codec = "xhe-aac"',
           ).replace(
               "stereo = false",
