@@ -9,8 +9,10 @@ from nfm_modulator import (
     NFM_AUDIO_LOW_HZ,
     NFM_CHANNEL_BANDWIDTH_HZ,
     NFM_OUTPUT_LEVEL,
+    NFM_PROFILES,
     SAMPLE_RATE_HZ,
     StreamingNFMModulator,
+    nfm_profile_settings,
     soft_clip,
 )
 
@@ -94,6 +96,35 @@ class StreamingNFMModulatorTests(unittest.TestCase):
             NFM_IF_HZ - NFM_DEVIATION_HZ - NFM_AUDIO_HIGH_HZ,
             0,
         )
+
+    def test_wide_profile_expands_voice_band_without_clipping_the_if(self):
+        settings = nfm_profile_settings("Wide (11 kHz)")
+        self.assertEqual(settings["if_hz"], 6_000)
+        self.assertEqual(settings["deviation_hz"], 2_500)
+        self.assertEqual(settings["audio_low_hz"], 100)
+        self.assertEqual(settings["audio_high_hz"], 3_000)
+        self.assertEqual(settings["channel_bandwidth_hz"], 11_000)
+        self.assertEqual(settings["transport_bandwidth_hz"], 12_000)
+        self.assertGreater(
+            settings["if_hz"] - settings["deviation_hz"] - settings["audio_high_hz"],
+            0,
+        )
+
+        modulator = StreamingNFMModulator(
+            if_hz=settings["if_hz"],
+            deviation_hz=settings["deviation_hz"],
+            low_cut_hz=settings["audio_low_hz"],
+            high_cut_hz=settings["audio_high_hz"],
+        )
+        output = modulator.process(np.zeros(512, dtype=np.float32))
+        self.assertEqual(output.dtype, np.float32)
+        self.assertTrue(np.isfinite(output).all())
+
+    def test_nfm_profiles_keep_the_existing_standard_default(self):
+        self.assertEqual(NFM_PROFILES[0], "Standard (9 kHz)")
+        self.assertEqual(nfm_profile_settings(NFM_PROFILES[0])["if_hz"], NFM_IF_HZ)
+        with self.assertRaises(ValueError):
+            nfm_profile_settings("Unknown profile")
 
     def test_soft_limiter_preserves_quiet_audio_and_rounds_peaks(self):
         source = np.array([-2.0, -0.4, 0.0, 0.4, 2.0], dtype=np.float64)
