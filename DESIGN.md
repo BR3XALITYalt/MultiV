@@ -29,15 +29,15 @@ This section applies to the public site in `docs/`. It does not replace the desk
 - **Identity:** MultiV is a BR3XALITY virtual-radio client. The supplied wide banner is the wordmark lockup; the supplied square mark is used as the favicon.
 - **Audience:** People who use virtual radio simulators and need one desktop client for audio input, transmission settings, and station management.
 - **Mood:** Restrained, technical, and broadcast-oriented. The page should feel like a piece of radio software, not a generic SaaS launch page.
-- **Palette:** Use a deep plum-charcoal page surface (`#15111A`), warm near-white text (`#F3EEF5`), muted neutral text (`#BFB4C6`), and one lavender accent (`#B58AE5`). The purple direction comes from the owner's explicit brand request and supplied artwork. Keep the accent on important links and the channel-marker motif rather than spreading it across every element.
+- **Palette:** Use a deep plum-charcoal page surface (`#15111A`), warm near-white text (`#F3EEF5`), muted neutral text (`#BFB4C6`), and one lavender accent (`#B58AE5`). The purple direction comes from the owner's explicit brand request and supplied artwork. Keep the accent on important links and the frequency-marker motif rather than spreading it across every element.
 - **Typography:** Use the browser's system sans-serif stack. It loads without a font request and keeps dense technical copy readable. Use weight, scale, and line length for hierarchy.
-- **Composition:** Use an asymmetric split hero, a source list, a compact station-capability definition list, a signal-mode table, a plain provider-status link, and a two-column installation section. Each section has a different structure because the content serves a different task. Do not repeat a feature-card grid.
+- **Composition:** Use a split hero, a source list, a station-capability definition list, signal-mode rows, a plain provider-status link, and a two-column installation section. The content structures vary by task while the two-column frame keeps the page easy to scan. Do not repeat a feature-card grid.
 - **Identity motif:** A small frequency-marker rule with uneven ticks appears beside section labels. It references radio tuning without inventing frequencies or presenting decorative values as live data.
 - **Imagery:** Display the supplied banner as one complete image so its blended wordmark is not recreated with HTML text. Use the owner-provided Unsplash gradient image only as a bounded hero image. Keep text off the image so contrast does not depend on its changing pixels. Do not generate additional art or screenshots.
 - **Surfaces:** Use solid page and section surfaces with thin separators. Avoid full-page blur, stacked glass panels, glow, and broad shadows. These effects add decoration without helping users understand the product.
-- **Motion:** Keep the page static. Links receive clear hover and focus states; honor reduced-motion preferences. Do not add scroll reveals, parallax, or animated meters.
+- **Motion:** Keep the page static. Links receive clear hover, active, and focus states; honor reduced-motion preferences. Do not add scroll reveals, parallax, or animated meters.
 - **Theme:** Keep the public site in its dark brand theme. The supplied wordmark and requested purple direction use a dark field; this is a brand decision, not an arbitrary technology aesthetic.
-- **Dials:** ENERGY 2 / RHYTHM 3 / MOTION 1.
+- **Dials:** ENERGY 2 / RHYTHM 2 / MOTION 1.
 
 ## Interface copy
 
