@@ -90,8 +90,8 @@ def next_audio_frame_deadline(
 
     next_deadline = current_deadline + AUDIO_FRAME_INTERVAL_SECONDS
     if now >= next_deadline:
-        # Playlist playback skips a missed slot. DRM immediately sends its
-        # next queued block, then resumes the normal sample clock.
+        # Playlist playback skips a missed slot. DRM sends the next queued block
+        # immediately, then resumes the sample clock.
         return now if catch_up_after_delay else now + AUDIO_FRAME_INTERVAL_SECONDS
     return next_deadline
 
