@@ -112,10 +112,10 @@ MultiV saves your Discord session between launches. Select **Disconnect Discord*
 
 MultiV stores station and transmission preferences here:
 
-- **Windows:** `%APPDATA%\\TXITPY\\transmit-settings.json`
+- **Windows:** `%APPDATA%\TXITPY\transmit-settings.json`
 - **Linux and macOS:** `$XDG_CONFIG_HOME/TXITPY/transmit-settings.json`, or `~/.config/TXITPY/transmit-settings.json`
 
-On Windows, MultiV stores the Discord session token separately at `%PROGRAMDATA%\\TXITPY\\token.txt`. On Linux and macOS, it uses the application configuration directory.
+On Windows, MultiV stores the Discord session token separately at `%PROGRAMDATA%\TXITPY\token.txt`. On Linux and macOS, it uses the application configuration directory.
 
 ## Command line
 
@@ -135,5 +135,5 @@ python main.py --list-inputs
 python main.py --no-gui
 
 # Start DRM mode with a playlist folder
-python main.py --no-gui --mode DRM --audio-source playlist --playlist "D:\\Radio\\Playlist"
+python main.py --no-gui --mode DRM --audio-source playlist --playlist "D:\Radio\Playlist"
 ```
