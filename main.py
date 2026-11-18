@@ -1048,8 +1048,9 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(14, 6))
         make_label(
             card,
-            "Sign in with Discord to use the MultiV desktop app. "
-            "MultiV checks your saved session each time it starts.",
+            "MultiV is a multi-source client for virtual radio simulators. "
+            "Choose a microphone, desktop audio, or playlist, then transmit through a supported simulator connection. "
+            "TXITY is the active connection today.",
             font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3162,9 +3163,9 @@ def build_app() -> None:
         ).pack(anchor="w")
         make_label(
             connect_card,
-            "TXITY provides a virtual SDR++ Server feed. Connect your SDR++ client to the "
-            "server endpoint shown by TXITY, then start the transmission here. MultiV sends "
-            "audio to TXITY's virtual service and does not control local RF hardware.",
+            "For TXITY, connect your SDR++ client to the virtual SDR++ Server endpoint shown by TXITY. "
+            "Choose a microphone, desktop-audio device, or playlist in MultiV, then start the transmission. "
+            "MultiV sends audio to the virtual service; it does not control local RF hardware.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3198,7 +3199,7 @@ def build_app() -> None:
 
         make_label(
             page,
-            "MultiV streams selected audio only to TXITY's virtual service.",
+            "This transmission sends one selected audio source to one TXITY virtual station.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
