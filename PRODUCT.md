@@ -16,28 +16,20 @@ Users of virtual radio simulators who want one client for station setup, audio i
 
 - **Multiple audio sources:** microphone, desktop audio, and playlists.
 - **Radio signal modes:** AM, sideband, NFM, FreeDV RADE V1, DRM (experimental), and CW.
-- **Multi-simulator support:** one desktop client is intended to connect to multiple virtual radio platforms; TXITY is the only connected backend today.
+- **Multi-simulator support:** one desktop client is intended to connect to multiple virtual radio platforms.
 - **Station workflow:** station identity, frequency, power, profile details, and transmission state.
 
-## Availability
+## Supported providers
 
-| Capability | Current status |
-|---|---|
-| Microphone, desktop-audio, and playlist sources | Available in the TXITY transmitter |
-| TXITY simulator connection | Available |
-| NFM and FreeDV RADE V1 transmission | Available through TXITY audio transport |
-| DRM transmission | Experimental |
-| SimTX account and protocol foundation | In development; not connected to the desktop transmitter |
-| Multiple active simulator backends | Not available |
-| Simultaneous multi-stream output to multiple simulators | Not available |
+- **TXITY:** currently supported.
+- **SimTX:** integration is in development.
 
 ## Messaging rules
 
 - Lead with the multi-source, multi-simulator product direction.
 - Explain that one application is intended to handle audio sources, radio modes, station configuration, and simulator connections.
-- Name TXITY as the current active backend.
+- Name TXITY as the currently supported provider.
 - Describe SimTX as in development until its transmitter is integrated and tested.
 - Do not present concurrent streams, simultaneous simulator targets, or unsupported backends as current features.
 - Use "multi-source" for input choices and "multi-stream" for concurrent output sessions. Do not treat those terms as interchangeable.
 - Do not invent supported simulator names, user counts, performance figures, testimonials, or receiver-test results.
-
