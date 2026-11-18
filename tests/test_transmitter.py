@@ -21,6 +21,7 @@ from transmitter import (
     should_send_live_audio_silence,
     next_audio_frame_deadline,
     playlist_frame_wait_seconds,
+    unpack_queued_audio_frame,
     build_audio_socket_url,
     build_transmit_config,
     apply_nfm_transport,
@@ -107,6 +108,29 @@ class TransmitterProtocolTests(unittest.TestCase):
             PLAYLIST_PREROLL_FRAMES * AUDIO_FRAME_INTERVAL_SECONDS,
             2.7306666666666666,
         )
+
+    def test_unpacks_drm_playlist_audio_before_websocket_send(self):
+        frame = bytes(FRAME_BYTES)
+        metadata = None
+
+        payload, playlist_info = unpack_queued_audio_frame((frame, metadata))
+
+        self.assertIs(payload, frame)
+        self.assertIsNone(playlist_info)
+        self.assertIsInstance(payload, bytes)
+        self.assertEqual(len(payload), FRAME_BYTES)
+
+    def test_unpacks_legacy_and_rade_playlist_queue_items(self):
+        frame = bytes(FRAME_BYTES)
+        playlist_info = ("track.ogg", 1, 2)
+
+        payload, info = unpack_queued_audio_frame((frame, playlist_info))
+        self.assertIs(payload, frame)
+        self.assertEqual(info, playlist_info)
+
+        payload, info = unpack_queued_audio_frame(frame)
+        self.assertIs(payload, frame)
+        self.assertIsNone(info)
 
     def test_live_audio_silence_only_fills_sustained_input_gaps(self):
         self.assertEqual(LIVE_AUDIO_SILENCE_GRACE_SECONDS, 0.1)
