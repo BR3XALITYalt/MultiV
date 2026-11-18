@@ -1,4 +1,4 @@
-# MultiV
+![MultiV](assets/banner.svg)   
 
 MultiV connects to TXITY. Sign in with Discord to browse stations, configure your station, and stream audio to the virtual service.
 
