@@ -144,8 +144,7 @@ def build_app() -> None:
         saved_fade_shape_id = "0"
     fade_shape_saved_value = f"{saved_fade_shape_id} - {fade_shape_names[saved_fade_shape_id]}"
 
-    # Tk variables live for the lifetime of the root, even when page widgets
-    # are rebuilt after navigation or a theme change.
+    # Keep Tk variables with the root; navigation and theme changes rebuild page widgets.
     connection_var = tk.StringVar(root, "Disconnected")
     account_var = tk.StringVar(root, "Not signed in to Discord")
     auth_status_var = tk.StringVar(root, "Checking TXITY server configuration...")
@@ -1705,7 +1704,7 @@ def build_app() -> None:
                 ],
             )
             widget.configure(style="TXITY.Transmit.TCombobox", font=("Segoe UI", 11))
-            # A wheel over a closed combobox should move the page, not cycle options.
+            # Let the page scroll when the pointer is over a closed combobox.
             widget.bind("<MouseWheel>", scroll_active_canvas)
             widget.bind("<Button-4>", lambda event: scroll_active_canvas(event, -1))
             widget.bind("<Button-5>", lambda event: scroll_active_canvas(event, 1))
@@ -2047,7 +2046,7 @@ def build_app() -> None:
         drm_profile_picker.bind("<<ComboboxSelected>>", apply_drm_quality_profile)
         make_label(
             drm_profile_frame,
-            "Presets set channel width and modulation. You can still adjust MSC modulation and stereo separately.",
+            "The preset sets channel width, MSC modulation, stereo, and long interleaving. You can change MSC modulation and stereo below.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
