@@ -815,7 +815,7 @@ def write_drm_station_config(
     occupancy: int = 0,
     stereo: bool = False,
 ) -> Path:
-    """Write a one-service DRM30 station configuration."""
+    """Write a one-service DRM30 station configuration with a layout-aware output IF."""
     input_count = sum((bool(input_device_name), bool(playlist_url)))
     if input_count != 1:
         raise ValueError("Choose exactly one DRM audio input: microphone or playlist.")
@@ -881,7 +881,6 @@ def write_drm_station_config(
         "[output]",
         'sample_format = "float32"',
         'format = "real"',
-        "if_hz = 1500.0",
         "level_dbfs = -15.0",
         "band_limit = true",
         "",
