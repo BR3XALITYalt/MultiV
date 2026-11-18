@@ -65,7 +65,7 @@ LOGIN_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TXITY - MultiV Login</title>
+<title>MultiV - Browser control login</title>
 <style>
 :root{color-scheme:light;--blue:#1769aa;--ink:#202124;--muted:#5f6368;--line:#dadce0;--surface:#fff;--page:#f5f7fa}
 *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);font:15px Arial,Helvetica,sans-serif}
@@ -161,7 +161,7 @@ button {
 </style>
 </head>
 <body>
-<header class="topbar"><div class="brand">TXITY</div><nav><a href="/">Transmit</a></nav></header>
+<header class="topbar"><div class="brand">MultiV</div><nav><a href="/">Transmit</a></nav></header>
 <main><h1>MultiV control panel</h1><p>Sign in to manage your MultiV transmitter and station profile.</p>
 <section class="card panel"><h2>Local control login</h2><form method="post" action="/login">
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
@@ -176,7 +176,7 @@ DASHBOARD_HTML = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf-token" content="__CSRF__">
-<title>TXITY - MultiV</title>
+<title>MultiV - Browser control</title>
 <style>
 :root{color-scheme:light;--blue:#1769aa;--blue-dark:#174ea6;--ink:#202124;--muted:#5f6368;--line:#dadce0;--surface:#fff;--page:#f5f7fa;--pale:#e8f0fe;--green:#137333;--red:#b3261e}
 *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);font:15px Arial,Helvetica,sans-serif}
@@ -443,12 +443,12 @@ footer {
 </style>
 </head>
 <body>
-<header><div class="brand">TXITY</div><nav>
+<header><div class="brand">MultiV</div><nav>
 <a class="nav-link active" href="#transmit">Transmit</a><a class="nav-link" href="#profile">Station profile</a><a class="nav-link" href="#page-details">Page details</a>
-<button class="nav-link" type="button" id="logout">Logout</button>
+<button class="nav-link" type="button" id="logout">Sign out</button>
 </nav></header>
 <main class="shell">
-<div class="hero"><div><h1>TXITY</h1><p class="sub">MultiV remote station control</p></div>
+<div class="hero"><div><h1>Remote station control</h1><p class="sub">MultiV browser panel</p></div>
 <div class="status"><span id="live-dot" class="dot"></span><span id="status">Connecting to MultiV...</span></div></div>
 <form id="control-form">
 <section id="transmit" class="card panel">
