@@ -28,7 +28,7 @@ The current application accepts microphone, desktop-audio, or playlist input and
 - `freedv_rade.py` and `freedv_rade_tx.c`: FreeDV RADE V1 transmit encoder integration.
 - `simtx_api.py`: SimTX account and protocol foundation. It is not connected to the desktop transmitter.
 
-Read [DESIGN.md](DESIGN.md) before changing either interface. Keep user-facing guidance in [README.md](README.md); keep implementation notes here.
+Read [DESIGN.md](DESIGN.md) before changing either interface. Read [PRODUCT.md](PRODUCT.md) before changing product positioning. Keep user-facing guidance in [README.md](README.md); keep implementation notes here.
 
 ## SimTX integration status
 
