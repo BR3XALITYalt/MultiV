@@ -44,10 +44,14 @@ Apply these rules to the README, developer documentation, design notes, code com
 ### Documentation
 
 - Organize user instructions around tasks: prerequisites, steps, expected result, and relevant limits.
-- Keep [README.md](README.md) focused on installing, configuring, and using MultiV. Put architecture notes, unfinished integrations, test commands, and implementation status in developer documentation.
+- Keep [README.md](README.md) as the user-facing entry page. It should cover installation, first use, core controls, important limitations, and safety-critical warnings without becoming a full technical manual.
+- Put detailed user reference material in [wiki/](wiki/Home.md): mode parameters and transport behavior, audio-format exceptions, encoder prerequisites, browser-panel configuration, storage paths, and command-line options.
+- Keep architecture, internal module notes, unfinished implementation details, and test commands in [DEVELOPMENT.md](DEVELOPMENT.md). Do not put these details in the user-facing README.
+- Keep [ROADMAP.md](ROADMAP.md) limited to concise provider and feature status. Link to the reference pages for technical explanations.
 - Use runnable examples. Match the actual command, option, path, control label, unit, and supported format.
 - Describe current behavior. Label experimental features and unverified signal paths. Do not present planned or partial work as usable.
 - Include implementation history only when it explains a current compatibility requirement.
+- Preserve third-party license and attribution notices beside the code or components they cover.
 
 ### Interface copy
 

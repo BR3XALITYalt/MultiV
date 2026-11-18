@@ -28,7 +28,7 @@ See [ROADMAP.md](ROADMAP.md) for provider support and integration status. Keep t
 - `freedv_rade.py` and `freedv_rade_tx.c`: FreeDV RADE V1 transmit encoder integration.
 - `simtx_api.py`: SimTX account and protocol foundation. The desktop transmitter does not use this module.
 
-Read [DESIGN.md](DESIGN.md) before changing an interface. Read [PRODUCT.md](PRODUCT.md) before changing product positioning. Put user instructions in [README.md](README.md) and implementation notes here.
+Read [DESIGN.md](DESIGN.md) before changing an interface. Read [PRODUCT.md](PRODUCT.md) before changing product positioning. Keep the [README](README.md) as the user-facing entry page. Put detailed mode, configuration, and command-line guidance in the [reference pages](wiki/Home.md). Keep architecture and implementation notes here.
 
 ## SimTX implementation
 
