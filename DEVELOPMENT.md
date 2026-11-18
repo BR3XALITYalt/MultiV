@@ -15,7 +15,7 @@ Run `python main.py` to inspect the desktop application. Test browser-control ch
 
 MultiV is intended to provide one desktop workflow for several virtual radio simulators. Keep audio-source selection separate from simulator-specific connection code as additional backends are developed.
 
-The current application accepts microphone, desktop-audio, or playlist input and runs one active TXITY transmission. SimTX account and protocol code exists in `simtx_api.py`, but the desktop transmitter does not use it. Do not describe SimTX as a working transmitter or claim simultaneous multi-simulator output.
+See [ROADMAP.md](ROADMAP.md) for the current supported providers and integration status. Keep the implementation notes below focused on code behavior rather than duplicating provider-support claims. The active desktop transmitter and the SimTX foundation are described in the relevant module notes.
 
 ## Main modules
 
@@ -30,7 +30,7 @@ The current application accepts microphone, desktop-audio, or playlist input and
 
 Read [DESIGN.md](DESIGN.md) before changing either interface. Read [PRODUCT.md](PRODUCT.md) before changing product positioning. Keep user-facing guidance in [README.md](README.md); keep implementation notes here.
 
-## SimTX integration status
+## SimTX implementation notes
 
 `simtx_api.py` contains an initial implementation based on the documented SimTX account API and game protocol v25. It includes:
 
