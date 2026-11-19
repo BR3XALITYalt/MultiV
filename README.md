@@ -6,14 +6,41 @@ MultiV is a desktop app for setting up a station and transmitting audio through 
 
 ## Install
 
-Install Python 3.12 or newer. On Windows, install the Microsoft Edge WebView2 Runtime.
+MultiV requires Python 3.12 or newer.
 
-From the project folder, run:
+### Windows
+
+Install the Microsoft Edge WebView2 Runtime, then run these commands from the project folder:
 
 ```powershell
 python -m pip install -r requirements.txt
 python main.py
 ```
+
+### Linux
+
+On Ubuntu or Debian, install the desktop, audio, and build dependencies:
+
+```bash
+sudo apt update
+sudo apt install python3-tk portaudio19-dev libportaudio2 build-essential cmake git pkg-config
+```
+
+Create a virtual environment using Python 3.12 or newer, then install MultiV:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python main.py
+```
+
+The Linux requirements install the Qt WebView backend used for Discord sign-in. Your desktop session must provide a working Qt display environment.
+
+MultiV uses PortAudio for microphone input. Desktop-audio capture uses a PulseAudio or PipeWire monitor source exposed as an input device. Select **Desktop audio (output loopback)** and choose the matching monitor source.
+
+The prebuilt RADE encoder is available for Windows x64 and Linux x86_64. DRM builds its encoder locally on Linux and can install the Rust toolchain automatically. DRM also needs Git, CMake, and a C/C++ compiler.
 
 ## Start a transmission
 
@@ -28,7 +55,7 @@ MultiV uses one audio source at a time. It does not mix the microphone, desktop 
 ## Audio sources
 
 - **Microphone**
-- **Desktop audio** on Windows
+- **Desktop audio** through Windows WASAPI or Linux PulseAudio/PipeWire monitor sources
 - **Playlist** from audio files or a folder
 
 See the [audio and playlist guide](wiki/Audio-Sources.md) for supported formats and playlist behavior.
