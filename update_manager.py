@@ -82,10 +82,10 @@ def _request_json(url: str) -> dict[str, Any]:
     return result
 
 
-def _expected_filename(key: str) -> str:
+def _expected_filename(key: str, build_number: int) -> str:
     return {
-        "windows-x86_64": "MultiV-windows-x86_64.zip",
-        "linux-x86_64": "MultiV-linux-x86_64.AppImage",
+        "windows-x86_64": f"MultiV-windows-x86_64-{build_number}.zip",
+        "linux-x86_64": f"MultiV-linux-x86_64-{build_number}.AppImage",
     }[key]
 
 
@@ -114,7 +114,7 @@ def parse_update_manifest(
         raise RuntimeError("The update manifest contains invalid build metadata.")
     if build_number <= int(current_build):
         return None
-    if filename != _expected_filename(key):
+    if filename != _expected_filename(key, build_number):
         raise RuntimeError("The update manifest names an unexpected application package.")
     expected_url = (
         f"https://github.com/{GITHUB_REPOSITORY}/releases/download/"
@@ -225,11 +225,9 @@ while (Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue) {{
 try {{
     New-Item -ItemType Directory -Path $Stage -Force | Out-Null
     Expand-Archive -LiteralPath $Archive -DestinationPath $Stage -Force
-    $Copy = Start-Process -FilePath 'robocopy.exe' -ArgumentList @(
-        $Stage, $InstallDir, '/MIR', '/R:2', '/W:1'
-    ) -Wait -PassThru -WindowStyle Hidden
-    if ($Copy.ExitCode -ge 8) {{
-        throw "File replacement failed with robocopy exit code $($Copy.ExitCode)."
+    & robocopy.exe $Stage $InstallDir '/MIR' '/R:2' '/W:1' | Out-Null
+    if ($LASTEXITCODE -ge 8) {{
+        throw "File replacement failed with robocopy exit code $LASTEXITCODE."
     }}
     Start-Process -FilePath $Executable
 }} finally {{
