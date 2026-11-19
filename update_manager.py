@@ -209,41 +209,41 @@ def _windows_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def _schedule_windows_update(archive: Path) -> None:
+def _schedule_windows_update(installer: Path) -> None:
     executable = Path(sys.executable).resolve()
     install_dir = executable.parent
     script_path = Path(tempfile.gettempdir()) / f"multiv-update-{uuid.uuid4().hex}.ps1"
+    default_install_dir = Path(
+        os.environ.get("ProgramFiles", r"C:\Program Files")
+    ) / "MultiV"
     script = f"""$ErrorActionPreference = 'Stop'
 $ParentProcessId = {os.getpid()}
-$Archive = {_windows_quote(str(archive))}
+$Installer = {_windows_quote(str(installer))}
 $InstallDir = {_windows_quote(str(install_dir))}
-$Executable = {_windows_quote(str(executable))}
-$ParentDirectory = Split-Path -Parent $InstallDir
-$Stage = Join-Path $ParentDirectory ('.MultiV-update-' + [guid]::NewGuid().ToString('N'))
-$Backup = Join-Path $ParentDirectory ('.MultiV-previous-' + [guid]::NewGuid().ToString('N'))
+$DefaultInstallDir = {_windows_quote(str(default_install_dir))}
+$UninstallKey = 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{{7C8D40C3-9EAA-49E0-8CB1-7819402B4761}}_is1'
 while (Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue) {{
     Start-Sleep -Milliseconds 300
 }}
 try {{
-    New-Item -ItemType Directory -Path $Stage -Force | Out-Null
-    Expand-Archive -LiteralPath $Archive -DestinationPath $Stage -Force
-    Move-Item -LiteralPath $InstallDir -Destination $Backup
-    try {{
-        Move-Item -LiteralPath $Stage -Destination $InstallDir
-        Start-Process -FilePath $Executable
-        Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
-    }} catch {{
-        if (Test-Path -LiteralPath $InstallDir) {{
-            Remove-Item -LiteralPath $InstallDir -Recurse -Force
-        }}
-        if (Test-Path -LiteralPath $Backup) {{
-            Move-Item -LiteralPath $Backup -Destination $InstallDir
-        }}
-        throw
+    # ZIP-based portable installs have no Inno Setup registration. Move those
+    # users to the standard Program Files location during their first installer update.
+    if (-not (Test-Path -LiteralPath $UninstallKey)) {{
+        $InstallDir = $DefaultInstallDir
     }}
+    $InstallerProcess = Start-Process -FilePath $Installer -ArgumentList @('/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-') -Verb RunAs -Wait -PassThru
+    if ($InstallerProcess.ExitCode -ne 0) {{
+        throw "The MultiV installer exited with code $($InstallerProcess.ExitCode)."
+    }}
+    $InstalledExecutable = Join-Path $InstallDir 'MultiV.exe'
+    if (-not (Test-Path -LiteralPath $InstalledExecutable)) {{
+        throw "The installer completed, but MultiV.exe was not found in $InstallDir."
+    }}
+    Start-Process -FilePath $InstalledExecutable -WorkingDirectory $InstallDir
+}} catch {{
+    $_ | Out-File -FilePath (Join-Path $env:TEMP 'MultiV-update-error.log') -Append
 }} finally {{
-    Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $Archive -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $Installer -Force -ErrorAction SilentlyContinue
 }}
 """
     script_path.write_text(script, encoding="utf-8")
@@ -271,7 +271,7 @@ try {{
         )
     except Exception:
         script_path.unlink(missing_ok=True)
-        archive.unlink(missing_ok=True)
+        installer.unlink(missing_ok=True)
         raise
 
 
