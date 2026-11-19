@@ -11,6 +11,14 @@ python -m unittest discover -s tests -v
 
 Run `python main.py` to inspect the desktop app. Test browser-panel changes through the local Web GUI. Unit tests do not verify audio hardware, live TXITY sessions, or receiver decoding.
 
+## Packaging and releases
+
+`.github/workflows/release-builds.yml` builds a PyInstaller Windows x64 directory package and a Linux x86_64 AppImage. Commits to `main` replace the `rolling` prerelease. Running the workflow manually also creates the next patch version release tag, beginning at `v0.1.0`.
+
+The workflow writes `build_info.py` before packaging. The updater reads that build number and checks the rolling release manifest in `multiv-update.json`. Assets are named with the workflow run number so the new manifest can be uploaded after the binaries without pointing clients at a partially replaced file. The manifest is the update channel's index and includes per-platform SHA-256 checksums.
+
+The updater is for packaged desktop builds only. It verifies the downloaded package before scheduling replacement after the running process exits. Windows uses a detached PowerShell process to replace the PyInstaller directory; Linux replaces the running AppImage file through a detached shell process. The user must approve the update.
+
 ## Product direction
 
 MultiV is intended to support one desktop workflow across several virtual radio simulators. Keep audio-source selection separate from provider-specific connection code as backends are added.
