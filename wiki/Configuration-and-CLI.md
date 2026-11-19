@@ -56,7 +56,7 @@ python main.py --no-gui
 Start DRM mode with a playlist folder:
 
 ```powershell
-python main.py --no-gui --mode DRM --audio-source playlist --playlist "D:\Radio\Playlist"
+python main.py --no-gui --mode DRM --audio-source playlist --playlist "$HOME/Radio/Playlist"
 ```
 
 ## Linux desktop audio
