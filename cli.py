@@ -37,7 +37,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
         prog="multiv",
         description=(
             "MultiV desktop client. Use --no-gui to load saved settings and "
-            "start a transmission from saved settings, including as an NSSM service."
+            "start a transmission from saved settings, including under Windows NSSM "
+            "or a Linux systemd user service."
         ),
     )
     parser.add_argument(
