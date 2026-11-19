@@ -371,18 +371,6 @@ jobs:
           Path("release-out/multiv-update.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
           PY
 
-      - name: Move rolling tag to this commit
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          if gh api "repos/$REPOSITORY/git/ref/tags/rolling" >/dev/null 2>&1; then
-            gh api --method PATCH "repos/$REPOSITORY/git/refs/tags/rolling" -f sha="$GITHUB_SHA" -F force=true >/dev/null
-          else
-            gh api --method POST "repos/$REPOSITORY/git/refs" -f ref="refs/tags/rolling" -f sha="$GITHUB_SHA" >/dev/null
-          fi
-
       - name: Publish rolling prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -396,7 +384,9 @@ jobs:
           if gh release view rolling --repo "$REPOSITORY" >/dev/null 2>&1; then
             gh release edit rolling --repo "$REPOSITORY" --title "$title" --notes "$notes" --prerelease
           else
-            gh release create rolling --repo "$REPOSITORY" --title "$title" --notes "$notes" --prerelease --target "$COMMIT"
+            # The rolling tag is a stable release anchor, not a per-build source tag.
+            # Target the current default branch only when the release is first created.
+            gh release create rolling --repo "$REPOSITORY" --title "$title" --notes "$notes" --prerelease --target main
           fi
           gh release upload rolling --repo "$REPOSITORY" \
             release-out/MultiV-windows-x86_64.exe \
