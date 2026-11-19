@@ -305,12 +305,19 @@ jobs:
             release-out/MultiV-linux-x86_64-"$BUILD_NUMBER".AppImage.sha256 --clobber
           gh release upload rolling --repo "$REPOSITORY" release-out/multiv-update.json --clobber
 
+          # Keep recent build assets available while clients finish downloading an older manifest.
           gh release view rolling --repo "$REPOSITORY" --json assets --jq '.assets[].name' |
           while IFS= read -r asset; do
-            case "$asset" in
-              "MultiV-windows-x86_64-$BUILD_NUMBER.zip"|"MultiV-windows-x86_64-$BUILD_NUMBER.zip.sha256"|"MultiV-linux-x86_64-$BUILD_NUMBER.AppImage"|"MultiV-linux-x86_64-$BUILD_NUMBER.AppImage.sha256"|"multiv-update.json") ;;
-              *) gh release delete-asset rolling "$asset" --repo "$REPOSITORY" --yes ;;
-            esac
+            if [[ "$asset" == "multiv-update.json" ]]; then
+              continue
+            fi
+            if [[ "$asset" =~ ^MultiV-(windows-x86_64|linux-x86_64)-([0-9]+)\.(zip|AppImage)(\.sha256)?$ ]]; then
+              asset_build="${BASH_REMATCH[2]}"
+              if (( asset_build >= BUILD_NUMBER - 5 )); then
+                continue
+              fi
+            fi
+            gh release delete-asset rolling "$asset" --repo "$REPOSITORY" --yes
           done
 
       - name: Publish numbered release for manual runs
