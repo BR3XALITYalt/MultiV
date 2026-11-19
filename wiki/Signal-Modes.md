@@ -23,7 +23,7 @@ RADE V1 uses the RADE C modem and LPCNet/FARGAN speech encoder.
 
 MultiV converts the modem output to a real 8 kHz audio waveform, resamples it to 48 kHz, and sends it through TXITY's USB audio transport. The entered frequency is the USB suppressed-carrier reference. The RADE audio centre is 1.5 kHz, and the transport passband is 3 kHz.
 
-The first time RADE starts, MultiV downloads a Windows x64 encoder package from a MultiV release and verifies its SHA-256 checksum before installation. Encoding uses significant CPU time. MultiV buffers audio before keying and stops with an error if the encoder cannot keep up.
+The first time RADE starts, MultiV downloads a platform-specific encoder package from a MultiV release and verifies its SHA-256 checksum before installation. Prebuilt packages are available for Windows x64 and Linux x86_64. Encoding uses significant CPU time. MultiV buffers audio before keying and stops with an error if the encoder cannot keep up.
 
 TXITY does not provide a RADE decoder or receive-audio stream to MultiV. RADE mode is transmit-only.
 
@@ -51,9 +51,7 @@ DRM accepts microphone input and OGG, MP3, or FLAC playlists. It does not suppor
 
 When DRM is selected, MultiV checks for the encoder and asks before installing missing dependencies.
 
-On Windows, setup can install the official Rust toolchain, download DecDRM 0.7.1 and its codec dependencies, and build the encoder. MultiV checks the Rust installer checksum before running it. The build requires Git, CMake, and Microsoft C++ Build Tools with the **Desktop development with C++** workload. Setup may request administrator approval.
-
-On other platforms, install Rust and a working C/C++ compiler.
+On Windows and supported Linux architectures, setup can install the official Rust toolchain, download DecDRM 0.7.1 and its codec dependencies, and build the encoder. MultiV checks the Rust installer checksum before running it. The build requires Git, CMake, and a working C/C++ compiler. On Windows, the compiler must be provided by Microsoft C++ Build Tools with the **Desktop development with C++** workload. Linux distributions may require their compiler and CMake development packages to be installed first.
 
 TXITY does not provide native DRM. MultiV sends the generated waveform through TXITY's DSB audio transport. An independent DRM receiver test has not verified this path.
 
