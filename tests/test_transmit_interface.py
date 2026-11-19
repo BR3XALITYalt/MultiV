@@ -128,7 +128,10 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         )
         call = assignment.value
         self.assertIsInstance(call, ast.Call)
-        self.assertEqual(call.func.id, "ttk.Progressbar")
+        self.assertIsInstance(call.func, ast.Attribute)
+        self.assertEqual(call.func.attr, "Progressbar")
+        self.assertIsInstance(call.func.value, ast.Name)
+        self.assertEqual(call.func.value.id, "ttk")
         self.assertIsInstance(call.args[0], ast.Name)
         self.assertEqual(call.args[0].id, "signal_card")
 
