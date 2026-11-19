@@ -15,7 +15,7 @@ Run `python main.py` to inspect the desktop app. Test browser-panel changes thro
 
 `.github/workflows/release-builds.yml` builds a PyInstaller Windows x64 directory package and a Linux x86_64 AppImage. Commits to `main` replace the `rolling` prerelease. Running the workflow manually also creates the next patch version release tag, beginning at `v0.1.0`.
 
-The workflow writes `build_info.py` before packaging. The updater reads that build number and checks the rolling release manifest in `multiv-update.json`. Assets are named with the workflow run number so the new manifest can be uploaded after the binaries without pointing clients at a partially replaced file. The manifest is the update channel's index and includes per-platform SHA-256 checksums.
+The workflow writes `build_info.py` before packaging. The updater checks the rolling release manifest in `multiv-update.json`; its internal build number prevents downgrades. Rolling downloads always use the stable filenames `MultiV-windows-x86_64.exe` and `MultiV-linux-x86_64.AppImage`, and the manifest includes per-platform SHA-256 checksums. All visible app, tray, installer, and browser-panel icons come from `assets/logo.png`; the Windows `.ico` and Linux launcher icon are generated from that PNG during packaging.
 
 The Windows package includes a separate console-mode `MultiVBrowserHelper.exe` beside `MultiV.exe`. `discord_auth.py` launches that helper in frozen builds so Python script arguments are never passed back to the PyInstaller application executable. Source runs continue to launch `discord_auth_browser.py` through the active Python interpreter.
 
