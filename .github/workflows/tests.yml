@@ -118,6 +118,7 @@ jobs:
           [output]
           sample_format = "float32"
           format = "real"
+          if_hz = 1500.0
           level_dbfs = -15.0
           band_limit = true
 
@@ -199,6 +200,9 @@ jobs:
               "occupancy = 0",
               "occupancy = 2",
           ).replace(
+              "if_hz = 1500.0",
+              "if_hz = 5000.0",
+          ).replace(
               "msc_mode = \"64-QAM\"",
               "msc_mode = \"16-QAM\"",
           )
@@ -224,6 +228,9 @@ jobs:
           wide_stereo_config = base.replace(
               "occupancy = 0",
               "occupancy = 2",
+          ).replace(
+              "if_hz = 1500.0",
+              "if_hz = 5000.0",
           ).replace(
               'codec = "he-aac"\ncore_rate = 12000',
               'codec = "xhe-aac"',
