@@ -10,7 +10,7 @@ from update_manager import (
 
 
 class UpdateManagerTests(unittest.TestCase):
-    def manifest(self, *, filename="MultiV-linux-x86_64.AppImage", url=None):
+    def manifest(self, *, filename="MultiV-linux-x86_64-42.AppImage", url=None):
         if url is None:
             url = (
                 "https://github.com/BR3XALITYalt/MultiV/releases/download/"
@@ -65,7 +65,7 @@ class UpdateManagerTests(unittest.TestCase):
         self.assertIsNotNone(update)
         self.assertEqual(update.version, "0.1.0-dev.42")
         self.assertEqual(update.build_number, 42)
-        self.assertEqual(update.filename, "MultiV-linux-x86_64.AppImage")
+        self.assertEqual(update.filename, "MultiV-linux-x86_64-42.AppImage")
         self.assertEqual(update.sha256, "b" * 64)
 
     def test_same_or_older_build_is_not_an_update(self):
