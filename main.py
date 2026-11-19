@@ -56,6 +56,8 @@ from station_directory import (
     format_frequency,
 )
 from txity_client import TxityClient
+from build_info import APP_BUILD_NUMBER, APP_COMMIT, APP_VERSION
+from update_manager import check_for_update, install_update, is_packaged
 
 BASE_URL = "https://txity.radiodiscussion.org"
 
@@ -117,6 +119,18 @@ def build_app() -> None:
     root.geometry("1180x790")
     root.minsize(900, 650)
     root.configure(background=palette["background"])
+
+    update_status_var = tk.StringVar(
+        root,
+        value=(
+            f"Version {APP_VERSION} (build {APP_BUILD_NUMBER})"
+            if is_packaged()
+            else "Source checkout. Automatic updates are available in packaged builds."
+        ),
+    )
+    update_state: dict[str, Any] = {"info": None, "checking": False}
+    update_check_button: Any = None
+    update_install_button: Any = None
 
     tray_icon: Any = None
     tray_setup_ready = threading.Event()
@@ -3477,8 +3491,132 @@ def build_app() -> None:
                     wraplength=790,
                 ).pack(anchor="w", pady=(3, 0))
 
+    def finish_update_check(
+        info: Any = None,
+        error: str | None = None,
+        *,
+        show_result: bool = False,
+    ) -> None:
+        update_state["checking"] = False
+        if update_check_button is not None:
+            update_check_button.configure(state="normal")
+        if error:
+            update_status_var.set(f"Update check failed: {error}")
+            if show_result:
+                messagebox.showerror("Update check failed", error, parent=root)
+            return
+        if info is None:
+            update_state["info"] = None
+            update_status_var.set(
+                f"MultiV {APP_VERSION} is up to date."
+                if is_packaged()
+                else "Automatic updates are available in packaged builds."
+            )
+            if update_install_button is not None:
+                update_install_button.configure(state="disabled")
+            if show_result:
+                messagebox.showinfo(
+                    "No updates available",
+                    "This copy of MultiV is up to date.",
+                    parent=root,
+                )
+            return
+
+        update_state["info"] = info
+        update_status_var.set(
+            f"Update available: {info.version} (build {info.build_number})."
+        )
+        if update_install_button is not None:
+            update_install_button.configure(state="normal")
+        if show_result and messagebox.askyesno(
+            "MultiV update available",
+            f"Version {info.version} is available. Install it and restart MultiV? "
+            "Any active transmission will be stopped.",
+            parent=root,
+        ):
+            install_application_update()
+
+    def check_application_updates(*, show_result: bool = True) -> None:
+        if not is_packaged():
+            update_status_var.set("Automatic updates are available in packaged builds.")
+            return
+        if update_state["checking"]:
+            return
+        update_state["checking"] = True
+        update_status_var.set("Checking for updates...")
+        if update_check_button is not None:
+            update_check_button.configure(state="disabled")
+
+        def worker() -> None:
+            try:
+                info = check_for_update()
+            except Exception as exc:
+                details = safe_error_text(str(exc), 500)
+                root.after(
+                    0,
+                    lambda message=details: finish_update_check(
+                        error=message,
+                        show_result=show_result,
+                    ),
+                )
+            else:
+                root.after(
+                    0,
+                    lambda result=info: finish_update_check(
+                        result,
+                        show_result=show_result,
+                    ),
+                )
+
+        threading.Thread(
+            target=worker,
+            daemon=True,
+            name="multiv-update-check",
+        ).start()
+
+    def install_application_update() -> None:
+        info = update_state.get("info")
+        if info is None:
+            return
+        if not messagebox.askyesno(
+            "Install MultiV update",
+            f"Download and install MultiV {info.version}? MultiV will close, stop any "
+            "active transmission, replace its application files, and restart.",
+            parent=root,
+        ):
+            return
+
+        update_status_var.set("Downloading and verifying the update...")
+        if update_install_button is not None:
+            update_install_button.configure(state="disabled")
+        if update_check_button is not None:
+            update_check_button.configure(state="disabled")
+
+        def worker() -> None:
+            try:
+                install_update(info)
+            except Exception as exc:
+                details = safe_error_text(str(exc), 700)
+                root.after(0, lambda message=details: update_install_failed(message))
+            else:
+                root.after(0, on_shutdown)
+
+        def update_install_failed(message: str) -> None:
+            update_status_var.set(f"Update failed: {message}")
+            if update_check_button is not None:
+                update_check_button.configure(state="normal")
+            if update_install_button is not None:
+                update_install_button.configure(state="normal")
+            messagebox.showerror("MultiV update failed", message, parent=root)
+
+        threading.Thread(
+            target=worker,
+            daemon=True,
+            name="multiv-update-install",
+        ).start()
+
     def show_settings(parent: tk.Frame) -> None:
-        nonlocal station_logo_upload_button
+        nonlocal station_logo_upload_button, update_check_button, update_install_button
         page, _canvas = create_scrollable_page(parent)
         make_label(
             page,
@@ -3703,6 +3841,51 @@ def build_app() -> None:
             lambda: webbrowser.open("http://127.0.0.1:23234"),
             kind="tonal",
         ).pack(anchor="w")
+
+        update_card = make_card(page, padding=16)
+        update_card.pack(fill="x", pady=(0, 14))
+        make_label(
+            update_card,
+            "Application updates",
+            font=("Segoe UI", 16, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 6))
+        make_label(
+            update_card,
+            f"Version {APP_VERSION}  ·  Build {APP_BUILD_NUMBER}",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 6))
+        make_label(
+            update_card,
+            variable=update_status_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=820,
+        ).pack(anchor="w", pady=(0, 10))
+        update_buttons = tk.Frame(update_card, bg=palette["surfaceContainerLow"])
+        update_buttons.pack(anchor="w")
+        update_check_button = make_button(
+            update_buttons,
+            "Check for updates",
+            lambda: check_application_updates(show_result=True),
+            kind="tonal",
+        )
+        update_check_button.pack(side="left", padx=(0, 8))
+        update_install_button = make_button(
+            update_buttons,
+            "Install update",
+            install_application_update,
+            kind="primary",
+        )
+        update_install_button.pack(side="left")
+        if not is_packaged():
+            update_check_button.configure(state="disabled")
+            update_install_button.configure(state="disabled")
+        else:
+            update_install_button.configure(state="disabled")
 
     def show_discord(parent: tk.Frame) -> None:
         page = tk.Frame(parent, bg=palette["background"])
@@ -4452,6 +4635,8 @@ def build_app() -> None:
     root.after(150, poll_web_gui_commands)
     root.after(250, drain_events)
     root.after(60_000, periodic_station_refresh)
+    if is_packaged():
+        root.after(4_000, lambda: check_application_updates(show_result=True))
     playlist_watch_thread = threading.Thread(
         target=watch_playlist_sources,
         daemon=True,
