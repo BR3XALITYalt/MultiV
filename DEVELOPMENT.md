@@ -17,7 +17,7 @@ Run `python main.py` to inspect the desktop app. Test browser-panel changes thro
 
 The workflow writes `build_info.py` before packaging. The updater reads that build number and checks the rolling release manifest in `multiv-update.json`. Assets are named with the workflow run number so the new manifest can be uploaded after the binaries without pointing clients at a partially replaced file. The manifest is the update channel's index and includes per-platform SHA-256 checksums.
 
-The updater is for packaged desktop builds only. It verifies the downloaded package before scheduling replacement after the running process exits. Windows uses a detached PowerShell process to replace the PyInstaller directory; Linux replaces the running AppImage file through a detached shell process. The user must approve the update.
+The updater is for packaged desktop builds only. It verifies the downloaded package before scheduling installation after the running process exits. Windows launches the verified Inno Setup installer through UAC and restarts MultiV when installation finishes; Linux replaces the running AppImage file through a detached shell process. The user must approve the update.
 
 ## Product direction
 
