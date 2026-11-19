@@ -84,7 +84,7 @@ def _request_json(url: str) -> dict[str, Any]:
 
 def _expected_filename(key: str, build_number: int) -> str:
     return {
-        "windows-x86_64": f"MultiV-windows-x86_64-{build_number}.zip",
+        "windows-x86_64": f"MultiV-windows-x86_64-{build_number}.exe",
         "linux-x86_64": f"MultiV-linux-x86_64-{build_number}.AppImage",
     }[key]
 
