@@ -1290,6 +1290,14 @@ def build_app() -> None:
     tx_mode_var.trace_add("write", lambda *_args: update_frequency_check())
     tx_allow_overlap_var.trace_add("write", lambda *_args: update_frequency_check())
 
+    live_reconfigure_state: dict[str, Any] = {
+        "after_id": None,
+        "request": None,
+        "active_request": None,
+        "stopping": False,
+        "cancelled": False,
+    }
+
     def update_transmit_button() -> None:
         button = tx_transmit_button
         if button is None:
@@ -1297,14 +1305,247 @@ def build_app() -> None:
         try:
             if button.winfo_exists():
                 button.configure(
-                    text="Stop Transmission" if transmitter.is_busy else "Start Transmission"
+                    text=(
+                        "Stop Transmission"
+                        if transmitter.is_busy or live_reconfigure_state["stopping"]
+                        else "Start Transmission"
+                    )
                 )
         except tk.TclError:
             pass
 
+    def build_transmission_request() -> dict[str, Any]:
+        config = build_transmit_config(
+            station_name=tx_station_name_var.get(),
+            description=tx_description_var.get(),
+            frequency=tx_frequency_var.get(),
+            mode=tx_mode_var.get(),
+            station_dbm=tx_power_var.get(),
+            allow_overlap=tx_allow_overlap_var.get(),
+            auth_token=client.auth_token,
+            cw_text=tx_cw_text_var.get(),
+            cw_wpm=tx_cw_wpm_var.get(),
+            cw_loop=tx_cw_loop_var.get(),
+            station_logo_url=tx_logo_url_var.get(),
+            station_details=tx_details_var.get(),
+            station_page_layout=tx_page_layout_var.get(),
+            fade_enabled=tx_fade_enabled_var.get(),
+            fade_seconds=tx_fade_seconds_var.get(),
+            fade_min_dbm=tx_fade_min_dbm_var.get(),
+            fade_shape=tx_fade_shape_var.get().split("-", 1)[0].strip(),
+            agc_enabled=tx_agc_enabled_var.get(),
+            agc_target=tx_agc_target_var.get(),
+            mic_gain_db=tx_mic_gain_var.get(),
+            bass_db=tx_bass_var.get(),
+            treble_db=tx_treble_var.get(),
+            presence_db=tx_presence_var.get(),
+            drive=tx_drive_var.get(),
+            nfm_transport_bandwidth_hz=tx_nfm_transport_bandwidth_var.get(),
+            nfm_profile=tx_nfm_profile_var.get(),
+            ssb_bandwidth_hz=tx_ssb_bandwidth_var.get(),
+            ssb_low_cut_hz=tx_ssb_low_cut_var.get(),
+            ssb_high_cut_hz=tx_ssb_high_cut_var.get(),
+            am_bandwidth_hz=tx_am_bandwidth_var.get(),
+            am_pre_emphasis=tx_am_pre_emphasis_var.get(),
+            drm_service_label=tx_drm_service_label_var.get(),
+            drm_service_id=tx_drm_service_id_var.get(),
+            drm_language=tx_drm_language_var.get(),
+            drm_programme_type=tx_drm_programme_type_var.get(),
+            drm_iso_language=tx_drm_iso_language_var.get(),
+            drm_iso_country=tx_drm_iso_country_var.get(),
+            drm_quality_profile=tx_drm_quality_profile_var.get(),
+            drm_audio_codec=tx_drm_audio_codec_var.get(),
+            drm_msc_mode=tx_drm_msc_mode_var.get(),
+            drm_stereo=tx_drm_stereo_var.get(),
+            drm_interleaving=tx_drm_interleaving_var.get().split(" ", 1)[0].casefold(),
+        )
+        if config["mode"] == "CW":
+            audio_source = "mic"
+        else:
+            audio_source = {
+                "Desktop audio (output loopback)": "loopback",
+                "Audio playlist": "playlist",
+            }.get(tx_audio_source_var.get(), "mic")
+
+        if config.get("_txitpyMode") == "DRM" and audio_source == "loopback":
+            raise ValueError(
+                "DRM mode supports microphone and playlist inputs, not desktop audio loopback."
+            )
+
+        playlist_files = list(tx_playlist_files) if audio_source == "playlist" else []
+        selected_device = (
+            tx_audio_device_ids.get(tx_audio_device_var.get())
+            if audio_source in {"mic", "loopback"}
+            else None
+        )
+        if config["mode"] != "CW" and selected_device is None and audio_source == "loopback":
+            raise ValueError("Select a desktop output device for loopback capture.")
+        if audio_source == "playlist" and not playlist_files:
+            raise ValueError("Add at least one audio file or folder to the playlist.")
+
+        candidates = build_frequency_candidates(
+            tx_frequency_var.get(),
+            [variable.get() for variable in tx_frequency_fallback_vars],
+        )
+        apply_nfm_transport(config, candidates[0][1])
+        apply_rade_transport(config, candidates[0][1])
+
+        playlist_shuffle = tx_playlist_shuffle_var.get()
+        playlist_loop = tx_playlist_loop_var.get()
+        retry_context = {
+            "base_config": dict(config),
+            "candidates": candidates,
+            "next_index": 1,
+            "current_index": 0,
+            "pending": False,
+            "input_device": selected_device,
+            "audio_source": audio_source,
+            "playlist_files": list(playlist_files),
+            "playlist_shuffle": playlist_shuffle,
+            "playlist_loop": playlist_loop,
+        }
+        return {
+            "config": config,
+            "input_device": selected_device,
+            "audio_source": audio_source,
+            "playlist_files": playlist_files,
+            "playlist_shuffle": playlist_shuffle,
+            "playlist_loop": playlist_loop,
+            "frequency_retry_context": retry_context,
+        }
+
+    def start_transmission_request(request: dict[str, Any]) -> None:
+        nonlocal frequency_retry_context
+        frequency_retry_context = request["frequency_retry_context"]
+        transmitter.start(
+            request["config"],
+            input_device=request["input_device"],
+            audio_source=request["audio_source"],
+            playlist_files=request["playlist_files"],
+            playlist_shuffle=request["playlist_shuffle"],
+            playlist_loop=request["playlist_loop"],
+        )
+        live_reconfigure_state["active_request"] = request
+        tx_status_var.set("Preparing transmission...")
+        if request["audio_source"] == "playlist":
+            tx_playlist_status_var.set("Preparing playlist...")
+        update_transmit_button()
+
+    def _request_matches(left: dict[str, Any] | None, right: dict[str, Any]) -> bool:
+        if not isinstance(left, dict):
+            return False
+        keys = (
+            "config",
+            "input_device",
+            "audio_source",
+            "playlist_files",
+            "playlist_shuffle",
+            "playlist_loop",
+        )
+        return all(left.get(key) == right.get(key) for key in keys)
+
+    def apply_live_reconfigure() -> None:
+        live_reconfigure_state["after_id"] = None
+        if not transmitter.is_busy and not live_reconfigure_state["stopping"]:
+            return
+        if drm_setup_state["running"]:
+            try:
+                live_reconfigure_state["after_id"] = root.after(500, apply_live_reconfigure)
+            except tk.TclError:
+                live_reconfigure_state["after_id"] = None
+            return
+
+        try:
+            request = build_transmission_request()
+        except Exception as exc:
+            tx_status_var.set(
+                "Live change not applied: " + safe_error_text(str(exc), 380)
+            )
+            return
+
+        if (
+            not live_reconfigure_state["stopping"]
+            and _request_matches(live_reconfigure_state["active_request"], request)
+        ):
+            return
+
+        live_reconfigure_state["request"] = request
+        if live_reconfigure_state["stopping"]:
+            return
+
+        live_reconfigure_state["stopping"] = True
+        live_reconfigure_state["cancelled"] = False
+        tx_status_var.set("Applying changes. Transmission will briefly pause.")
+        if request["audio_source"] == "playlist":
+            tx_playlist_status_var.set("Restarting playlist with updated settings...")
+        transmitter.stop()
+        update_transmit_button()
+
+    def schedule_live_reconfigure(*_args) -> None:
+        if not transmitter.is_busy and not live_reconfigure_state["stopping"]:
+            return
+        previous = live_reconfigure_state["after_id"]
+        if previous is not None:
+            try:
+                root.after_cancel(previous)
+            except tk.TclError:
+                pass
+        try:
+            # Sliders emit many writes while dragging. Apply one update after
+            # the user has paused, rather than restarting on every slider tick.
+            live_reconfigure_state["after_id"] = root.after(
+                900,
+                apply_live_reconfigure,
+            )
+        except tk.TclError:
+            live_reconfigure_state["after_id"] = None
+
+    def start_pending_live_reconfigure() -> None:
+        request = live_reconfigure_state["request"]
+        live_reconfigure_state["request"] = None
+        live_reconfigure_state["stopping"] = False
+        cancelled = bool(live_reconfigure_state["cancelled"])
+        live_reconfigure_state["cancelled"] = False
+
+        if request is None or cancelled:
+            live_reconfigure_state["active_request"] = None
+            update_transmit_button()
+            return
+
+        try:
+            start_transmission_request(request)
+        except Exception as exc:
+            live_reconfigure_state["active_request"] = None
+            frequency_retry_context = None
+            tx_status_var.set(
+                "Could not apply live changes: " + safe_error_text(str(exc), 450)
+            )
+            update_transmit_button()
+
     def toggle_transmission() -> None:
         nonlocal frequency_retry_context
+        if live_reconfigure_state["stopping"]:
+            # A second click during the automatic restart cancels the restart;
+            # the current transmitter has already received its stop request.
+            live_reconfigure_state["request"] = None
+            live_reconfigure_state["cancelled"] = True
+            frequency_retry_context = None
+            tx_status_var.set("Stopping transmission...")
+            update_transmit_button()
+            return
+
+        pending_after = live_reconfigure_state["after_id"]
+        if pending_after is not None:
+            try:
+                root.after_cancel(pending_after)
+            except tk.TclError:
+                pass
+            live_reconfigure_state["after_id"] = None
+
         if transmitter.is_busy:
+            live_reconfigure_state["request"] = None
+            live_reconfigure_state["active_request"] = None
+            live_reconfigure_state["cancelled"] = False
             frequency_retry_context = None
             transmitter.stop()
             tx_status_var.set("Stopping transmission...")
@@ -1316,106 +1557,16 @@ def build_app() -> None:
             navigate("discord")
             return
 
-        frequency_retry_context = None
+        live_reconfigure_state["request"] = None
+        live_reconfigure_state["cancelled"] = False
         try:
-            config = build_transmit_config(
-                station_name=tx_station_name_var.get(),
-                description=tx_description_var.get(),
-                frequency=tx_frequency_var.get(),
-                mode=tx_mode_var.get(),
-                station_dbm=tx_power_var.get(),
-                allow_overlap=tx_allow_overlap_var.get(),
-                auth_token=client.auth_token,
-                cw_text=tx_cw_text_var.get(),
-                cw_wpm=tx_cw_wpm_var.get(),
-                cw_loop=tx_cw_loop_var.get(),
-                station_logo_url=tx_logo_url_var.get(),
-                station_details=tx_details_var.get(),
-                station_page_layout=tx_page_layout_var.get(),
-                fade_enabled=tx_fade_enabled_var.get(),
-                fade_seconds=tx_fade_seconds_var.get(),
-                fade_min_dbm=tx_fade_min_dbm_var.get(),
-                fade_shape=tx_fade_shape_var.get().split("-", 1)[0].strip(),
-                agc_enabled=tx_agc_enabled_var.get(),
-                agc_target=tx_agc_target_var.get(),
-                mic_gain_db=tx_mic_gain_var.get(),
-                bass_db=tx_bass_var.get(),
-                treble_db=tx_treble_var.get(),
-                presence_db=tx_presence_var.get(),
-                drive=tx_drive_var.get(),
-                nfm_transport_bandwidth_hz=tx_nfm_transport_bandwidth_var.get(),
-                nfm_profile=tx_nfm_profile_var.get(),
-                ssb_bandwidth_hz=tx_ssb_bandwidth_var.get(),
-                ssb_low_cut_hz=tx_ssb_low_cut_var.get(),
-                ssb_high_cut_hz=tx_ssb_high_cut_var.get(),
-                am_bandwidth_hz=tx_am_bandwidth_var.get(),
-                am_pre_emphasis=tx_am_pre_emphasis_var.get(),
-                drm_service_label=tx_drm_service_label_var.get(),
-                drm_service_id=tx_drm_service_id_var.get(),
-                drm_language=tx_drm_language_var.get(),
-                drm_programme_type=tx_drm_programme_type_var.get(),
-                drm_iso_language=tx_drm_iso_language_var.get(),
-                drm_iso_country=tx_drm_iso_country_var.get(),
-                drm_quality_profile=tx_drm_quality_profile_var.get(),
-                drm_audio_codec=tx_drm_audio_codec_var.get(),
-                drm_msc_mode=tx_drm_msc_mode_var.get(),
-                drm_stereo=tx_drm_stereo_var.get(),
-                drm_interleaving=tx_drm_interleaving_var.get().split(" ", 1)[0].casefold(),
-            )
-            if config["mode"] == "CW":
-                audio_source = "mic"
-            else:
-                audio_source = {
-                    "Desktop audio (output loopback)": "loopback",
-                    "Audio playlist": "playlist",
-                }.get(tx_audio_source_var.get(), "mic")
-            playlist_files = list(tx_playlist_files) if audio_source == "playlist" else []
-            selected_device = (
-                tx_audio_device_ids.get(tx_audio_device_var.get())
-                if audio_source in {"mic", "loopback"}
-                else None
-            )
-            if config["mode"] != "CW" and selected_device is None and audio_source == "loopback":
-                raise ValueError("Select a desktop output device for loopback capture.")
-            if audio_source == "playlist" and not playlist_files:
-                raise ValueError("Add at least one audio file or folder to the playlist.")
-
-            candidates = build_frequency_candidates(
-                tx_frequency_var.get(),
-                [variable.get() for variable in tx_frequency_fallback_vars],
-            )
-            apply_nfm_transport(config, candidates[0][1])
-            apply_rade_transport(config, candidates[0][1])
-
-            frequency_retry_context = {
-                "base_config": dict(config),
-                "candidates": candidates,
-                "next_index": 1,
-                "current_index": 0,
-                "pending": False,
-                "input_device": selected_device,
-                "audio_source": audio_source,
-                "playlist_files": list(playlist_files),
-                "playlist_shuffle": tx_playlist_shuffle_var.get(),
-                "playlist_loop": tx_playlist_loop_var.get(),
-            }
-
-            transmitter.start(
-                config,
-                input_device=selected_device,
-                audio_source=audio_source,
-                playlist_files=playlist_files,
-                playlist_shuffle=tx_playlist_shuffle_var.get(),
-                playlist_loop=tx_playlist_loop_var.get(),
-            )
-            tx_status_var.set("Preparing transmission...")
-            if audio_source == "playlist":
-                tx_playlist_status_var.set("Preparing playlist...")
-            update_transmit_button()
+            request = build_transmission_request()
+            start_transmission_request(request)
         except Exception as exc:
             frequency_retry_context = None
             details = safe_error_text(str(exc), 500)
             tx_status_var.set(details)
+            update_transmit_button()
 
     def get_web_gui_state() -> dict[str, Any]:
         with web_gui_state_lock:
