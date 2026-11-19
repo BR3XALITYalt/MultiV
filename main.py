@@ -13,6 +13,7 @@ import webbrowser
 from pathlib import Path
 from typing import Any
 
+from app_assets import asset_path
 from audio_playlist import (
     build_playlist_snapshot,
     normalize_audio_sources,
@@ -56,7 +57,7 @@ from station_directory import (
     format_frequency,
 )
 from txity_client import TxityClient
-from build_info import APP_BUILD_NUMBER, APP_COMMIT, APP_VERSION
+from build_info import APP_COMMIT, APP_VERSION
 from update_manager import check_for_update, install_update, is_packaged
 
 BASE_URL = "https://txity.radiodiscussion.org"
@@ -114,6 +115,11 @@ def build_app() -> None:
     theme_mode = _system_theme_mode()
 
     root = tk.Tk()
+    try:
+        root._multiv_icon = tk.PhotoImage(file=str(asset_path("logo.png")))
+        root.iconphoto(True, root._multiv_icon)
+    except (tk.TclError, OSError):
+        pass
     palette = apply_tk_theme(root, theme_mode)
     root.title("MultiV")
     root.geometry("1180x790")
@@ -123,7 +129,7 @@ def build_app() -> None:
     update_status_var = tk.StringVar(
         root,
         value=(
-            f"Version {APP_VERSION} (build {APP_BUILD_NUMBER})"
+            f"Version {APP_VERSION}"
             if is_packaged()
             else "Source checkout. Automatic updates are available in packaged builds."
         ),
@@ -3862,7 +3868,7 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(0, 6))
         make_label(
             update_card,
-            f"Version {APP_VERSION}  ·  Build {APP_BUILD_NUMBER}",
+            f"Version {APP_VERSION}",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
