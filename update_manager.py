@@ -218,18 +218,29 @@ $ParentProcessId = {os.getpid()}
 $Archive = {_windows_quote(str(archive))}
 $InstallDir = {_windows_quote(str(install_dir))}
 $Executable = {_windows_quote(str(executable))}
-$Stage = Join-Path $env:TEMP ('MultiV-update-' + [guid]::NewGuid().ToString('N'))
+$ParentDirectory = Split-Path -Parent $InstallDir
+$Stage = Join-Path $ParentDirectory ('.MultiV-update-' + [guid]::NewGuid().ToString('N'))
+$Backup = Join-Path $ParentDirectory ('.MultiV-previous-' + [guid]::NewGuid().ToString('N'))
 while (Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue) {{
     Start-Sleep -Milliseconds 300
 }}
 try {{
     New-Item -ItemType Directory -Path $Stage -Force | Out-Null
     Expand-Archive -LiteralPath $Archive -DestinationPath $Stage -Force
-    & robocopy.exe $Stage $InstallDir '/MIR' '/R:2' '/W:1' | Out-Null
-    if ($LASTEXITCODE -ge 8) {{
-        throw "File replacement failed with robocopy exit code $LASTEXITCODE."
+    Move-Item -LiteralPath $InstallDir -Destination $Backup
+    try {{
+        Move-Item -LiteralPath $Stage -Destination $InstallDir
+        Start-Process -FilePath $Executable
+        Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
+    }} catch {{
+        if (Test-Path -LiteralPath $InstallDir) {{
+            Remove-Item -LiteralPath $InstallDir -Recurse -Force
+        }}
+        if (Test-Path -LiteralPath $Backup) {{
+            Move-Item -LiteralPath $Backup -Destination $InstallDir
+        }}
+        throw
     }}
-    Start-Process -FilePath $Executable
 }} finally {{
     Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $Archive -Force -ErrorAction SilentlyContinue
