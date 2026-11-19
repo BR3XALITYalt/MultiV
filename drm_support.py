@@ -33,6 +33,8 @@ DRM_QUALITY_PROFILES = (
     "Maximum quality (9 kHz, 64-QAM stereo)",
 )
 DRM_DEFAULT_QUALITY_PROFILE = DRM_QUALITY_PROFILES[0]
+# Real-IF placements keep each supported profile inside TXITY's 10 kHz transport band.
+DRM_OUTPUT_IF_HZ = {0: 1_500.0, 2: 5_000.0}
 _DRM_QUALITY_PROFILE_SETTINGS = {
     DRM_QUALITY_PROFILES[0]: {"occupancy": 0, "msc_mode": "16-QAM", "stereo": False},
     DRM_QUALITY_PROFILES[1]: {"occupancy": 2, "msc_mode": "16-QAM", "stereo": False},
@@ -894,8 +896,9 @@ def write_drm_station_config(
     selected_msc_mode = str(msc_mode or "").strip().upper()
     if selected_msc_mode not in DRM_MSC_MODES:
         raise ValueError("DRM MSC modulation must be 16-QAM or 64-QAM.")
-    if isinstance(occupancy, bool) or not isinstance(occupancy, int) or not 0 <= occupancy <= 5:
-        raise ValueError("DRM spectrum occupancy must be an integer from 0 to 5.")
+    if isinstance(occupancy, bool) or not isinstance(occupancy, int) or occupancy not in DRM_OUTPUT_IF_HZ:
+        raise ValueError("TXITY DRM supports the 4.5 kHz and 9 kHz channel profiles.")
+    output_if_hz = DRM_OUTPUT_IF_HZ[occupancy]
     if not isinstance(stereo, bool):
         raise ValueError("DRM stereo must be a boolean value.")
 
@@ -912,6 +915,7 @@ def write_drm_station_config(
         "[output]",
         'sample_format = "float32"',
         'format = "real"',
+        f"if_hz = {output_if_hz:.1f}",
         "level_dbfs = -15.0",
         "band_limit = true",
         "",
