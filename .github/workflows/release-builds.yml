@@ -166,7 +166,7 @@ jobs:
           Type=Application
           Name=MultiV
           Comment=Desktop client for virtual radio simulators
-          Exec=MultiV
+          Exec=AppRun
           Icon=multiv
           Terminal=false
           Categories=AudioVideo;Audio;
