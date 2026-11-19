@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from discord_auth import (
     AUTH_START_URL,
+    _browser_helper_command,
     auth_token_path,
     DiscordAuthManager,
     clean_discord_user,
@@ -32,6 +33,73 @@ def fake_txity_token(payload):
 
 
 class DiscordAuthValidationTests(unittest.TestCase):
+    def test_browser_helper_uses_python_script_in_source_runs(self):
+        command = _browser_helper_command(
+            Path("discord_auth_browser.py"),
+            "https://txity.example/login",
+            "http://127.0.0.1:1234/complete",
+            "test-state",
+            False,
+        )
+        self.assertEqual(
+            command,
+            [
+                __import__("sys").executable,
+                "-u",
+                "discord_auth_browser.py",
+                "https://txity.example/login",
+                "http://127.0.0.1:1234/complete",
+                "test-state",
+                "login",
+            ],
+        )
+
+    def test_browser_helper_uses_dedicated_executable_when_frozen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app_executable = Path(directory) / "MultiV.exe"
+            helper_executable = Path(directory) / "MultiVBrowserHelper.exe"
+            app_executable.touch()
+            helper_executable.touch()
+            with (
+                patch("discord_auth.sys.frozen", True, create=True),
+                patch("discord_auth.sys.executable", str(app_executable)),
+            ):
+                command = _browser_helper_command(
+                    Path(directory) / "discord_auth_browser.py",
+                    "https://txity.example/login",
+                    "http://127.0.0.1:1234/complete",
+                    "test-state",
+                    True,
+                )
+
+        self.assertEqual(
+            command,
+            [
+                str(helper_executable.resolve()),
+                "https://txity.example/login",
+                "http://127.0.0.1:1234/complete",
+                "test-state",
+                "restore",
+            ],
+        )
+
+    def test_browser_helper_fails_clearly_when_packaged_helper_is_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app_executable = Path(directory) / "MultiV.exe"
+            app_executable.touch()
+            with (
+                patch("discord_auth.sys.frozen", True, create=True),
+                patch("discord_auth.sys.executable", str(app_executable)),
+                self.assertRaisesRegex(FileNotFoundError, "MultiVBrowserHelper.exe"),
+            ):
+                _browser_helper_command(
+                    Path(directory) / "discord_auth_browser.py",
+                    "https://txity.example/login",
+                    "http://127.0.0.1:1234/complete",
+                    "test-state",
+                    False,
+                )
+
     def test_accepts_opaque_token(self):
         self.assertTrue(is_auth_token("signed.txity.token-value"))
 

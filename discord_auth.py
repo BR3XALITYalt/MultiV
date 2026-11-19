@@ -261,6 +261,33 @@ p{{line-height:1.5;color:#444}}
     return html.encode("utf-8"), headers
 
 
+def _browser_helper_command(
+    helper_script: Path,
+    login_url: str,
+    callback_url: str,
+    state: str,
+    restore_only: bool,
+) -> list[str]:
+    """Build a command for the browser helper in source and frozen builds."""
+    helper_args = [
+        login_url,
+        callback_url,
+        state,
+        "restore" if restore_only else "login",
+    ]
+    if getattr(sys, "frozen", False):
+        helper_executable = (
+            Path(sys.executable).resolve().with_name("MultiVBrowserHelper.exe")
+        )
+        if not helper_executable.is_file():
+            raise FileNotFoundError(
+                f"The packaged browser helper was not found: {helper_executable}"
+            )
+        return [str(helper_executable), *helper_args]
+
+    return [sys.executable, "-u", str(helper_script), *helper_args]
+
+
 class DiscordAuthManager:
     """Open TXITY in an embedded browser and receive its signed token locally."""
 
@@ -483,15 +510,13 @@ class DiscordAuthManager:
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
         try:
             process = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-u",
-                    str(helper_path),
+                _browser_helper_command(
+                    helper_path,
                     login_url,
                     complete_url,
                     state,
-                    "restore" if restore_only else "login",
-                ],
+                    restore_only,
+                ),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,

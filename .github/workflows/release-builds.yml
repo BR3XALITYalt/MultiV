@@ -135,6 +135,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --add-data "assets;assets" --collect-all webview --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL --collect-all pyaudiowpatch --collect-all pystray --collect-all clr_loader --collect-all pythonnet --hidden-import clr main.py
+          pyinstaller --noconfirm --clean --console --onefile --name MultiVBrowserHelper --distpath "dist/MultiV" --workpath "build/MultiVBrowserHelper" --collect-all webview --collect-all clr_loader --collect-all pythonnet --hidden-import clr discord_auth_browser.py
 
           $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
           $compilerPath = Join-Path $programFilesX86 "Inno Setup 6\ISCC.exe"
@@ -161,6 +162,15 @@ jobs:
           $hash = (Get-FileHash $installerPath -Algorithm SHA256).Hash.ToLower()
           "$hash  $filename" | Set-Content -NoNewline -Encoding ascii (Join-Path $output "$filename.sha256")
 
+          $helperExecutable = Join-Path $PWD "dist/MultiV/MultiVBrowserHelper.exe"
+          if (-not (Test-Path $helperExecutable)) {
+              throw "The packaged Discord browser helper executable is missing."
+          }
+          & $helperExecutable
+          if ($LASTEXITCODE -ne 2) {
+              throw "The packaged Discord browser helper failed its argument-dispatch smoke test (exit code $LASTEXITCODE)."
+          }
+
           # Install into a temporary folder and verify the optional desktop shortcut task.
           $installTest = Join-Path $env:RUNNER_TEMP "MultiV-Inno-Test"
           if (Test-Path $installTest) {
@@ -186,6 +196,10 @@ jobs:
                   Get-ChildItem $installTest -Force -Recurse | Select-Object -First 40 FullName
               }
               throw "The Inno Setup installer did not install MultiV correctly."
+          }
+
+          if (-not (Test-Path (Join-Path $installTest "MultiVBrowserHelper.exe"))) {
+              throw "The installed Discord browser helper executable is missing."
           }
 
           $desktopPaths = @(
