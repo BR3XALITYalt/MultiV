@@ -114,8 +114,14 @@ class UpdateManagerTests(unittest.TestCase):
             )
 
     def test_expected_filenames_are_fixed_per_platform(self):
-        self.assertEqual(_expected_filename("windows-x86_64"), "MultiV-windows-x86_64.zip")
-        self.assertEqual(_expected_filename("linux-x86_64"), "MultiV-linux-x86_64.AppImage")
+        self.assertEqual(
+            _expected_filename("windows-x86_64", 42),
+            "MultiV-windows-x86_64-42.zip",
+        )
+        self.assertEqual(
+            _expected_filename("linux-x86_64", 42),
+            "MultiV-linux-x86_64-42.AppImage",
+        )
 
 
 if __name__ == "__main__":
