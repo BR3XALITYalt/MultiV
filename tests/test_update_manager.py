@@ -10,7 +10,7 @@ from update_manager import (
 
 
 class UpdateManagerTests(unittest.TestCase):
-    def manifest(self, *, filename="MultiV-linux-x86_64-42.AppImage", url=None):
+    def manifest(self, *, filename="MultiV-linux-x86_64.AppImage", url=None):
         if url is None:
             url = (
                 "https://github.com/BR3XALITYalt/MultiV/releases/download/"
@@ -18,7 +18,7 @@ class UpdateManagerTests(unittest.TestCase):
             )
         return {
             "channel": "rolling",
-            "version": "0.1.0-dev.42",
+            "version": "0.1.0-dev",
             "build_number": 42,
             "commit": "a" * 40,
             "assets": {
@@ -63,9 +63,9 @@ class UpdateManagerTests(unittest.TestCase):
             release_url="https://github.com/BR3XALITYalt/MultiV/releases/tag/rolling",
         )
         self.assertIsNotNone(update)
-        self.assertEqual(update.version, "0.1.0-dev.42")
+        self.assertEqual(update.version, "0.1.0-dev")
         self.assertEqual(update.build_number, 42)
-        self.assertEqual(update.filename, "MultiV-linux-x86_64-42.AppImage")
+        self.assertEqual(update.filename, "MultiV-linux-x86_64.AppImage")
         self.assertEqual(update.sha256, "b" * 64)
 
     def test_same_or_older_build_is_not_an_update(self):
@@ -114,10 +114,10 @@ class UpdateManagerTests(unittest.TestCase):
             )
 
     def test_windows_manifest_accepts_inno_setup_installer(self):
-        filename = "MultiV-windows-x86_64-42.exe"
+        filename = "MultiV-windows-x86_64.exe"
         manifest = {
             "channel": "rolling",
-            "version": "0.1.0-dev.42",
+            "version": "0.1.0-dev",
             "build_number": 42,
             "commit": "a" * 40,
             "assets": {
@@ -137,14 +137,14 @@ class UpdateManagerTests(unittest.TestCase):
         self.assertIsNotNone(update)
         self.assertEqual(update.filename, filename)
 
-    def test_expected_filenames_are_fixed_per_platform(self):
+    def test_expected_filenames_are_stable_per_platform(self):
         self.assertEqual(
-            _expected_filename("windows-x86_64", 42),
-            "MultiV-windows-x86_64-42.exe",
+            _expected_filename("windows-x86_64"),
+            "MultiV-windows-x86_64.exe",
         )
         self.assertEqual(
-            _expected_filename("linux-x86_64", 42),
-            "MultiV-linux-x86_64-42.AppImage",
+            _expected_filename("linux-x86_64"),
+            "MultiV-linux-x86_64.AppImage",
         )
 
 
