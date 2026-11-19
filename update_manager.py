@@ -82,10 +82,10 @@ def _request_json(url: str) -> dict[str, Any]:
     return result
 
 
-def _expected_filename(key: str, build_number: int) -> str:
+def _expected_filename(key: str) -> str:
     return {
-        "windows-x86_64": f"MultiV-windows-x86_64-{build_number}.exe",
-        "linux-x86_64": f"MultiV-linux-x86_64-{build_number}.AppImage",
+        "windows-x86_64": "MultiV-windows-x86_64.exe",
+        "linux-x86_64": "MultiV-linux-x86_64.AppImage",
     }[key]
 
 
@@ -114,7 +114,7 @@ def parse_update_manifest(
         raise RuntimeError("The update manifest contains invalid build metadata.")
     if build_number <= int(current_build):
         return None
-    if filename != _expected_filename(key, build_number):
+    if filename != _expected_filename(key):
         raise RuntimeError("The update manifest names an unexpected application package.")
     expected_url = (
         f"https://github.com/{GITHUB_REPOSITORY}/releases/download/"
