@@ -129,26 +129,74 @@ jobs:
           )
           PY
 
-      - name: Build Windows application
+      - name: Build Windows installer
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --add-data "assets;assets" --collect-all webview --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL --collect-all pyaudiowpatch --collect-all pystray --collect-all clr_loader --collect-all pythonnet --hidden-import clr main.py
+
+          $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+          $compilerPath = Join-Path $programFilesX86 "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $compilerPath)) {
+              choco install innosetup --no-progress -y
+          }
+          if (-not (Test-Path $compilerPath)) {
+              throw "Inno Setup 6 compiler was not found."
+          }
+
+          $version = "${{ needs.prepare.outputs.app_version }}"
           $build = "${{ github.run_number }}"
-          $filename = "MultiV-windows-x86_64-$build.zip"
+          & $compilerPath "/DAppVersion=$version" "/DBuildNumber=$build" "MultiV.iss"
+          if ($LASTEXITCODE -ne 0) {
+              throw "Inno Setup failed with exit code $LASTEXITCODE."
+          }
+
+          $filename = "MultiV-windows-x86_64-$build.exe"
           $output = Join-Path $PWD "release-out"
-          New-Item -ItemType Directory -Force -Path $output | Out-Null
-          Compress-Archive -Path "dist/MultiV/*" -DestinationPath (Join-Path $output $filename) -CompressionLevel Optimal
-          $hash = (Get-FileHash (Join-Path $output $filename) -Algorithm SHA256).Hash.ToLower()
+          $installerPath = Join-Path $output $filename
+          if (-not (Test-Path $installerPath)) {
+              throw "Inno Setup did not produce $filename."
+          }
+          $hash = (Get-FileHash $installerPath -Algorithm SHA256).Hash.ToLower()
           "$hash  $filename" | Set-Content -NoNewline -Encoding ascii (Join-Path $output "$filename.sha256")
-          $app = Start-Process -FilePath "dist/MultiV/MultiV.exe" -PassThru
+
+          # Install into a temporary folder and verify the optional desktop shortcut task.
+          $installTest = Join-Path $env:RUNNER_TEMP "MultiV-Inno-Test"
+          if (Test-Path $installTest) {
+              Remove-Item $installTest -Recurse -Force
+          }
+          & $installerPath "/VERYSILENT" "/SUPPRESSMSGBOXES" "/NORESTART" "/SP-" "/DIR=$installTest" "/TASKS=desktopicon"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $installTest "MultiV.exe"))) {
+              throw "The Inno Setup installer did not install MultiV correctly."
+          }
+
+          $desktopPaths = @(
+              [Environment]::GetFolderPath("Desktop"),
+              [Environment]::GetFolderPath("CommonDesktopDirectory")
+          ) | Where-Object { $_ }
+          $shortcut = $desktopPaths | ForEach-Object { Join-Path $_ "MultiV.lnk" } | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $shortcut) {
+              throw "The desktop shortcut task did not create MultiV.lnk."
+          }
+
+          $appPath = Join-Path $installTest "MultiV.exe"
+          $app = Start-Process -FilePath $appPath -WorkingDirectory $installTest -PassThru
           Start-Sleep -Seconds 8
           $app.Refresh()
           if ($app.HasExited -and $app.ExitCode -ne 0) {
-              throw "The packaged Windows application exited with code $($app.ExitCode)."
+              throw "The installed Windows application exited with code $($app.ExitCode)."
           }
           if (-not $app.HasExited) {
               Stop-Process -Id $app.Id -Force
+          }
+
+          $uninstaller = Join-Path $installTest "unins000.exe"
+          if (Test-Path $uninstaller) {
+              Start-Process -FilePath $uninstaller -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          }
+          foreach ($desktopPath in $desktopPaths) {
+              Remove-Item (Join-Path $desktopPath "MultiV.lnk") -Force -ErrorAction SilentlyContinue
           }
 
       - name: Build Linux AppImage
@@ -249,7 +297,7 @@ jobs:
           build = int(os.environ["APP_BUILD_NUMBER"])
           repository = os.environ["REPOSITORY"]
           files = {
-              "windows-x86_64": f"MultiV-windows-x86_64-{build}.zip",
+              "windows-x86_64": f"MultiV-windows-x86_64-{build}.exe",
               "linux-x86_64": f"MultiV-linux-x86_64-{build}.AppImage",
           }
           assets = {}
@@ -303,8 +351,8 @@ jobs:
             gh release create rolling --repo "$REPOSITORY" --title "$title" --notes "$notes" --prerelease --target "$COMMIT"
           fi
           gh release upload rolling --repo "$REPOSITORY" \
-            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".zip \
-            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".zip.sha256 \
+            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".exe \
+            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".exe.sha256 \
             release-out/MultiV-linux-x86_64-"$BUILD_NUMBER".AppImage \
             release-out/MultiV-linux-x86_64-"$BUILD_NUMBER".AppImage.sha256 --clobber
           gh release upload rolling --repo "$REPOSITORY" release-out/multiv-update.json --clobber
@@ -315,7 +363,7 @@ jobs:
             if [[ "$asset" == "multiv-update.json" ]]; then
               continue
             fi
-            if [[ "$asset" =~ ^MultiV-(windows-x86_64|linux-x86_64)-([0-9]+)\.(zip|AppImage)(\.sha256)?$ ]]; then
+            if [[ "$asset" =~ ^MultiV-(windows-x86_64|linux-x86_64)-([0-9]+)\.(exe|AppImage)(\.sha256)?$ ]]; then
               asset_build="${BASH_REMATCH[2]}"
               if (( asset_build >= BUILD_NUMBER - 5 )); then
                 continue
@@ -339,8 +387,8 @@ jobs:
             --title "MultiV $APP_VERSION" \
             --notes "MultiV $APP_VERSION. Build $BUILD_NUMBER from commit $COMMIT." \
             --target "$COMMIT" \
-            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".zip \
-            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".zip.sha256 \
+            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".exe \
+            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".exe.sha256 \
             release-out/MultiV-linux-x86_64-"$BUILD_NUMBER".AppImage \
             release-out/MultiV-linux-x86_64-"$BUILD_NUMBER".AppImage.sha256 \
             release-out/multiv-update.json
