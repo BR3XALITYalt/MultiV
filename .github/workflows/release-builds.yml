@@ -168,6 +168,7 @@ jobs:
           }
           $installLog = Join-Path $env:RUNNER_TEMP "MultiV-Inno-Test.log"
           $setup = Start-Process -FilePath $installerPath -ArgumentList @(
+              "/CURRENTUSER",
               "/VERYSILENT",
               "/SUPPRESSMSGBOXES",
               "/NORESTART",
