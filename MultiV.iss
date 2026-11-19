@@ -4,10 +4,6 @@
 #ifndef AppVersion
   #error AppVersion must be supplied by the build workflow.
 #endif
-#ifndef BuildNumber
-  #error BuildNumber must be supplied by the build workflow.
-#endif
-
 [Setup]
 AppId={{7C8D40C3-9EAA-49E0-8CB1-7819402B4761}}
 AppName={#AppName}
@@ -23,10 +19,11 @@ ArchitecturesInstallIn64BitMode=x64compatible
 UsePreviousAppDir=yes
 UsePreviousTasks=yes
 OutputDir=release-out
-OutputBaseFilename=MultiV-windows-x86_64-{#BuildNumber}
+OutputBaseFilename=MultiV-windows-x86_64
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=assets\logo.ico
 UninstallDisplayIcon={app}\MultiV.exe
 UninstallDisplayName=MultiV
 
