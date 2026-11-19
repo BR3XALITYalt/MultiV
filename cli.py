@@ -144,7 +144,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--list-loopback-devices",
         action="store_true",
-        help="List Windows desktop-audio loopback devices, then exit.",
+        help="List desktop-audio loopback or monitor devices, then exit.",
     )
     return parser
 
