@@ -3532,7 +3532,7 @@ def build_app() -> None:
 
         update_state["info"] = info
         update_status_var.set(
-            f"Update available: {info.version} (build {info.build_number})."
+            f"Update available: {info.version}."
         )
         if update_install_button is not None:
             update_install_button.configure(state="normal")
