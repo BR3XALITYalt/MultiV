@@ -801,6 +801,17 @@ def build_app() -> None:
 
     def disconnect_discord() -> None:
         nonlocal discord_authenticated, current_page
+        pending_live_apply = live_reconfigure_state.get("after_id")
+        if pending_live_apply is not None:
+            try:
+                root.after_cancel(pending_live_apply)
+            except tk.TclError:
+                pass
+        live_reconfigure_state["after_id"] = None
+        live_reconfigure_state["request"] = None
+        live_reconfigure_state["active_request"] = None
+        live_reconfigure_state["stopping"] = False
+        live_reconfigure_state["cancelled"] = False
         transmitter.stop(wait=0.5)
         client.set_discord_auth(None, None)
         client.disconnect()
@@ -4496,8 +4507,10 @@ def build_app() -> None:
                     file=sys.stderr,
                     flush=True,
                 )
+                live_restart = state == "stopped" and live_reconfigure_state["stopping"]
                 retry_after_stop = (
                     state == "stopped"
+                    and not live_restart
                     and isinstance(frequency_retry_context, dict)
                     and bool(frequency_retry_context.get("pending"))
                 )
@@ -4511,14 +4524,24 @@ def build_app() -> None:
                     tx_negative_status_reason = None
                     tx_negative_status_count = 0
                     tx_ptt_confirmed = False
-                if state == "stopped" and tx_terminal_server_message:
-                    tx_status_var.set(tx_terminal_server_message)
+
+                if live_restart:
+                    start_pending_live_reconfigure()
+                    if not transmitter.is_busy:
+                        tx_status_var.set("Transmission stopped.")
+                elif state == "stopped":
+                    live_reconfigure_state["active_request"] = None
+                    if tx_terminal_server_message:
+                        tx_status_var.set(tx_terminal_server_message)
+                    else:
+                        tx_status_var.set(state_text)
                 else:
                     tx_status_var.set(state_text)
+
                 if tx_audio_source_var.get() == "Audio playlist":
                     if state == "transmitting":
                         tx_playlist_status_var.set("Connected. Loading the first track...")
-                    elif state == "stopped" and (
+                    elif state == "stopped" and not transmitter.is_busy and (
                         tx_playlist_status_var.get().startswith("Preparing")
                         or tx_playlist_status_var.get().startswith("Playing")
                         or tx_playlist_status_var.get().startswith("Connected")
@@ -4590,10 +4613,15 @@ def build_app() -> None:
                         pass
                 schedule_tx_settings_save()
 
-                if transmitter.is_busy:
+                if transmitter.is_busy and tx_audio_source_var.get() == "Audio playlist":
                     tx_playlist_status_var.set(
                         f"Playlist changed on disk ({added} added, {removed} removed). "
-                        "Changes apply the next time you start playback."
+                        "Applying the updated playlist..."
+                    )
+                    schedule_live_reconfigure()
+                elif transmitter.is_busy:
+                    tx_playlist_status_var.set(
+                        f"Playlist changed on disk ({added} added, {removed} removed)."
                     )
                 elif added or removed:
                     tx_playlist_status_var.set(
