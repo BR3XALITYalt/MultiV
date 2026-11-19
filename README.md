@@ -42,6 +42,15 @@ MultiV uses PortAudio for microphone input. Desktop-audio capture uses a PulseAu
 
 The prebuilt RADE encoder is available for Windows x64 and Linux x86_64. DRM builds its encoder locally on Linux and can install the Rust toolchain automatically. DRM also needs Git, CMake, and a C/C++ compiler. Headless operation can run under a Linux systemd user service; see the [command-line guide](wiki/Configuration-and-CLI.md).
 
+## Packaged builds
+
+Download the [latest rolling build](https://github.com/BR3XALITYalt/MultiV/releases/tag/rolling) or choose a numbered release from the [releases page](https://github.com/BR3XALITYalt/MultiV/releases).
+
+- **Windows:** Extract the ZIP file and run `MultiV.exe`.
+- **Linux:** Make the AppImage executable, then open it.
+
+Packaged builds check for updates when they start. MultiV asks before installing an update and restarting. Keep the application in a folder your account can modify so it can replace its own files.
+
 ## Start a transmission
 
 1. Sign in with Discord.
