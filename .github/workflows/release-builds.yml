@@ -224,7 +224,10 @@ jobs:
           if (-not (Test-Path $expectedIcon)) {
               throw "The installer did not install the shared logo.ico."
           }
-          $actualIcon = [IO.Path]::GetFullPath(($shortcutInfo.IconLocation -replace ',\s*\d+\s*
+          $actualIcon = ($shortcutInfo.IconLocation -split ',')[0].Trim().Trim('"')
+          if ([IO.Path]::GetFullPath($actualIcon) -ne $expectedIcon) {
+              throw "The desktop shortcut icon is incorrect: $($shortcutInfo.IconLocation)"
+          }
 
           $appPath = Join-Path $installTest "MultiV.exe"
           $previousBrowserRestore = $env:MULTIV_DISABLE_BROWSER_RESTORE
