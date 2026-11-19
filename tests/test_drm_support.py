@@ -25,6 +25,7 @@ from drm_support import (
     _visual_studio_build_tools_command,
     _visual_studio_cmake_generator_for_version,
     _clear_stale_opus_cmake_builds,
+    _rustup_linux_target,
     LocalDRMPlaylistServer,
     _patch_decdrm_output_validation,
     _run_command,
@@ -33,6 +34,19 @@ from drm_support import (
 
 
 class DRMConfigurationTests(unittest.TestCase):
+    def test_rustup_linux_target_supports_common_desktop_architectures(self):
+        with mock.patch("drm_support.platform.machine", return_value="x86_64"):
+            self.assertEqual(_rustup_linux_target(), "x86_64-unknown-linux-gnu")
+        with mock.patch("drm_support.platform.machine", return_value="aarch64"):
+            self.assertEqual(_rustup_linux_target(), "aarch64-unknown-linux-gnu")
+        with mock.patch("drm_support.platform.machine", return_value="i686"):
+            self.assertEqual(_rustup_linux_target(), "i686-unknown-linux-gnu")
+
+    def test_rustup_linux_target_rejects_unknown_architecture(self):
+        with mock.patch("drm_support.platform.machine", return_value="mips64"):
+            with self.assertRaisesRegex(RuntimeError, "not configured"):
+                _rustup_linux_target()
+
     def test_build_command_streams_output_to_progress_callback(self):
         updates = []
         output = _run_command(
