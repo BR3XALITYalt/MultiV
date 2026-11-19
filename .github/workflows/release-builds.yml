@@ -16,17 +16,17 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      app_version: \${{ steps.version.outputs.app_version }}
-      release_version: \${{ steps.version.outputs.release_version }}
+      app_version: ${{ steps.version.outputs.app_version }}
+      release_version: ${{ steps.version.outputs.release_version }}
     steps:
       - uses: actions/checkout@v7
       - name: Resolve version
         id: version
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-          EVENT_NAME: \${{ github.event_name }}
-          RUN_NUMBER: \${{ github.run_number }}
-          REPOSITORY: \${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           export RELEASE_TAGS="$(gh release list --repo "$REPOSITORY" --limit 100 --json tagName --jq '.[].tagName' || true)"
@@ -39,8 +39,11 @@ jobs:
               match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", tag.strip())
               if match:
                   versions.append(tuple(map(int, match.groups())))
-          latest = max(versions, default=(0, 1, 0))
           manual = os.environ["EVENT_NAME"] == "workflow_dispatch"
+          latest = max(
+              versions,
+              default=(0, 1, -1) if manual else (0, 1, 0),
+          )
           if manual:
               version = f"{latest[0]}.{latest[1]}.{latest[2] + 1}"
               release_version = f"v{version}"
@@ -63,7 +66,7 @@ jobs:
             platform: windows-x86_64
           - os: ubuntu-22.04
             platform: linux-x86_64
-    runs-on: \${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -88,9 +91,9 @@ jobs:
       - name: Write packaged build metadata
         shell: bash
         env:
-          APP_VERSION: \${{ needs.prepare.outputs.app_version }}
-          APP_BUILD_NUMBER: \${{ github.run_number }}
-          APP_COMMIT: \${{ github.sha }}
+          APP_VERSION: ${{ needs.prepare.outputs.app_version }}
+          APP_BUILD_NUMBER: ${{ github.run_number }}
+          APP_COMMIT: ${{ github.sha }}
         run: |
           python - <<'PY'
           import os
@@ -109,7 +112,7 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --add-data "assets;assets" --collect-all webview --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL --collect-all pyaudiowpatch --collect-all pystray main.py
-          $build = "\${{ github.run_number }}"
+          $build = "${{ github.run_number }}"
           $filename = "MultiV-windows-x86_64-$build.zip"
           $output = Join-Path $PWD "release-out"
           New-Item -ItemType Directory -Force -Path $output | Out-Null
@@ -148,20 +151,21 @@ jobs:
           Categories=AudioVideo;Audio;
           EOF
 
-          curl -fL --retry 3 https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -o linuxdeploy-x86_64.AppImage
-          chmod +x linuxdeploy-x86_64.AppImage
-          APPIMAGE_EXTRACT_AND_RUN=1 ./linuxdeploy-x86_64.AppImage --appdir "$APPDIR" --executable "$APPDIR/usr/bin/MultiV" --desktop-file "$APPDIR/usr/share/applications/multiv.desktop" --icon-file "$APPDIR/usr/share/icons/hicolor/256x256/apps/multiv.png"
-
           cat > "$APPDIR/AppRun" <<'EOF'
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "$0")")"
+          export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/usr/bin/MultiV/_internal:${LD_LIBRARY_PATH:-}"
           exec "$HERE/usr/bin/MultiV" "$@"
           EOF
           chmod +x "$APPDIR/AppRun"
 
+          curl -fL --retry 3 https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -o linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+          APPIMAGE_EXTRACT_AND_RUN=1 ./linuxdeploy-x86_64.AppImage --appdir "$APPDIR" --executable "$APPDIR/usr/bin/MultiV" --desktop-file "$APPDIR/usr/share/applications/multiv.desktop" --icon-file "$APPDIR/usr/share/icons/hicolor/256x256/apps/multiv.png"
+
           curl -fL --retry 3 https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
-          build="\${{ github.run_number }}"
+          build="${{ github.run_number }}"
           filename="MultiV-linux-x86_64-$build.AppImage"
           mkdir -p release-out
           APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 ./appimagetool-x86_64.AppImage "$APPDIR" "release-out/$filename"
@@ -171,7 +175,7 @@ jobs:
       - name: Upload platform artifact
         uses: actions/upload-artifact@v4
         with:
-          name: multiv-\${{ matrix.platform }}
+          name: multiv-${{ matrix.platform }}
           path: release-out/*
           if-no-files-found: error
           retention-days: 3
@@ -191,10 +195,10 @@ jobs:
 
       - name: Create update manifest
         env:
-          APP_VERSION: \${{ needs.prepare.outputs.app_version }}
-          APP_BUILD_NUMBER: \${{ github.run_number }}
-          APP_COMMIT: \${{ github.sha }}
-          REPOSITORY: \${{ github.repository }}
+          APP_VERSION: ${{ needs.prepare.outputs.app_version }}
+          APP_BUILD_NUMBER: ${{ github.run_number }}
+          APP_COMMIT: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -234,8 +238,8 @@ jobs:
 
       - name: Move rolling tag to this commit
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: \${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           if gh api "repos/$REPOSITORY/git/ref/tags/rolling" >/dev/null 2>&1; then
@@ -246,10 +250,10 @@ jobs:
 
       - name: Publish rolling prerelease
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: \${{ github.repository }}
-          BUILD_NUMBER: \${{ github.run_number }}
-          COMMIT: \${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
           title="MultiV rolling build $BUILD_NUMBER"
@@ -277,12 +281,12 @@ jobs:
       - name: Publish numbered release for manual runs
         if: github.event_name == 'workflow_dispatch'
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: \${{ github.repository }}
-          RELEASE_VERSION: \${{ needs.prepare.outputs.release_version }}
-          APP_VERSION: \${{ needs.prepare.outputs.app_version }}
-          BUILD_NUMBER: \${{ github.run_number }}
-          COMMIT: \${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+          APP_VERSION: ${{ needs.prepare.outputs.app_version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
           gh release create "$RELEASE_VERSION" --repo "$REPOSITORY" \
