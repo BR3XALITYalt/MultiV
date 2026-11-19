@@ -1467,6 +1467,7 @@ def build_app() -> None:
         return all(left.get(key) == right.get(key) for key in keys)
 
     def apply_live_reconfigure() -> None:
+        nonlocal frequency_retry_context
         live_reconfigure_state["after_id"] = None
         if not transmitter.is_busy and not live_reconfigure_state["stopping"]:
             return
@@ -1497,6 +1498,7 @@ def build_app() -> None:
 
         live_reconfigure_state["stopping"] = True
         live_reconfigure_state["cancelled"] = False
+        frequency_retry_context = None
         tx_status_var.set("Applying changes. Transmission will briefly pause.")
         if request["audio_source"] == "playlist":
             tx_playlist_status_var.set("Restarting playlist with updated settings...")
@@ -1521,6 +1523,11 @@ def build_app() -> None:
             )
         except tk.TclError:
             live_reconfigure_state["after_id"] = None
+
+    def cancel_pending_live_reconfigure() -> None:
+        if live_reconfigure_state["stopping"]:
+            live_reconfigure_state["request"] = None
+            live_reconfigure_state["cancelled"] = True
 
     def start_pending_live_reconfigure() -> None:
         nonlocal frequency_retry_context
@@ -4434,6 +4441,7 @@ def build_app() -> None:
                                 )
                             tx_terminal_server_message = message
                             frequency_retry_context = None
+                            cancel_pending_live_reconfigure()
                             tx_status_var.set(message)
                             transmitter.stop()
             else:
@@ -4554,6 +4562,7 @@ def build_app() -> None:
                 update_transmit_button()
 
             elif kind == "tx_error":
+                cancel_pending_live_reconfigure()
                 details = safe_error_text(str(event.get("text") or "Transmission failed."), 800)
                 traceback_text = str(event.get("traceback") or "").strip()
                 tx_status_var.set(f"Transmission error: {details}")
@@ -4588,6 +4597,7 @@ def build_app() -> None:
                     tx_status_var.set(f"TXITY: {server_text}")
                     if message_type in {"kicked", "banned"}:
                         frequency_retry_context = None
+                        cancel_pending_live_reconfigure()
                         transmitter.stop()
 
             elif kind == "playlist_refresh":
