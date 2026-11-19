@@ -19,9 +19,9 @@ On Windows, the Discord session token is stored at `%PROGRAMDATA%\TXITPY\token.t
 
 ## Packaged application updates
 
-Windows ZIP and Linux AppImage builds check the `rolling` prerelease when the desktop application starts. MultiV compares the embedded build number with the latest published manifest. It downloads only the package for the current operating system and verifies its SHA-256 checksum before scheduling an update.
+The Windows Inno Setup installer and Linux AppImage builds check the `rolling` prerelease when the desktop application starts. MultiV compares the embedded build number with the latest published manifest. It downloads only the installer or AppImage for the current operating system and verifies its SHA-256 checksum before scheduling an update.
 
-The application asks before updating. Accepting stops the current application, replaces the packaged files, and restarts MultiV. The application directory must be writable by the current user. On Linux, MultiV must be launched from the AppImage file itself; extracted AppImage contents cannot update the original file.
+The application asks before updating. Accepting stops the current application. Windows launches the installer with a UAC elevation prompt and installs to the registered location; a first update from an older portable ZIP build moves the installation to the default Program Files location. Linux replaces the running AppImage file. On Linux, MultiV must be launched from the AppImage file itself; extracted AppImage contents cannot update the original file.
 
 Source checkouts and headless service runs do not self-update. Install a new source checkout manually. The [rolling release](https://github.com/BR3XALITYalt/MultiV/releases/tag/rolling) is updated on commits to `main`; manual release-workflow runs also publish incrementing version tags.
 
