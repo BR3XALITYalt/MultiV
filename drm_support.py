@@ -468,17 +468,46 @@ def _rustup_windows_target() -> str:
     return "x86_64-pc-windows-msvc"
 
 
-def _download_verified_rustup_installer(on_log: Callable[[str], None] | None = None) -> Path:
-    if os.name != "nt":
+def _rustup_linux_target() -> str:
+    """Return the GNU/Linux rustup target for supported desktop architectures."""
+    machine = platform.machine().casefold()
+    targets = {
+        "x86_64": "x86_64-unknown-linux-gnu",
+        "amd64": "x86_64-unknown-linux-gnu",
+        "aarch64": "aarch64-unknown-linux-gnu",
+        "arm64": "aarch64-unknown-linux-gnu",
+        "i686": "i686-unknown-linux-gnu",
+        "i386": "i686-unknown-linux-gnu",
+    }
+    try:
+        return targets[machine]
+    except KeyError as exc:
         raise RuntimeError(
-            "MultiV can install Rust on Windows. "
-            "Install Rust 1.88 or newer from https://rust-lang.org/tools/install, then reopen MultiV."
+            f"Automatic Rust installation is not configured for Linux architecture {machine or 'unknown'}. "
+            "Install Rust 1.88 or newer from https://rust-lang.org/tools/install."
+        ) from exc
+
+
+def _download_verified_rustup_installer(on_log: Callable[[str], None] | None = None) -> Path:
+    system = platform.system().casefold()
+    if os.name == "nt":
+        target = _rustup_windows_target()
+        installer_name = "rustup-init.exe"
+        cached_name = f"rustup-init-{target}.exe"
+    elif system == "linux":
+        target = _rustup_linux_target()
+        installer_name = "rustup-init"
+        cached_name = f"rustup-init-{target}"
+    else:
+        raise RuntimeError(
+            "Automatic Rust installation is supported on Windows and Linux. "
+            "Install Rust 1.88 or newer from https://rust-lang.org/tools/install."
         )
-    target = _rustup_windows_target()
-    url = f"{RUSTUP_DOWNLOAD_BASE}/{target}/rustup-init.exe"
+
+    url = f"{RUSTUP_DOWNLOAD_BASE}/{target}/{installer_name}"
     installer_dir = _cache_root() / "installers"
     installer_dir.mkdir(parents=True, exist_ok=True)
-    installer = installer_dir / f"rustup-init-{target}.exe"
+    installer = installer_dir / cached_name
 
     if on_log:
         on_log("Downloading the official Rust installer.")
@@ -499,6 +528,8 @@ def _download_verified_rustup_installer(on_log: Callable[[str], None] | None = N
     temporary = installer.with_suffix(".download")
     temporary.write_bytes(installer_data)
     temporary.replace(installer)
+    if os.name != "nt":
+        installer.chmod(0o755)
     return installer
 
 
