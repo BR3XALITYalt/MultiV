@@ -1,4 +1,6 @@
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
 from transmitter import (
@@ -33,10 +35,47 @@ from transmitter import (
     find_frequency_overlaps,
     build_frequency_candidates,
     mode_bandwidth_hz,
+    list_audio_inputs,
+    list_loopback_devices,
 )
 
 
 class TransmitterProtocolTests(unittest.TestCase):
+    def test_linux_loopback_lists_pulseaudio_and_pipewire_monitor_sources(self):
+        devices = [
+            {"name": "Built-in Audio Analog Stereo", "max_input_channels": 2, "hostapi": 0},
+            {"name": "Monitor of Built-in Audio Analog Stereo", "max_input_channels": 2, "hostapi": 0},
+            {"name": "alsa_output.usb.monitor", "max_input_channels": 2, "hostapi": 1},
+            {"name": "Output Only Device", "max_input_channels": 0, "hostapi": 1},
+        ]
+        sounddevice = SimpleNamespace(
+            query_devices=lambda: devices,
+            query_hostapis=lambda: [{"name": "PulseAudio"}, {"name": "PipeWire"}],
+        )
+        with (
+            mock.patch("transmitter.platform.system", return_value="Linux"),
+            mock.patch.dict("sys.modules", {"sounddevice": sounddevice}),
+        ):
+            result = list_loopback_devices()
+
+        self.assertEqual([item[0] for item in result], [1, 2])
+        self.assertIn("[PulseAudio]", result[0][1])
+        self.assertIn("[PipeWire]", result[1][1])
+
+    def test_linux_microphone_list_excludes_monitor_sources(self):
+        devices = [
+            {"name": "USB Microphone", "max_input_channels": 1, "hostapi": 0},
+            {"name": "Monitor of Built-in Audio", "max_input_channels": 2, "hostapi": 0},
+        ]
+        sounddevice = SimpleNamespace(query_devices=lambda: devices)
+        with (
+            mock.patch("transmitter.platform.system", return_value="Linux"),
+            mock.patch.dict("sys.modules", {"sounddevice": sounddevice}),
+        ):
+            result = list_audio_inputs()
+
+        self.assertEqual(result, [(0, "USB Microphone")])
+
     def test_audio_batch_matches_browser_worklet(self):
         self.assertEqual(BATCH_SAMPLES, 512)
         self.assertEqual(SAMPLE_RATE_HZ, 48_000)
