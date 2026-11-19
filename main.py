@@ -4477,9 +4477,14 @@ def build_app() -> None:
                     auth_enabled = config.get("secureDiscordAuth") is True
                     if auth_enabled and not auth_restore_started:
                         auth_restore_started = True
-                        account_var.set("Checking saved Discord login...")
-                        auth_status_var.set("Checking the saved TXITY browser session.")
-                        auth_manager.restore_session()
+                        if os.environ.get("MULTIV_DISABLE_BROWSER_RESTORE") == "1":
+                            auth_status_var.set(
+                                "Automatic browser session restore is disabled."
+                            )
+                        else:
+                            account_var.set("Checking saved Discord login...")
+                            auth_status_var.set("Checking the saved TXITY browser session.")
+                            auth_manager.restore_session()
                     elif not auth_enabled:
                         auth_status_var.set(
                             "TXITY secure Discord sign-in is not enabled. The dashboard remains locked."

@@ -166,9 +166,9 @@ jobs:
           if (-not (Test-Path $helperExecutable)) {
               throw "The packaged Discord browser helper executable is missing."
           }
-          & $helperExecutable
-          if ($LASTEXITCODE -ne 2) {
-              throw "The packaged Discord browser helper failed its argument-dispatch smoke test (exit code $LASTEXITCODE)."
+          & $helperExecutable "--check-runtime"
+          if ($LASTEXITCODE -ne 0) {
+              throw "The packaged Discord browser helper could not import its WebView runtime (exit code $LASTEXITCODE)."
           }
 
           # Install into a temporary folder and verify the optional desktop shortcut task.
@@ -212,7 +212,17 @@ jobs:
           }
 
           $appPath = Join-Path $installTest "MultiV.exe"
-          $app = Start-Process -FilePath $appPath -WorkingDirectory $installTest -PassThru
+          $previousBrowserRestore = $env:MULTIV_DISABLE_BROWSER_RESTORE
+          try {
+              $env:MULTIV_DISABLE_BROWSER_RESTORE = "1"
+              $app = Start-Process -FilePath $appPath -WorkingDirectory $installTest -PassThru
+          } finally {
+              if ($null -eq $previousBrowserRestore) {
+                  Remove-Item Env:MULTIV_DISABLE_BROWSER_RESTORE -ErrorAction SilentlyContinue
+              } else {
+                  $env:MULTIV_DISABLE_BROWSER_RESTORE = $previousBrowserRestore
+              }
+          }
           Start-Sleep -Seconds 8
           $app.Refresh()
           if ($app.HasExited -and $app.ExitCode -ne 0) {

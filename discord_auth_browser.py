@@ -240,6 +240,17 @@ class AuthBridge:
 
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
+    if args == ["--check-runtime"]:
+        try:
+            import webview
+        except Exception as exc:
+            print(
+                f"Could not import the embedded browser runtime: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return 1
+        return 0
     if len(args) not in (3, 4):
         return 2
 
