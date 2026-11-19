@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import os
+import platform
 import queue
 import re
 import shutil
@@ -30,12 +31,42 @@ RADE_PREROLL_FRAMES = 20
 RADE_AUDIO_QUEUE_FRAMES = 256
 
 _RUNTIME_TAG = "txitpy-rade-runtime"
-_RUNTIME_NAME = "txitpy-rade-v1-windows-x64.zip"
 _RUNTIME_BASE_URL = (
     "https://github.com/BR3XALITYalt/TXITPY/releases/download/"
     f"{_RUNTIME_TAG}"
 )
 _MAX_RUNTIME_BYTES = 64 * 1024 * 1024
+
+
+def _runtime_spec() -> tuple[str, str, tuple[str, ...]]:
+    """Return the verified runtime asset, executable, and library patterns."""
+    if os.name == "nt":
+        if struct.calcsize("P") != 8:
+            raise RuntimeError("FreeDV RADE V1 requires 64-bit Windows.")
+        return (
+            "txitpy-rade-v1-windows-x64.zip",
+            "freedv_rade_tx.exe",
+            ("rade.dll", "librade.dll"),
+        )
+
+    if platform.system().casefold() == "linux":
+        if struct.calcsize("P") != 8:
+            raise RuntimeError("The prebuilt FreeDV RADE V1 runtime requires 64-bit Linux.")
+        machine = platform.machine().casefold()
+        if machine not in {"x86_64", "amd64"}:
+            raise RuntimeError(
+                "The prebuilt FreeDV RADE V1 runtime is currently available for Linux x86_64."
+            )
+        return (
+            "txitpy-rade-v1-linux-x86_64.zip",
+            "freedv_rade_tx",
+            ("librade.so*",),
+        )
+
+    raise RuntimeError(
+        "The prebuilt FreeDV RADE V1 runtime is currently available for Windows x64 "
+        "and Linux x86_64."
+    )
 
 
 def _runtime_cache_root() -> Path:
@@ -61,43 +92,41 @@ def _download_asset(url: str, limit: int) -> bytes:
     return data
 
 
+def _has_rade_library(directory: Path, patterns: tuple[str, ...]) -> bool:
+    return any(
+        path.is_file()
+        for pattern in patterns
+        for path in directory.glob(pattern)
+    )
+
+
 def prepare_rade_encoder(
     on_log: Callable[[str], None] | None = None,
 ) -> Path:
-    """Download and verify the Windows x64 FreeDV RADE V1 encoder package."""
-    if os.name != "nt":
-        raise RuntimeError(
-            "The prebuilt FreeDV RADE V1 runtime is currently available for Windows x64."
-        )
-    if struct.calcsize("P") != 8:
-        raise RuntimeError("FreeDV RADE V1 requires 64-bit Windows.")
-
+    """Download, verify, and install the native FreeDV RADE V1 encoder package."""
+    asset_name, executable_name, library_patterns = _runtime_spec()
     root = _runtime_cache_root()
     install_dir = root / "runtime"
-    executable = install_dir / "freedv_rade_tx.exe"
-    required_files = (executable,)
-    rade_libraries = (
-        install_dir / "rade.dll",
-        install_dir / "librade.dll",
-    )
-    if (
-        all(path.is_file() for path in required_files)
-        and any(path.is_file() for path in rade_libraries)
-    ):
+    executable = install_dir / executable_name
+
+    def runtime_ready(directory: Path) -> bool:
+        return executable_name == "" or (
+            (directory / executable_name).is_file()
+            and _has_rade_library(directory, library_patterns)
+        )
+
+    if runtime_ready(install_dir):
         return executable
 
     root.mkdir(parents=True, exist_ok=True)
     with _runtime_install_lock:
-        if (
-            all(path.is_file() for path in required_files)
-            and any(path.is_file() for path in rade_libraries)
-        ):
+        if runtime_ready(install_dir):
             return executable
 
         if on_log:
             on_log("Downloading the FreeDV RADE V1 encoder package.")
 
-        archive_url = f"{_RUNTIME_BASE_URL}/{_RUNTIME_NAME}"
+        archive_url = f"{_RUNTIME_BASE_URL}/{asset_name}"
         checksum_url = f"{archive_url}.sha256"
         archive_data = _download_asset(archive_url, _MAX_RUNTIME_BYTES)
         checksum_data = _download_asset(checksum_url, 4_096).decode(
@@ -126,18 +155,20 @@ def prepare_rade_encoder(
                         raise RuntimeError("The FreeDV RADE runtime contains an unsafe file path.")
                 archive.extractall(extracted)
 
-            missing = [
-                path.name for path in required_files
-                if not (extracted / path.name).is_file()
-            ]
-            if not any((extracted / path.name).is_file() for path in rade_libraries):
-                missing.append("rade.dll or librade.dll")
+            missing = []
+            if not (extracted / executable_name).is_file():
+                missing.append(executable_name)
+            if not _has_rade_library(extracted, library_patterns):
+                missing.append("RADE runtime library")
             if missing:
                 raise RuntimeError(
                     "The FreeDV RADE runtime package is incomplete: "
                     + ", ".join(missing)
                     + "."
                 )
+
+            if os.name != "nt":
+                (extracted / executable_name).chmod(0o755)
 
             if install_dir.exists():
                 shutil.rmtree(install_dir)
@@ -148,7 +179,6 @@ def prepare_rade_encoder(
         if on_log:
             on_log("FreeDV RADE V1 is ready.")
         return executable
-
 
 _runtime_install_lock = threading.Lock()
 
@@ -257,11 +287,18 @@ class FreeDVRadeEncoder:
             raise FileNotFoundError(f"FreeDV RADE encoder not found: {self.executable}")
 
         environment = os.environ.copy()
-        environment["PATH"] = (
-            str(self.executable.parent)
-            + os.pathsep
-            + environment.get("PATH", "")
-        )
+        if os.name == "nt":
+            environment["PATH"] = (
+                str(self.executable.parent)
+                + os.pathsep
+                + environment.get("PATH", "")
+            )
+        else:
+            environment["LD_LIBRARY_PATH"] = (
+                str(self.executable.parent)
+                + os.pathsep
+                + environment.get("LD_LIBRARY_PATH", "")
+            )
         try:
             self._process = subprocess.Popen(
                 [str(self.executable)],
