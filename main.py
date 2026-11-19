@@ -420,6 +420,8 @@ def build_app() -> None:
                 pass
         if save:
             schedule_tx_settings_save()
+        if transmitter.is_busy and tx_audio_source_var.get() == "Audio playlist":
+            schedule_live_reconfigure()
         return added, removed
 
     tx_setting_variables = (
@@ -814,6 +816,15 @@ def build_app() -> None:
         build_shell()
 
     def on_shutdown() -> None:
+        pending_live_apply = live_reconfigure_state.get("after_id")
+        if pending_live_apply is not None:
+            try:
+                root.after_cancel(pending_live_apply)
+            except tk.TclError:
+                pass
+            live_reconfigure_state["after_id"] = None
+        live_reconfigure_state["request"] = None
+        live_reconfigure_state["stopping"] = False
         playlist_watch_stop.set()
         if tray_icon is not None:
             try:
@@ -1568,6 +1579,12 @@ def build_app() -> None:
             tx_status_var.set(details)
             update_transmit_button()
 
+    for setting_variable in tx_setting_variables:
+        if setting_variable is not web_gui_enabled_var:
+            setting_variable.trace_add("write", schedule_live_reconfigure)
+    for fallback_variable in tx_frequency_fallback_vars:
+        fallback_variable.trace_add("write", schedule_live_reconfigure)
+
     def get_web_gui_state() -> dict[str, Any]:
         with web_gui_state_lock:
             return dict(web_gui_state)
@@ -1601,11 +1618,6 @@ def build_app() -> None:
 
             command_type = command.get("type")
             if command_type == "settings":
-                if transmitter.is_busy:
-                    web_gui_status_var.set(
-                        "Stop transmission before changing station or signal settings."
-                    )
-                    continue
                 values = command.get("values", {})
                 if not isinstance(values, dict):
                     continue
