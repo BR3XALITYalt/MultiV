@@ -1958,6 +1958,7 @@ def build_app() -> None:
             variable = tk.StringVar(root, "")
             variable.trace_add("write", schedule_tx_settings_save)
             variable.trace_add("write", lambda *_args: update_frequency_check())
+            variable.trace_add("write", schedule_live_reconfigure)
             tx_frequency_fallback_vars.append(variable)
             render_frequency_fields()
             schedule_tx_settings_save()
