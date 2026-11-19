@@ -17,6 +17,7 @@ DefaultDirName={autopf}\MultiV
 DefaultGroupName=MultiV
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UsePreviousAppDir=yes
