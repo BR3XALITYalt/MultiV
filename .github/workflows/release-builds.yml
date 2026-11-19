@@ -102,6 +102,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
 
+      - name: Install Windows WebView backend dependency
+        if: runner.os == 'Windows'
+        run: python -m pip install pythonnet
+
       - name: Write packaged build metadata
         shell: bash
         env:
