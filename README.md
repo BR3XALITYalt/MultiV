@@ -46,10 +46,10 @@ The prebuilt RADE encoder is available for Windows x64 and Linux x86_64. DRM bui
 
 Download the [latest rolling build](https://github.com/BR3XALITYalt/MultiV/releases/tag/rolling) or choose a numbered release from the [releases page](https://github.com/BR3XALITYalt/MultiV/releases).
 
-- **Windows:** Extract the ZIP file and run `MultiV.exe`.
+- **Windows:** Run the installer. It defaults to `C:\Program Files\MultiV`; the desktop shortcut is optional during setup.
 - **Linux:** Run `chmod +x MultiV-linux-x86_64-*.AppImage`, then open the AppImage file.
 
-Packaged builds check for updates when they start. MultiV asks before installing an update and restarting. Keep the application in a folder your account can modify so it can replace its own files.
+Packaged builds check for updates when they start. MultiV asks before installing an update and restarting. Windows updates launch the installer with an elevation prompt; Linux updates replace the AppImage in its current folder.
 
 ## Start a transmission
 
