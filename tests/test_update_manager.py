@@ -113,10 +113,34 @@ class UpdateManagerTests(unittest.TestCase):
                 current_build=1,
             )
 
+    def test_windows_manifest_accepts_inno_setup_installer(self):
+        filename = "MultiV-windows-x86_64-42.exe"
+        manifest = {
+            "channel": "rolling",
+            "version": "0.1.0-dev.42",
+            "build_number": 42,
+            "commit": "a" * 40,
+            "assets": {
+                "windows-x86_64": {
+                    "filename": filename,
+                    "url": (
+                        "https://github.com/BR3XALITYalt/MultiV/releases/download/"
+                        f"rolling/{filename}"
+                    ),
+                    "sha256": "b" * 64,
+                }
+            },
+        }
+        update = parse_update_manifest(
+            manifest, key="windows-x86_64", current_build=41
+        )
+        self.assertIsNotNone(update)
+        self.assertEqual(update.filename, filename)
+
     def test_expected_filenames_are_fixed_per_platform(self):
         self.assertEqual(
             _expected_filename("windows-x86_64", 42),
-            "MultiV-windows-x86_64-42.zip",
+            "MultiV-windows-x86_64-42.exe",
         )
         self.assertEqual(
             _expected_filename("linux-x86_64", 42),
