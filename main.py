@@ -4536,8 +4536,14 @@ def build_app() -> None:
                     tx_ptt_confirmed = False
 
                 if live_restart:
+                    was_cancelled = bool(live_reconfigure_state["cancelled"])
+                    previous_status = tx_status_var.get()
                     start_pending_live_reconfigure()
-                    if not transmitter.is_busy:
+                    if (
+                        not transmitter.is_busy
+                        and was_cancelled
+                        and previous_status.startswith("Stopping transmission")
+                    ):
                         tx_status_var.set("Transmission stopped.")
                 elif state == "stopped":
                     live_reconfigure_state["active_request"] = None
