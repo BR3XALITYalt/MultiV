@@ -33,10 +33,11 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 Source: "dist\MultiV\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "assets\logo.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\MultiV"; Filename: "{app}\MultiV.exe"; WorkingDir: "{app}"
-Name: "{userdesktop}\MultiV"; Filename: "{app}\MultiV.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\MultiV"; Filename: "{app}\MultiV.exe"; IconFilename: "{app}\logo.ico"; IconIndex: 0; WorkingDir: "{app}"
+Name: "{userdesktop}\MultiV"; Filename: "{app}\MultiV.exe"; IconFilename: "{app}\logo.ico"; IconIndex: 0; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\MultiV.exe"; Description: "Launch MultiV"; Flags: nowait postinstall skipifsilent
