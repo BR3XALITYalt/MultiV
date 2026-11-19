@@ -68,6 +68,10 @@ def _open_nssm_parent_process() -> tuple[Any, Any, int] | None:
     kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    kernel32.TerminateProcess.restype = wintypes.BOOL
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
 
     snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
     invalid_handle = ctypes.c_void_p(-1).value
@@ -146,10 +150,6 @@ def stop_nssm_parent_process(logger: Any) -> bool:
         return False
 
     kernel32, parent_handle, parent_pid = parent
-    kernel32.TerminateProcess.argtypes = [ctypes.c_void_p, wintypes.DWORD]
-    kernel32.TerminateProcess.restype = wintypes.BOOL
-    kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, wintypes.DWORD]
-    kernel32.WaitForSingleObject.restype = wintypes.DWORD
     try:
         if not kernel32.TerminateProcess(parent_handle, 0):
             error_code = ctypes.get_last_error()
