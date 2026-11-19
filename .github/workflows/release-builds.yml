@@ -134,11 +134,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          python - <<'PY'
-          from PIL import Image
-          logo = Image.open("assets/logo.png").convert("RGBA")
-          logo.save("assets/logo.ico", format="ICO", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
-          PY
+          python -c "from PIL import Image; logo = Image.open('assets/logo.png').convert('RGBA'); logo.save('assets/logo.ico', format='ICO', sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])"
+          if ($LASTEXITCODE -ne 0) {
+              throw "Could not generate the Windows icon from assets/logo.png."
+          }
           pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --icon "assets/logo.ico" --add-data "assets;assets" --collect-all webview --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL --collect-all pyaudiowpatch --collect-all pystray --collect-all clr_loader --collect-all pythonnet --hidden-import clr main.py
           pyinstaller --noconfirm --clean --console --onefile --name MultiVBrowserHelper --icon "assets/logo.ico" --distpath "dist/MultiV" --workpath "build/MultiVBrowserHelper" --collect-all webview --collect-all clr_loader --collect-all pythonnet --hidden-import clr discord_auth_browser.py
 
