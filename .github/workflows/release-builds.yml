@@ -134,8 +134,13 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --add-data "assets;assets" --collect-all webview --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL --collect-all pyaudiowpatch --collect-all pystray --collect-all clr_loader --collect-all pythonnet --hidden-import clr main.py
-          pyinstaller --noconfirm --clean --console --onefile --name MultiVBrowserHelper --distpath "dist/MultiV" --workpath "build/MultiVBrowserHelper" --collect-all webview --collect-all clr_loader --collect-all pythonnet --hidden-import clr discord_auth_browser.py
+          python - <<'PY'
+          from PIL import Image
+          logo = Image.open("assets/logo.png").convert("RGBA")
+          logo.save("assets/logo.ico", format="ICO", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+          PY
+          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --icon "assets/logo.ico" --add-data "assets;assets" --collect-all webview --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL --collect-all pyaudiowpatch --collect-all pystray --collect-all clr_loader --collect-all pythonnet --hidden-import clr main.py
+          pyinstaller --noconfirm --clean --console --onefile --name MultiVBrowserHelper --icon "assets/logo.ico" --distpath "dist/MultiV" --workpath "build/MultiVBrowserHelper" --collect-all webview --collect-all clr_loader --collect-all pythonnet --hidden-import clr discord_auth_browser.py
 
           $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
           $compilerPath = Join-Path $programFilesX86 "Inno Setup 6\ISCC.exe"
@@ -148,7 +153,7 @@ jobs:
 
           $version = "${{ needs.prepare.outputs.app_version }}"
           $build = "${{ github.run_number }}"
-          & $compilerPath "/DAppVersion=$version" "/DBuildNumber=$build" "MultiV.iss"
+          & $compilerPath "/DAppVersion=$version" "MultiV.iss"
           if ($LASTEXITCODE -ne 0) {
               throw "Inno Setup failed with exit code $LASTEXITCODE."
           }
@@ -245,7 +250,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --add-data "assets:assets" --collect-all webview --collect-all qtpy --collect-all PyQt6 --collect-all PyQt6.QtWebEngineCore --collect-all PyQt6.QtWebEngineWidgets --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL main.py
+          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --icon "assets/logo.png" --add-data "assets:assets" --collect-all webview --collect-all qtpy --collect-all PyQt6 --collect-all PyQt6.QtWebEngineCore --collect-all PyQt6.QtWebEngineWidgets --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL main.py
 
           APPDIR="$PWD/AppDir"
           mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
