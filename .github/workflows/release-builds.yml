@@ -206,13 +206,18 @@ jobs:
               throw "The installed Discord browser helper executable is missing."
           }
 
-          $desktopPaths = @(
-              [Environment]::GetFolderPath("Desktop"),
-              [Environment]::GetFolderPath("CommonDesktopDirectory")
-          ) | Where-Object { $_ }
-          $shortcut = $desktopPaths | ForEach-Object { Join-Path $_ "MultiV.lnk" } | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $shortcut) {
-              throw "The desktop shortcut task did not create MultiV.lnk."
+          $userDesktop = [Environment]::GetFolderPath("Desktop")
+          $shortcut = Join-Path $userDesktop "MultiV.lnk"
+          if (-not (Test-Path $shortcut)) {
+              throw "The desktop shortcut task did not create MultiV.lnk on the installing user's desktop."
+          }
+
+          $shortcutShell = New-Object -ComObject WScript.Shell
+          $shortcutInfo = $shortcutShell.CreateShortcut($shortcut)
+          $expectedTarget = [IO.Path]::GetFullPath((Join-Path $installTest "MultiV.exe"))
+          $actualTarget = [IO.Path]::GetFullPath($shortcutInfo.TargetPath)
+          if ($actualTarget -ne $expectedTarget) {
+              throw "The desktop shortcut target is incorrect: $actualTarget"
           }
 
           $appPath = Join-Path $installTest "MultiV.exe"
@@ -240,9 +245,7 @@ jobs:
           if (Test-Path $uninstaller) {
               Start-Process -FilePath $uninstaller -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
           }
-          foreach ($desktopPath in $desktopPaths) {
-              Remove-Item (Join-Path $desktopPath "MultiV.lnk") -Force -ErrorAction SilentlyContinue
-          }
+          Remove-Item $shortcut -Force -ErrorAction SilentlyContinue
 
       - name: Build Linux AppImage
         if: runner.os == 'Linux'
