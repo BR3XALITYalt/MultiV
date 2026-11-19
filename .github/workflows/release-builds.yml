@@ -166,8 +166,24 @@ jobs:
           if (Test-Path $installTest) {
               Remove-Item $installTest -Recurse -Force
           }
-          & $installerPath "/VERYSILENT" "/SUPPRESSMSGBOXES" "/NORESTART" "/SP-" "/DIR=$installTest" "/TASKS=desktopicon"
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $installTest "MultiV.exe"))) {
+          $installLog = Join-Path $env:RUNNER_TEMP "MultiV-Inno-Test.log"
+          $setup = Start-Process -FilePath $installerPath -ArgumentList @(
+              "/VERYSILENT",
+              "/SUPPRESSMSGBOXES",
+              "/NORESTART",
+              "/SP-",
+              "/LOG=$installLog",
+              "/DIR=$installTest",
+              "/TASKS=desktopicon"
+          ) -Wait -PassThru
+          Write-Host "Inno Setup exit code: $($setup.ExitCode)"
+          if ($setup.ExitCode -ne 0 -or -not (Test-Path (Join-Path $installTest "MultiV.exe"))) {
+              if (Test-Path $installLog) {
+                  Get-Content $installLog -Tail 100
+              }
+              if (Test-Path $installTest) {
+                  Get-ChildItem $installTest -Force -Recurse | Select-Object -First 40 FullName
+              }
               throw "The Inno Setup installer did not install MultiV correctly."
           }
 
