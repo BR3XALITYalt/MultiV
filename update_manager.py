@@ -336,12 +336,7 @@ def install_update(info: UpdateInfo) -> None:
         raise RuntimeError("Automatic updates are not available for this platform.")
 
     if key == "windows-x86_64":
-        executable = Path(sys.executable).resolve()
-        if not os.access(executable.parent, os.W_OK):
-            raise RuntimeError(
-                "MultiV is installed in a folder this account cannot modify. Move it to a writable folder and retry."
-            )
-        destination = Path(tempfile.gettempdir()) / f"multiv-update-{uuid.uuid4().hex}.zip"
+        destination = Path(tempfile.gettempdir()) / f"multiv-update-{uuid.uuid4().hex}.exe"
         _download_verified_update(info, destination)
         _schedule_windows_update(destination)
         return
