@@ -4,6 +4,7 @@ import re
 import unittest
 from urllib.parse import urlencode
 
+from app_assets import asset_path
 from web_gui import (
     TxityWebGUI,
     create_password_record,
@@ -33,6 +34,30 @@ class WebGUIPasswordTests(unittest.TestCase):
 
 
 class WebGUIHTTPTests(unittest.TestCase):
+    def test_favicon_serves_repository_logo_without_authentication(self):
+        salt, digest = create_password_record("a-long-test-password")
+        gui = TxityWebGUI(
+            host="127.0.0.1",
+            port=0,
+            password_salt=salt,
+            password_hash=digest,
+            state_provider=lambda: {},
+            command_submitter=lambda _command: None,
+        )
+        gui.start()
+        try:
+            host, port = gui.address
+            connection = http.client.HTTPConnection(host, port, timeout=5)
+            connection.request("GET", "/favicon.png")
+            response = connection.getresponse()
+            body = response.read()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.getheader("Content-Type"), "image/png")
+            self.assertEqual(body, asset_path("logo.png").read_bytes())
+            connection.close()
+        finally:
+            gui.stop()
+
     def test_login_session_and_csrf_protect_transmit_commands(self):
         salt, digest = create_password_record("a-long-test-password")
         commands = []
