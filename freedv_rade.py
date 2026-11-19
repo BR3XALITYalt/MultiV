@@ -110,7 +110,7 @@ def prepare_rade_encoder(
     executable = install_dir / executable_name
 
     def runtime_ready(directory: Path) -> bool:
-        return executable_name == "" or (
+        return (
             (directory / executable_name).is_file()
             and _has_rade_library(directory, library_patterns)
         )
