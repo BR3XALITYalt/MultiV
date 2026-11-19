@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from app_assets import asset_path
-from PIL import Image
+from PIL import Image, ImageOps
 from system_tray import create_tray_icon, create_tray_image
 
 
@@ -35,9 +35,15 @@ class SystemTrayTests(unittest.TestCase):
         image = create_tray_image()
 
         with Image.open(asset_path("logo.png")) as source:
-            expected = source.convert("RGBA").resize(
+            logo = ImageOps.contain(
+                source.convert("RGBA"),
                 (64, 64),
                 Image.Resampling.LANCZOS,
+            )
+            expected = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+            expected.alpha_composite(
+                logo,
+                ((64 - logo.width) // 2, (64 - logo.height) // 2),
             )
 
         self.assertEqual(image.size, (64, 64))
