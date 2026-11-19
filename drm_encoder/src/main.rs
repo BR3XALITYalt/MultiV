@@ -38,8 +38,11 @@ fn run() -> Result<(), Box<dyn Error>> {
     config.output.device = None;
     config.output.sample_format = SampleFormat::Float32;
     config.output.format = SignalFormat::Real;
-    // Mode B / SO0 carriers plus the 150 Hz filter margin stay below TXITY's 6 kHz edge.
-    config.output.if_hz = Some(1_500.0);
+    // Keep the profile-selected IF. The 4.5 kHz and 9 kHz placements include
+    // the 150 Hz filter margin inside TXITY's 10 kHz transport band.
+    if config.output.if_hz.is_none() {
+        return Err("DRM profile is missing its TXITY-compatible output IF".into());
+    }
 
     if check_only {
         let plan = config.validate()?;
