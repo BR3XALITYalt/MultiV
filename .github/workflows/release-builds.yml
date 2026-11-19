@@ -137,8 +137,15 @@ jobs:
           Compress-Archive -Path "dist/MultiV/*" -DestinationPath (Join-Path $output $filename) -CompressionLevel Optimal
           $hash = (Get-FileHash (Join-Path $output $filename) -Algorithm SHA256).Hash.ToLower()
           "$hash  $filename" | Set-Content -NoNewline -Encoding ascii (Join-Path $output "$filename.sha256")
-          & "dist/MultiV/MultiV.exe" --help
-          if ($LASTEXITCODE -ne 0) { throw "The packaged Windows application did not start." }
+          $app = Start-Process -FilePath "dist/MultiV/MultiV.exe" -PassThru
+          Start-Sleep -Seconds 8
+          $app.Refresh()
+          if ($app.HasExited -and $app.ExitCode -ne 0) {
+              throw "The packaged Windows application exited with code $($app.ExitCode)."
+          }
+          if (-not $app.HasExited) {
+              Stop-Process -Id $app.Id -Force
+          }
 
       - name: Build Linux AppImage
         if: runner.os == 'Linux'
