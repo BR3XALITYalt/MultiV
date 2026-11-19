@@ -250,7 +250,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --icon "assets/logo.png" --add-data "assets:assets" --collect-all webview --collect-all qtpy --collect-all PyQt6 --collect-all PyQt6.QtWebEngineCore --collect-all PyQt6.QtWebEngineWidgets --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL main.py
+          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --add-data "assets:assets" --collect-all webview --collect-all qtpy --collect-all PyQt6 --collect-all PyQt6.QtWebEngineCore --collect-all PyQt6.QtWebEngineWidgets --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL main.py
 
           APPDIR="$PWD/AppDir"
           mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
