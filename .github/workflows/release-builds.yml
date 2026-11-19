@@ -48,7 +48,7 @@ jobs:
               version = f"{latest[0]}.{latest[1]}.{latest[2] + 1}"
               release_version = f"v{version}"
           else:
-              version = f"{latest[0]}.{latest[1]}.{latest[2]}-dev.{os.environ['RUN_NUMBER']}"
+              version = f"{latest[0]}.{latest[1]}.{latest[2]}-dev"
               release_version = ""
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"app_version={version}\n")
@@ -153,7 +153,7 @@ jobs:
               throw "Inno Setup failed with exit code $LASTEXITCODE."
           }
 
-          $filename = "MultiV-windows-x86_64-$build.exe"
+          $filename = "MultiV-windows-x86_64.exe"
           $output = Join-Path $PWD "release-out"
           $installerPath = Join-Path $output $filename
           if (-not (Test-Path $installerPath)) {
@@ -293,7 +293,7 @@ jobs:
           curl -fL --retry 3 https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
           build="${{ github.run_number }}"
-          filename="MultiV-linux-x86_64-$build.AppImage"
+          filename="MultiV-linux-x86_64.AppImage"
           mkdir -p release-out
           APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 ./appimagetool-x86_64.AppImage "$APPDIR" "release-out/$filename"
           chmod +x "release-out/$filename"
@@ -338,8 +338,8 @@ jobs:
           build = int(os.environ["APP_BUILD_NUMBER"])
           repository = os.environ["REPOSITORY"]
           files = {
-              "windows-x86_64": f"MultiV-windows-x86_64-{build}.exe",
-              "linux-x86_64": f"MultiV-linux-x86_64-{build}.AppImage",
+              "windows-x86_64": "MultiV-windows-x86_64.exe",
+              "linux-x86_64": "MultiV-linux-x86_64.AppImage",
           }
           assets = {}
           for platform, filename in files.items():
@@ -384,33 +384,26 @@ jobs:
           COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
-          title="MultiV rolling build $BUILD_NUMBER"
-          notes="Automatic build $BUILD_NUMBER from commit $COMMIT. This prerelease is updated on every commit to main."
+          title="MultiV Rolling Release"
+          notes="Latest successful build from the main branch. This prerelease is updated automatically."
           if gh release view rolling --repo "$REPOSITORY" >/dev/null 2>&1; then
             gh release edit rolling --repo "$REPOSITORY" --title "$title" --notes "$notes" --prerelease
           else
             gh release create rolling --repo "$REPOSITORY" --title "$title" --notes "$notes" --prerelease --target "$COMMIT"
           fi
           gh release upload rolling --repo "$REPOSITORY" \
-            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".exe \
-            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".exe.sha256 \
-            release-out/MultiV-linux-x86_64-"$BUILD_NUMBER".AppImage \
-            release-out/MultiV-linux-x86_64-"$BUILD_NUMBER".AppImage.sha256 --clobber
+            release-out/MultiV-windows-x86_64.exe \
+            release-out/MultiV-windows-x86_64.exe.sha256 \
+            release-out/MultiV-linux-x86_64.AppImage \
+            release-out/MultiV-linux-x86_64.AppImage.sha256 --clobber
           gh release upload rolling --repo "$REPOSITORY" release-out/multiv-update.json --clobber
 
-          # Keep recent build assets available while clients finish downloading an older manifest.
+          # Remove legacy numbered packages after replacing the stable rolling assets.
           gh release view rolling --repo "$REPOSITORY" --json assets --jq '.assets[].name' |
           while IFS= read -r asset; do
-            if [[ "$asset" == "multiv-update.json" ]]; then
-              continue
+            if [[ "$asset" =~ ^MultiV-(windows-x86_64|linux-x86_64)-[0-9]+\.(exe|AppImage)(\.sha256)?$ ]]; then
+              gh release delete-asset rolling "$asset" --repo "$REPOSITORY" --yes
             fi
-            if [[ "$asset" =~ ^MultiV-(windows-x86_64|linux-x86_64)-([0-9]+)\.(exe|AppImage)(\.sha256)?$ ]]; then
-              asset_build="${BASH_REMATCH[2]}"
-              if (( asset_build >= BUILD_NUMBER - 5 )); then
-                continue
-              fi
-            fi
-            gh release delete-asset rolling "$asset" --repo "$REPOSITORY" --yes
           done
 
       - name: Publish numbered release for manual runs
@@ -428,8 +421,8 @@ jobs:
             --title "MultiV $APP_VERSION" \
             --notes "MultiV $APP_VERSION. Build $BUILD_NUMBER from commit $COMMIT." \
             --target "$COMMIT" \
-            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".exe \
-            release-out/MultiV-windows-x86_64-"$BUILD_NUMBER".exe.sha256 \
-            release-out/MultiV-linux-x86_64-"$BUILD_NUMBER".AppImage \
-            release-out/MultiV-linux-x86_64-"$BUILD_NUMBER".AppImage.sha256 \
+            release-out/MultiV-windows-x86_64.exe \
+            release-out/MultiV-windows-x86_64.exe.sha256 \
+            release-out/MultiV-linux-x86_64.AppImage \
+            release-out/MultiV-linux-x86_64.AppImage.sha256 \
             release-out/multiv-update.json
