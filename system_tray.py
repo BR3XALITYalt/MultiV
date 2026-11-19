@@ -5,29 +5,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from app_assets import asset_path
+
 
 def create_tray_image():
-    """Create a small MultiV icon using the application's primary blue."""
-    from PIL import Image, ImageDraw
+    """Load the shared application logo and prepare it for the system tray."""
+    from PIL import Image
 
-    image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle(
-        (3, 3, 61, 61),
-        radius=13,
-        fill="#185ABC",
-    )
-    draw.rounded_rectangle(
-        (14, 15, 50, 23),
-        radius=3,
-        fill="#FFFFFF",
-    )
-    draw.rounded_rectangle(
-        (28, 21, 36, 49),
-        radius=3,
-        fill="#FFFFFF",
-    )
-    return image
+    with Image.open(asset_path("logo.png")) as source:
+        return source.convert("RGBA").resize((64, 64), Image.Resampling.LANCZOS)
 
 
 def create_tray_icon(
