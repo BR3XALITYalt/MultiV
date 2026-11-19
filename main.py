@@ -1950,6 +1950,7 @@ def build_app() -> None:
                 render_frequency_fields()
                 schedule_tx_settings_save()
                 update_frequency_check()
+                schedule_live_reconfigure()
 
         def add_frequency_fallback() -> None:
             if len(tx_frequency_fallback_vars) >= 7:
