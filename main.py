@@ -3495,14 +3495,16 @@ def build_app() -> None:
         info: Any = None,
         error: str | None = None,
         *,
-        show_result: bool = False,
+        prompt_update: bool = False,
+        report_errors: bool = False,
+        report_current: bool = False,
     ) -> None:
         update_state["checking"] = False
         if update_check_button is not None:
             update_check_button.configure(state="normal")
         if error:
             update_status_var.set(f"Update check failed: {error}")
-            if show_result:
+            if report_errors:
                 messagebox.showerror("Update check failed", error, parent=root)
             return
         if info is None:
@@ -3514,7 +3516,7 @@ def build_app() -> None:
             )
             if update_install_button is not None:
                 update_install_button.configure(state="disabled")
-            if show_result:
+            if report_current:
                 messagebox.showinfo(
                     "No updates available",
                     "This copy of MultiV is up to date.",
@@ -3528,15 +3530,20 @@ def build_app() -> None:
         )
         if update_install_button is not None:
             update_install_button.configure(state="normal")
-        if show_result and messagebox.askyesno(
+        if prompt_update and messagebox.askyesno(
             "MultiV update available",
             f"Version {info.version} is available. Install it and restart MultiV? "
             "Any active transmission will be stopped.",
             parent=root,
         ):
-            install_application_update()
+            install_application_update(confirmed=True)
 
-    def check_application_updates(*, show_result: bool = True) -> None:
+    def check_application_updates(
+        *,
+        prompt_update: bool = False,
+        report_errors: bool = False,
+        report_current: bool = False,
+    ) -> None:
         if not is_packaged():
             update_status_var.set("Automatic updates are available in packaged builds.")
             return
@@ -3556,7 +3563,8 @@ def build_app() -> None:
                     0,
                     lambda message=details: finish_update_check(
                         error=message,
-                        show_result=show_result,
+                        report_errors=report_errors,
+                        report_current=report_current,
                     ),
                 )
             else:
@@ -3564,7 +3572,9 @@ def build_app() -> None:
                     0,
                     lambda result=info: finish_update_check(
                         result,
-                        show_result=show_result,
+                        prompt_update=prompt_update,
+                        report_errors=report_errors,
+                        report_current=report_current,
                     ),
                 )
 
@@ -3574,11 +3584,11 @@ def build_app() -> None:
             name="multiv-update-check",
         ).start()
 
-    def install_application_update() -> None:
+    def install_application_update(*, confirmed: bool = False) -> None:
         info = update_state.get("info")
         if info is None:
             return
-        if not messagebox.askyesno(
+        if not confirmed and not messagebox.askyesno(
             "Install MultiV update",
             f"Download and install MultiV {info.version}? MultiV will close, stop any "
             "active transmission, replace its application files, and restart.",
@@ -3870,7 +3880,10 @@ def build_app() -> None:
         update_check_button = make_button(
             update_buttons,
             "Check for updates",
-            lambda: check_application_updates(show_result=True),
+            lambda: check_application_updates(
+                report_errors=True,
+                report_current=True,
+            ),
             kind="tonal",
         )
         update_check_button.pack(side="left", padx=(0, 8))
@@ -4636,7 +4649,7 @@ def build_app() -> None:
     root.after(250, drain_events)
     root.after(60_000, periodic_station_refresh)
     if is_packaged():
-        root.after(4_000, lambda: check_application_updates(show_result=True))
+        root.after(4_000, lambda: check_application_updates(prompt_update=True))
     playlist_watch_thread = threading.Thread(
         target=watch_playlist_sources,
         daemon=True,
