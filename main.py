@@ -1512,6 +1512,7 @@ def build_app() -> None:
             live_reconfigure_state["after_id"] = None
 
     def start_pending_live_reconfigure() -> None:
+        nonlocal frequency_retry_context
         request = live_reconfigure_state["request"]
         live_reconfigure_state["request"] = None
         live_reconfigure_state["stopping"] = False
@@ -1823,6 +1824,15 @@ def build_app() -> None:
             pady=9,
         )
         tx_transmit_button.pack(side="right", padx=(12, 0))
+        make_label(
+            hero,
+            variable=tx_status_var,
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["background"],
+            wraplength=440,
+            justify="right",
+        ).pack(side="right", padx=(10, 0), pady=(4, 0))
 
         def add_tx_entry(
             parent_frame: tk.Misc,
@@ -2019,7 +2029,9 @@ def build_app() -> None:
         signal_card = make_card(page, padding=16)
         signal_card.pack(fill="x", pady=(0, 12))
 
-        drm_metadata_card = make_card(page, padding=16)
+        advanced_container = tk.Frame(page, bg=palette["background"])
+        advanced_expanded = False
+        drm_metadata_card = make_card(advanced_container, padding=16)
         make_label(
             drm_metadata_card,
             "DRM service metadata",
@@ -2574,9 +2586,6 @@ def build_app() -> None:
         )
         sharing.pack(anchor="w", padx=6, pady=(8, 0))
 
-        advanced_container = tk.Frame(page, bg=palette["background"])
-        advanced_expanded = False
-
         def toggle_advanced_settings() -> None:
             nonlocal advanced_expanded
             if advanced_expanded:
@@ -2858,7 +2867,7 @@ def build_app() -> None:
         am_pre_emphasis.pack(anchor="w", padx=6, pady=(7, 0))
         make_label(
             audio_filter_card,
-            "MultiV sends these processing values with your TXITY station configuration when you start transmission.",
+            "Changes apply automatically during transmission. The signal briefly stops while MultiV rebuilds the active audio path and starts again.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3348,14 +3357,6 @@ def build_app() -> None:
             wraplength=850,
         ).pack(anchor="w", pady=(6, 0))
 
-        status_card = make_card(page, padding=16)
-        status_card.pack(fill="x", pady=(0, 12))
-        make_label(
-            status_card,
-            variable=tx_status_var,
-            font=("Segoe UI", 11, "bold"),
-            background=palette["surfaceContainerLow"],
-        ).pack(anchor="w")
         progress_style = ttk.Style(root)
         progress_style.configure(
             "TXITY.Horizontal.TProgressbar",
@@ -3367,7 +3368,7 @@ def build_app() -> None:
             thickness=8,
         )
         drm_progressbar = ttk.Progressbar(
-            status_card,
+            signal_card,
             mode="indeterminate",
             maximum=100,
             style="TXITY.Horizontal.TProgressbar",
