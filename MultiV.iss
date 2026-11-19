@@ -17,6 +17,7 @@ PrivilegesRequiredOverridesAllowed=commandline
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UsePreviousAppDir=yes
+DisableDirPage=no
 UsePreviousTasks=yes
 OutputDir=release-out
 OutputBaseFilename=MultiV-windows-x86_64
@@ -28,14 +29,14 @@ UninstallDisplayIcon={app}\MultiV.exe
 UninstallDisplayName=MultiV
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional options:"; Flags: unchecked
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional options:"; Flags: checkedonce
 
 [Files]
 Source: "dist\MultiV\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\MultiV"; Filename: "{app}\MultiV.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\MultiV"; Filename: "{app}\MultiV.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{userdesktop}\MultiV"; Filename: "{app}\MultiV.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\MultiV.exe"; Description: "Launch MultiV"; Flags: nowait postinstall skipifsilent
