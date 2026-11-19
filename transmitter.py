@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import os
+import platform
 import queue
 import random
 import re
@@ -656,8 +657,14 @@ def build_transmit_config(
     return configuration
 
 
+def _is_linux_monitor_device(device: dict[str, Any]) -> bool:
+    """Identify PulseAudio and PipeWire monitor sources exposed as input devices."""
+    name = str(device.get("name") or "").casefold()
+    return "monitor" in name
+
+
 def list_audio_inputs() -> list[tuple[int, str]]:
-    """Return available PortAudio microphone and line-input devices."""
+    """Return microphone and line-input devices, excluding Linux monitor sources."""
     import sounddevice
 
     devices = sounddevice.query_devices()
@@ -665,11 +672,49 @@ def list_audio_inputs() -> list[tuple[int, str]]:
         (index, str(device.get("name") or f"Audio input {index}"))
         for index, device in enumerate(devices)
         if int(device.get("max_input_channels", 0)) > 0
+        and not (
+            platform.system().casefold() == "linux"
+            and _is_linux_monitor_device(device)
+        )
     ]
 
 
 def list_loopback_devices() -> list[tuple[int, str]]:
-    """Return Windows WASAPI loopback devices for capturing desktop playback."""
+    """Return desktop-audio loopback devices for the current operating system."""
+    if platform.system().casefold() == "linux":
+        import sounddevice
+
+        devices = sounddevice.query_devices()
+        host_apis = sounddevice.query_hostapis()
+        result: list[tuple[int, str]] = []
+        for index, device in enumerate(devices):
+            if int(device.get("max_input_channels", 0)) < 1:
+                continue
+            if not _is_linux_monitor_device(device):
+                continue
+            host_api_index = int(device.get("hostapi", -1))
+            host_api_name = ""
+            if 0 <= host_api_index < len(host_apis):
+                host_api_name = str(host_apis[host_api_index].get("name") or "")
+            name = str(device.get("name") or f"Desktop monitor {index}")
+            label = f"{index}: {name}"
+            if host_api_name:
+                label += f" [{host_api_name}]"
+            result.append((index, label))
+
+        if not result:
+            raise RuntimeError(
+                "No desktop-audio monitor sources were found. On Linux, enable a "
+                "PulseAudio or PipeWire monitor source, then refresh audio devices."
+            )
+        return result
+
+    if os.name != "nt":
+        raise RuntimeError(
+            "Desktop-audio loopback is supported on Windows and Linux. "
+            "Linux requires a PulseAudio or PipeWire monitor source."
+        )
+
     try:
         import pyaudiowpatch as pyaudio
     except ImportError as exc:
@@ -1401,45 +1446,66 @@ class TxityTransmitter:
                     return
 
                 if audio_source == "loopback" and not drm_mode:
-                    try:
-                        import pyaudiowpatch as pyaudio
-                    except ImportError as exc:
-                        raise RuntimeError(
-                            "Desktop audio capture requires PyAudioWPatch. Install the project requirements and reopen MultiV."
-                        ) from exc
-
                     if input_device is None:
-                        raise RuntimeError("Select a desktop output device for loopback capture.")
+                        raise RuntimeError("Select a desktop-audio monitor device for loopback capture.")
 
-                    loopback_manager = pyaudio.PyAudio()
-                    info = loopback_manager.get_device_info_by_index(input_device)
-                    if not bool(info.get("isLoopbackDevice")):
-                        raise RuntimeError("The selected device is not a Windows WASAPI loopback input.")
+                    if platform.system().casefold() == "linux":
+                        import sounddevice
 
-                    channels = min(2, int(info.get("maxInputChannels", 0)))
-                    source_rate = int(round(float(info.get("defaultSampleRate", SAMPLE_RATE_HZ))))
-                    if channels < 1 or source_rate < 1:
-                        raise RuntimeError("The selected desktop output does not expose a usable audio format.")
+                        input_stream = sounddevice.InputStream(
+                            device=input_device,
+                            samplerate=SAMPLE_RATE_HZ,
+                            channels=1,
+                            dtype="float32",
+                            blocksize=BATCH_SAMPLES,
+                            latency="low",
+                            callback=microphone_callback,
+                        )
+                        input_stream.start()
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": (
+                                "Desktop-audio monitor opened through PortAudio; "
+                                "capturing 48 kHz mono Float32."
+                            ),
+                        })
+                    else:
+                        try:
+                            import pyaudiowpatch as pyaudio
+                        except ImportError as exc:
+                            raise RuntimeError(
+                                "Desktop audio capture requires PyAudioWPatch. Install the project requirements and reopen MultiV."
+                            ) from exc
 
-                    loopback_stream = loopback_manager.open(
-                        format=pyaudio.paFloat32,
-                        channels=channels,
-                        rate=source_rate,
-                        input=True,
-                        input_device_index=input_device,
-                        frames_per_buffer=BATCH_SAMPLES,
-                        stream_callback=loopback_callback_factory(channels, source_rate, pyaudio),
-                        start=False,
-                    )
-                    loopback_stream.start_stream()
-                    self.events.put({
-                        "kind": "tx_log",
-                        "text": (
-                            f"Desktop output loopback opened: {info.get('name', 'selected output')} "
-                            f"({source_rate} Hz, {channels} channels); downmixing and converting to "
-                            "48 kHz mono Float32."
-                        ),
-                    })
+                        loopback_manager = pyaudio.PyAudio()
+                        info = loopback_manager.get_device_info_by_index(input_device)
+                        if not bool(info.get("isLoopbackDevice")):
+                            raise RuntimeError("The selected device is not a Windows WASAPI loopback input.")
+
+                        channels = min(2, int(info.get("maxInputChannels", 0)))
+                        source_rate = int(round(float(info.get("defaultSampleRate", SAMPLE_RATE_HZ))))
+                        if channels < 1 or source_rate < 1:
+                            raise RuntimeError("The selected desktop output does not expose a usable audio format.")
+
+                        loopback_stream = loopback_manager.open(
+                            format=pyaudio.paFloat32,
+                            channels=channels,
+                            rate=source_rate,
+                            input=True,
+                            input_device_index=input_device,
+                            frames_per_buffer=BATCH_SAMPLES,
+                            stream_callback=loopback_callback_factory(channels, source_rate, pyaudio),
+                            start=False,
+                        )
+                        loopback_stream.start_stream()
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": (
+                                f"Desktop output loopback opened: {info.get('name', 'selected output')} "
+                                f"({source_rate} Hz, {channels} channels); downmixing and converting to "
+                                "48 kHz mono Float32."
+                            ),
+                        })
                 elif audio_source == "mic" and not drm_mode:
                     import sounddevice
 
