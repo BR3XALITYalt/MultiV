@@ -56,8 +56,22 @@ jobs:
           print(f"Build version: {version}")
           PY
 
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install "Pillow>=10.0.0" "numpy>=1.26" "soundfile>=0.14.0" "av>=14.0.0"
+      - name: Compile Python files
+        run: python -m compileall -q .
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
   build:
-    needs: prepare
+    needs: [prepare, test]
     strategy:
       fail-fast: false
       matrix:
