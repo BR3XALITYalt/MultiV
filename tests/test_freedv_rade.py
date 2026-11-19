@@ -14,7 +14,7 @@ from freedv_rade import (
     StreamingDecimator3,
     StreamingLinearResampler,
     _read_exact,
-    prepare_rade_encoder,
+    _runtime_spec,
 )
 
 
@@ -75,10 +75,34 @@ class FreeDVRadePipelineTests(unittest.TestCase):
 
         self.assertEqual(_read_exact(ShortReader(b"abcdefghij"), 7), b"abcdefg")
 
-    def test_prepare_runtime_explains_unsupported_platform(self):
-        with mock.patch("freedv_rade.os.name", "posix"):
-            with self.assertRaisesRegex(RuntimeError, "currently available for Windows x64"):
-                prepare_rade_encoder()
+    def test_windows_runtime_uses_the_verified_windows_package(self):
+        with mock.patch("freedv_rade.os.name", "nt"):
+            asset, executable, libraries = _runtime_spec()
+
+        self.assertEqual(asset, "txitpy-rade-v1-windows-x64.zip")
+        self.assertEqual(executable, "freedv_rade_tx.exe")
+        self.assertIn("rade.dll", libraries)
+
+    def test_linux_x64_runtime_uses_the_native_linux_package(self):
+        with (
+            mock.patch("freedv_rade.os.name", "posix"),
+            mock.patch("freedv_rade.platform.system", return_value="Linux"),
+            mock.patch("freedv_rade.platform.machine", return_value="x86_64"),
+        ):
+            asset, executable, libraries = _runtime_spec()
+
+        self.assertEqual(asset, "txitpy-rade-v1-linux-x86_64.zip")
+        self.assertEqual(executable, "freedv_rade_tx")
+        self.assertEqual(libraries, ("librade.so*",))
+
+    def test_linux_arm_runtime_reports_that_no_prebuilt_package_exists(self):
+        with (
+            mock.patch("freedv_rade.os.name", "posix"),
+            mock.patch("freedv_rade.platform.system", return_value="Linux"),
+            mock.patch("freedv_rade.platform.machine", return_value="aarch64"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Linux x86_64"):
+                _runtime_spec()
 
 
 if __name__ == "__main__":
