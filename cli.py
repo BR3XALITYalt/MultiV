@@ -17,7 +17,11 @@ from typing import Any, Callable
 
 from audio_playlist import build_playlist_snapshot, normalize_audio_sources
 from discord_auth import auth_token_path, is_auth_token, safe_error_text
-from service_stop import WindowsServiceStopWindow, hide_service_console
+from service_stop import (
+    WindowsServiceStopWindow,
+    hide_service_console,
+    stop_nssm_parent_process,
+)
 from transmitter import (
     SUPPORTED_MODES,
     apply_nfm_transport,
@@ -783,11 +787,16 @@ def run_headless(
         logger.info("Audio device: %s", plan["audio_device_name"])
 
         shutdown_event = threading.Event()
+        nssm_stop_event = threading.Event()
         old_handlers = _install_shutdown_handlers(shutdown_event, logger)
         service_stop_window = None
         if os.name == "nt":
             try:
-                service_stop_window = WindowsServiceStopWindow(shutdown_event, logger)
+                service_stop_window = WindowsServiceStopWindow(
+                    shutdown_event,
+                    logger,
+                    nssm_stop_event,
+                )
                 service_stop_window.start()
             except Exception as exc:
                 logger.warning(
@@ -889,6 +898,10 @@ def run_headless(
                             "Could not close the hidden service-stop window: %s",
                             safe_error_text(str(exc), 800),
                         )
+                if nssm_stop_event.is_set():
+                    # Stop the verified NSSM parent only after MultiV has released
+                    # PTT and disconnected, then let the caller exit this process.
+                    stop_nssm_parent_process(logger)
                 for signum, previous in old_handlers.items():
                     try:
                         signal.signal(signum, previous)
