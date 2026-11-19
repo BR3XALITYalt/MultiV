@@ -10,10 +10,20 @@ from app_assets import asset_path
 
 def create_tray_image():
     """Load the shared application logo and prepare it for the system tray."""
-    from PIL import Image
+    from PIL import Image, ImageOps
 
     with Image.open(asset_path("logo.png")) as source:
-        return source.convert("RGBA").resize((64, 64), Image.Resampling.LANCZOS)
+        logo = ImageOps.contain(
+            source.convert("RGBA"),
+            (64, 64),
+            Image.Resampling.LANCZOS,
+        )
+    canvas = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    canvas.alpha_composite(
+        logo,
+        ((64 - logo.width) // 2, (64 - logo.height) // 2),
+    )
+    return canvas
 
 
 def create_tray_icon(
