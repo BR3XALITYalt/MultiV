@@ -132,3 +132,110 @@ jobs:
           files: |
             txitpy-rade-v1-windows-x64.zip
             txitpy-rade-v1-windows-x64.zip.sha256
+
+  build-linux-runtime:
+    needs: build-windows-runtime
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out TXITPY
+        uses: actions/checkout@v7
+
+      - name: Check out the pinned FreeDV RADE C implementation
+        uses: actions/checkout@v7
+        with:
+          repository: freedv/rade_c
+          ref: be66f3927eaf872a2fa2ebb4fa08f937d8bd2bce
+          path: rade_c
+
+      - name: Install the Linux build toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake autoconf automake libtool pkg-config build-essential make git zip
+
+      - name: Add the TXITPY streaming entry point
+        run: |
+          cp freedv_rade_tx.c rade_c/src/freedv_rade_tx.c
+          cat >> rade_c/src/CMakeLists.txt <<'EOF'
+
+          add_executable(freedv_rade_tx freedv_rade_tx.c)
+          target_link_libraries(freedv_rade_tx rade ${RADE_EXE_OPUS_LIBS})
+          EOF
+
+      - name: Build RADE for Linux x86_64
+        run: |
+          cmake -S rade_c -B rade_c/build-linux -DCMAKE_BUILD_TYPE=Release
+          cmake --build rade_c/build-linux --target freedv_rade_tx --parallel 2
+
+      - name: Package and test the Linux runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp rade_c/build-linux/src/freedv_rade_tx dist/
+          rade_library="$(find rade_c/build-linux/src -maxdepth 1 -type f -name 'librade.so*' -print -quit)"
+          if [ -z "$rade_library" ]; then
+            echo "Could not locate the Linux RADE shared library."
+            exit 1
+          fi
+          cp "$rade_library" dist/
+
+          if LD_LIBRARY_PATH="$PWD/dist" ldd dist/freedv_rade_tx | grep -q "not found"; then
+            echo "The Linux RADE runtime has unresolved shared-library dependencies."
+            LD_LIBRARY_PATH="$PWD/dist" ldd dist/freedv_rade_tx
+            exit 1
+          fi
+
+          cp rade_c/LICENSE dist/LICENSE-RADE.txt
+          opus_license="$(find rade_c/build-linux -path '*/build_opus/COPYING' -print -quit)"
+          if [ -z "$opus_license" ]; then
+            echo "Could not locate the bundled Opus license."
+            exit 1
+          fi
+          cp "$opus_license" dist/LICENSE-OPUS.txt
+          cat > dist/THIRD-PARTY-NOTICES.txt <<'EOF'
+          TXITPY FreeDV RADE V1 runtime
+
+          RADE C implementation:
+          https://github.com/freedv/rade_c
+          Licensed under the BSD 2-Clause License. See LICENSE-RADE.txt.
+
+          Speech feature extraction and FARGAN vocoder:
+          Opus project.
+          https://opus-codec.org/
+          See LICENSE-OPUS.txt.
+          EOF
+
+          LD_LIBRARY_PATH="$PWD/dist" dist/freedv_rade_tx </dev/null > dist/empty-output.bin
+          python - <<'PY'
+          import struct
+          from pathlib import Path
+
+          output = Path("dist/empty-output.bin").read_bytes()
+          if len(output) < 4:
+              raise SystemExit("The Linux RADE helper did not emit a frame header.")
+          sample_count = struct.unpack_from("<I", output)[0]
+          if sample_count != 1152 or len(output) != 4 + sample_count * 4:
+              raise SystemExit(
+                  f"Unexpected RADE end-of-over frame: {sample_count} samples, "
+                  f"{len(output)} output bytes."
+              )
+          print("Linux RADE V1 streaming helper smoke test passed.")
+          PY
+
+          (cd dist && zip -9 ../txitpy-rade-v1-linux-x86_64.zip freedv_rade_tx librade.so* LICENSE-RADE.txt LICENSE-OPUS.txt THIRD-PARTY-NOTICES.txt)
+          sha256sum txitpy-rade-v1-linux-x86_64.zip > txitpy-rade-v1-linux-x86_64.zip.sha256
+
+      - name: Publish the Linux runtime
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: txitpy-rade-runtime
+          target_commitish: main
+          name: TXITPY FreeDV RADE Runtime
+          body: Prebuilt FreeDV RADE V1 runtimes for Windows x64 and Linux x86_64.
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          files: |
+            txitpy-rade-v1-linux-x86_64.zip
+            txitpy-rade-v1-linux-x86_64.zip.sha256
