@@ -3,6 +3,8 @@ import types
 import unittest
 from unittest.mock import patch
 
+from app_assets import asset_path
+from PIL import Image
 from system_tray import create_tray_icon, create_tray_image
 
 
@@ -29,13 +31,18 @@ class FakeIcon:
 
 
 class SystemTrayTests(unittest.TestCase):
-    def test_tray_image_has_expected_size_and_transparency(self):
+    def test_tray_image_uses_repository_logo(self):
         image = create_tray_image()
+
+        with Image.open(asset_path("logo.png")) as source:
+            expected = source.convert("RGBA").resize(
+                (64, 64),
+                Image.Resampling.LANCZOS,
+            )
 
         self.assertEqual(image.size, (64, 64))
         self.assertEqual(image.mode, "RGBA")
-        self.assertEqual(image.getpixel((0, 0))[3], 0)
-        self.assertEqual(image.getpixel((32, 32)), (255, 255, 255, 255))
+        self.assertEqual(image.tobytes(), expected.tobytes())
 
     def test_left_click_restores_and_context_menu_quits(self):
         fake_pystray = types.SimpleNamespace(
