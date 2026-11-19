@@ -125,7 +125,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --add-data "assets;assets" --collect-all webview --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL --collect-all pyaudiowpatch --collect-all pystray main.py
+          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --add-data "assets;assets" --collect-all webview --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL --collect-all pyaudiowpatch --collect-all pystray --collect-all clr_loader --collect-all pythonnet --hidden-import clr main.py
           $build = "${{ github.run_number }}"
           $filename = "MultiV-windows-x86_64-$build.zip"
           $output = Join-Path $PWD "release-out"
@@ -133,6 +133,8 @@ jobs:
           Compress-Archive -Path "dist/MultiV/*" -DestinationPath (Join-Path $output $filename) -CompressionLevel Optimal
           $hash = (Get-FileHash (Join-Path $output $filename) -Algorithm SHA256).Hash.ToLower()
           "$hash  $filename" | Set-Content -NoNewline -Encoding ascii (Join-Path $output "$filename.sha256")
+          & "dist/MultiV/MultiV.exe" --help
+          if ($LASTEXITCODE -ne 0) { throw "The packaged Windows application did not start." }
 
       - name: Build Linux AppImage
         if: runner.os == 'Linux'
@@ -153,6 +155,7 @@ jobs:
           canvas.alpha_composite(image, ((256-image.width)//2, (256-image.height)//2))
           canvas.save("AppDir/usr/share/icons/hicolor/256x256/apps/multiv.png")
           PY
+          ln -s usr/share/icons/hicolor/256x256/apps/multiv.png "$APPDIR/.DirIcon"
 
           cat > "$APPDIR/usr/share/applications/multiv.desktop" <<'EOF'
           [Desktop Entry]
@@ -185,6 +188,7 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 ./appimagetool-x86_64.AppImage "$APPDIR" "release-out/$filename"
           chmod +x "release-out/$filename"
           sha256sum "release-out/$filename" > "release-out/$filename.sha256"
+          APPIMAGE_EXTRACT_AND_RUN=1 "release-out/$filename" --help >/tmp/multiv-appimage-help.txt
 
       - name: Upload platform artifact
         uses: actions/upload-artifact@v4
