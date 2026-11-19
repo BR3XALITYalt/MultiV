@@ -17,6 +17,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
+from app_assets import asset_path
+
 PASSWORD_ITERATIONS = 600_000
 SESSION_SECONDS = 12 * 60 * 60
 MAX_REQUEST_BYTES = 64 * 1024
@@ -65,6 +67,7 @@ LOGIN_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/png" href="/favicon.png">
 <title>MultiV - Browser control login</title>
 <style>
 :root{color-scheme:light;--blue:#1769aa;--ink:#202124;--muted:#5f6368;--line:#dadce0;--surface:#fff;--page:#f5f7fa}
@@ -175,6 +178,7 @@ DASHBOARD_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/png" href="/favicon.png">
 <meta name="csrf-token" content="__CSRF__">
 <title>MultiV - Browser control</title>
 <style>
@@ -594,7 +598,7 @@ class TxityWebGUI:
                     self.send_header("Cache-Control", "no-store")
                     self.send_header("X-Content-Type-Options", "nosniff")
                     self.send_header("Referrer-Policy", "no-referrer")
-                    self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+                    self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
                     if cookie:
                         self.send_header("Set-Cookie", cookie)
                     self.end_headers()
@@ -606,7 +610,7 @@ class TxityWebGUI:
                     self.send_header("Cache-Control", "no-store")
                     self.send_header("X-Content-Type-Options", "nosniff")
                     self.send_header("Referrer-Policy", "no-referrer")
-                    self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+                    self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
                     if cookie:
                         self.send_header("Set-Cookie", cookie)
                     self.end_headers()
@@ -673,6 +677,14 @@ class TxityWebGUI:
 
                 def do_GET(self) -> None:
                     path = urlsplit(self.path).path
+                    if path == "/favicon.png":
+                        try:
+                            logo = asset_path("logo.png").read_bytes()
+                        except OSError:
+                            self._send(404, b"Favicon unavailable", "text/plain; charset=utf-8")
+                        else:
+                            self._send(200, logo, "image/png")
+                        return
                     if path in {"/", "/index.html"}:
                         session_id, session = self._session()
                         if not session_id or not session:
