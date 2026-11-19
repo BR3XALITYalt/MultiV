@@ -27,7 +27,7 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         }
         self.assertIn("frequency_retry_context", nonlocal_names)
 
-    def test_drm_metadata_card_uses_page_as_its_pack_parent(self):
+    def test_drm_metadata_card_is_inside_advanced_settings(self):
         metadata_assignment = next(
             node
             for node in ast.walk(self.tree)
@@ -42,7 +42,7 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIsInstance(call.func, ast.Name)
         self.assertEqual(call.func.id, "make_card")
         self.assertIsInstance(call.args[0], ast.Name)
-        self.assertEqual(call.args[0].id, "page")
+        self.assertEqual(call.args[0].id, "advanced_container")
         self.assertNotIn("drm_metadata_slot", self.source)
 
 
@@ -61,6 +61,76 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         )
         self.assertIsInstance(assignment.value.args[0], ast.Name)
         self.assertEqual(assignment.value.args[0].id, "hero")
+
+
+    def test_transmit_status_is_next_to_start_stop_button(self):
+        labels = [
+            node
+            for node in ast.walk(self.tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "make_label"
+        ]
+        status_labels = [
+            node for node in labels
+            if any(
+                keyword.arg == "variable"
+                and isinstance(keyword.value, ast.Name)
+                and keyword.value.id == "tx_status_var"
+                for keyword in node.keywords
+            )
+        ]
+        self.assertTrue(status_labels)
+        self.assertTrue(
+            any(
+                node.args
+                and isinstance(node.args[0], ast.Name)
+                and node.args[0].id == "hero"
+                for node in status_labels
+            )
+        )
+        self.assertNotIn("status_card = make_card(page", self.source)
+
+    def test_live_reconfigure_is_debounced_and_restarts_active_transmission(self):
+        self.assertIn("def schedule_live_reconfigure(", self.source)
+        self.assertIn("root.after(\n                900,\n                apply_live_reconfigure,", self.source)
+        self.assertIn("transmitter.stop()", self.source)
+        self.assertIn("start_pending_live_reconfigure()", self.source)
+        self.assertIn("def build_transmission_request()", self.source)
+
+    def test_every_transmit_setting_is_watched_for_live_changes(self):
+        self.assertIn(
+            'setting_variable.trace_add("write", schedule_live_reconfigure)',
+            self.source,
+        )
+        self.assertIn(
+            'variable.trace_add("write", schedule_live_reconfigure)',
+            self.source,
+        )
+        self.assertIn(
+            'tx_audio_source_var',
+            self.source,
+        )
+        self.assertIn(
+            'tx_drm_service_label_var',
+            self.source,
+        )
+
+    def test_drm_progress_indicator_is_attached_to_signal_card(self):
+        assignment = next(
+            node
+            for node in ast.walk(self.tree)
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "drm_progressbar"
+                for target in node.targets
+            )
+        )
+        call = assignment.value
+        self.assertIsInstance(call, ast.Call)
+        self.assertEqual(call.func.id, "ttk.Progressbar")
+        self.assertIsInstance(call.args[0], ast.Name)
+        self.assertEqual(call.args[0].id, "signal_card")
 
     def test_advanced_signal_controls_use_collapsed_container(self):
         assignments = {}
