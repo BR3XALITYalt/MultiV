@@ -2145,7 +2145,7 @@ def build_app() -> None:
                 ),
                 "RADE": (
                     "FreeDV RADE V1 - neural digital voice over TXITY's USB or LSB audio transport. "
-                    "Uses a 1.5 kHz audio centre and channel. The first start downloads a verified Windows x64 encoder."
+                    "Uses a 1.5 kHz audio centre and channel. The first start downloads a verified native encoder package."
                 ),
                 "DRM": "DRM [EXPERIMENTAL] - one xHE-AAC or HE-AAC audio service. Choose 4.5 kHz robust, 9 kHz quality, or 9 kHz 64-QAM stereo maximum-quality profiles in DRM settings. Use a microphone or OGG, MP3, or FLAC playlists.",
                 "CW": "CW - carrier only. MultiV sends the configured CW message instead of microphone or desktop audio.",
@@ -2314,17 +2314,6 @@ def build_app() -> None:
             missing = [str(item) for item in (status.get("missing") or [])]
             if not missing:
                 missing = ["the DRM encoder has not been built on this computer"]
-
-            if not status.get("rust_ready") and os.name != "nt":
-                restore_previous_mode()
-                messagebox.showinfo(
-                    "Rust is required for DRM",
-                    "Install Rust 1.88 or newer from https://rust-lang.org/tools/install, "
-                    "then restart MultiV and select DRM again.",
-                    parent=root,
-                )
-                webbrowser.open("https://rust-lang.org/tools/install")
-                return
 
             prompt = (
                 "DRM mode is not ready. MultiV could not detect:\n\n"
@@ -3040,7 +3029,11 @@ def build_app() -> None:
             if selected_source == "Audio playlist":
                 return
             if selected_source == "Desktop audio (output loopback)":
-                tx_audio_device_label_var.set("Desktop output device")
+                tx_audio_device_label_var.set(
+                    "Desktop monitor source"
+                    if sys.platform.startswith("linux")
+                    else "Desktop output device"
+                )
                 try:
                     devices = list_loopback_devices()
                 except Exception as exc:
@@ -3759,8 +3752,8 @@ def build_app() -> None:
         description = (
             "MultiV uses TXITY's official Discord sign-in flow. Your website session "
             "uses a separate browser profile. MultiV checks it each time the "
-            "desktop app starts. MultiV saves the TXITY session token in its AppData "
-            "folder so headless mode can use it."
+            "desktop app starts. MultiV saves the TXITY session token in its per-user "
+            "configuration folder so headless mode can use it."
         )
         make_label(
             card,
