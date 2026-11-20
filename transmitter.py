@@ -46,6 +46,12 @@ from freedv_rade import (
     prepare_rade_encoder,
 )
 
+from icecast_output import (
+    ICECAST_BITRATES,
+    IcecastBroadcaster,
+    normalize_icecast_destination,
+)
+
 
 BASE_URL = "https://txity.radiodiscussion.org"
 AUDIO_URL = "wss://txity.radiodiscussion.org/ws/audio"
@@ -870,6 +876,8 @@ class TxityTransmitter:
         playlist_files: list[str] | None = None,
         playlist_shuffle: bool = False,
         playlist_loop: bool = False,
+        icecast_destinations: list[dict[str, Any]] | None = None,
+        icecast_bitrate_kbps: int = 128,
     ) -> None:
         selected_source = str(audio_source or "mic").casefold()
         if selected_source not in SUPPORTED_AUDIO_SOURCES:
@@ -881,6 +889,20 @@ class TxityTransmitter:
         selected_playlist = collect_audio_files(playlist_files or [])
         if selected_source == "playlist" and not selected_playlist:
             raise ValueError("Add at least one supported audio file to the playlist.")
+        selected_icecast_destinations = [
+            normalize_icecast_destination(item)
+            for item in (icecast_destinations or [])
+        ]
+        try:
+            selected_icecast_bitrate = int(icecast_bitrate_kbps)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Icecast bitrate must be a whole number.") from exc
+        if selected_icecast_bitrate not in ICECAST_BITRATES:
+            raise ValueError(
+                "Icecast bitrate must be one of: "
+                + ", ".join(str(value) for value in ICECAST_BITRATES)
+                + " kbps."
+            )
 
         with self._lock:
             if self._starting or self._active or (self._thread and self._thread.is_alive()):
@@ -906,6 +928,8 @@ class TxityTransmitter:
                     selected_playlist,
                     bool(playlist_shuffle),
                     bool(playlist_loop),
+                    selected_icecast_destinations,
+                    selected_icecast_bitrate,
                 ),
                 daemon=True,
                 name="txity-transmitter",
@@ -939,6 +963,8 @@ class TxityTransmitter:
         playlist_files: list[str],
         playlist_shuffle: bool,
         playlist_loop: bool,
+        icecast_destinations: list[dict[str, Any]],
+        icecast_bitrate_kbps: int,
     ) -> None:
         import numpy as np
         import websocket
@@ -975,6 +1001,26 @@ class TxityTransmitter:
         audio_thread_error: list[str] = []
         audio_capture_error: list[str] = []
         audio_queue = self._audio_queue
+        icecast_broadcaster: IcecastBroadcaster | None = None
+        if icecast_destinations:
+            if drm_mode or mode == "CW":
+                unsupported_mode = "DRM" if drm_mode else "CW"
+                self.events.put({
+                    "kind": "tx_icecast_state",
+                    "name": "Icecast",
+                    "state": "Unavailable",
+                    "text": f"Icecast output is not available in {unsupported_mode} mode.",
+                })
+            else:
+                icecast_broadcaster = IcecastBroadcaster(
+                    icecast_destinations,
+                    bitrate_kbps=icecast_bitrate_kbps,
+                    station_name=str(config.get("stationName") or "MultiV"),
+                    station_description=str(config.get("stationDescription") or ""),
+                    events=self.events,
+                    sample_rate=SAMPLE_RATE_HZ,
+                )
+                icecast_broadcaster.start()
         nfm_modulator = (
             StreamingNFMModulator(
                 if_hz=int(config.get("_txitpyNfmIfHz", NFM_IF_HZ)),
@@ -1076,6 +1122,11 @@ class TxityTransmitter:
             import numpy as np
 
             pcm = np.asarray(samples, dtype=np.float32).reshape(-1)
+            if pcm.size and icecast_broadcaster is not None:
+                icecast_broadcaster.send_pcm(
+                    pcm,
+                    wait_for_space=wait_for_space,
+                )
             if rade_encoder is not None:
                 if playlist_info is not None:
                     with rade_playlist_info_lock:
@@ -2156,6 +2207,17 @@ class TxityTransmitter:
                     loopback_manager.terminate()
                 except Exception:
                     pass
+
+            if icecast_broadcaster is not None:
+                try:
+                    icecast_broadcaster.stop()
+                except Exception as exc:
+                    self.events.put({
+                        "kind": "tx_icecast_state",
+                        "name": "Icecast",
+                        "state": "Shutdown error",
+                        "text": f"Could not stop Icecast outputs cleanly: {_safe_error(exc)}",
+                    })
 
             close_audio_connection()
 
