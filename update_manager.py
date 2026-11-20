@@ -228,7 +228,8 @@ $InstallDir = {_windows_quote(str(install_dir))}
 $DefaultInstallDir = {_windows_quote(str(default_install_dir))}
 $OriginalExecutable = {_windows_quote(str(executable))}
 $LogPath = {_windows_quote(str(log_path))}
-$UninstallKey = 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{{7C8D40C3-9EAA-49E0-8CB1-7819402B4761}}_is1'
+$MachineUninstallKey = 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{{7C8D40C3-9EAA-49E0-8CB1-7819402B4761}}_is1'
+$UserUninstallKey = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{{7C8D40C3-9EAA-49E0-8CB1-7819402B4761}}_is1'
 
 function Write-UpdateLog([string]$Message) {{
     $Timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
@@ -253,7 +254,10 @@ try {{
     Write-UpdateLog "MultiV has exited."
 
     # Keep existing installer locations. Portable copies move to Program Files.
-    if (-not (Test-Path -LiteralPath $UninstallKey)) {{
+    if (
+        -not (Test-Path -LiteralPath $MachineUninstallKey) -and
+        -not (Test-Path -LiteralPath $UserUninstallKey)
+    ) {{
         $InstallDir = $DefaultInstallDir
     }}
     Write-UpdateLog "Starting installer for $InstallDir."
