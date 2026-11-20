@@ -60,7 +60,7 @@ def normalize_icecast_destination(value: Any) -> dict[str, str]:
         raise ValueError("The Icecast source password contains invalid characters.")
 
     host = parsed.hostname
-    default_port = 443 if parsed.scheme.casefold() == "https" else 80
+    default_port = 443 if parsed.scheme.casefold() == "https" else 8000
     selected_port = port or default_port
     display_host = f"[{host}]" if ":" in host else host
     display_name = f"{display_host}:{selected_port}{parsed.path}"
@@ -234,6 +234,7 @@ class _Destination:
                     except queue.Empty:
                         continue
                     if payload is None:
+                        self.emit("Disconnected")
                         return
                     connection.sendall(payload)
 
