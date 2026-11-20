@@ -49,6 +49,7 @@ from transmitter import (
     list_loopback_devices,
     parse_rf_frequency,
 )
+from icecast_output import ICECAST_BITRATES, normalize_icecast_destination
 from web_gui import TxityWebGUI, create_password_record
 from station_directory import (
     Station,
@@ -301,6 +302,26 @@ def build_app() -> None:
     tx_ssb_high_cut_var = tk.StringVar(root, saved_text("ssb_high_cut_hz", "0"))
     tx_am_bandwidth_var = tk.StringVar(root, saved_text("am_bandwidth_hz", "12000"))
     tx_am_pre_emphasis_var = tk.BooleanVar(root, saved_bool("am_pre_emphasis", False))
+    saved_icecast_destinations = saved_tx_settings.get("icecast_destinations", [])
+    if not isinstance(saved_icecast_destinations, list):
+        saved_icecast_destinations = []
+    icecast_destinations: list[dict[str, Any]] = []
+    for saved_destination in saved_icecast_destinations[:8]:
+        if not isinstance(saved_destination, dict):
+            continue
+        icecast_destinations.append({
+            "url": str(saved_destination.get("url") or "")[:2_048],
+            "username": str(saved_destination.get("username") or "source")[:128],
+            "password": str(saved_destination.get("password") or ""),
+            "enabled": bool(saved_destination.get("enabled", True)),
+        })
+    tx_icecast_bitrate_var = tk.StringVar(
+        root,
+        saved_text("icecast_bitrate_kbps", "128"),
+    )
+    tx_icecast_status_var = tk.StringVar(root, "No Icecast destinations configured.")
+    tx_icecast_states: dict[str, str] = {}
+
     tx_status_var = tk.StringVar(root, "Not transmitting")
     tx_audio_device_ids: dict[str, int | None] = {"System default": None}
     tx_profile_initialized = bool(saved_text("station_name", "").strip())
@@ -332,6 +353,8 @@ def build_app() -> None:
             "station_dbm": tx_power_var.get(),
             "audio_source": tx_audio_source_var.get(),
             "audio_device": tx_audio_device_var.get(),
+            "icecast_bitrate_kbps": tx_icecast_bitrate_var.get(),
+            "icecast_destinations": [dict(item) for item in icecast_destinations],
             "playlist_files": list(tx_playlist_files),
             "playlist_sources": list(tx_playlist_sources),
             "playlist_excluded_files": sorted(tx_playlist_excluded_files),
@@ -383,6 +406,8 @@ def build_app() -> None:
                 json.dumps(tx_settings_snapshot(), ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            if os.name != "nt":
+                os.chmod(temporary, 0o600)
             temporary.replace(path)
         except OSError as exc:
             try:
@@ -440,7 +465,7 @@ def build_app() -> None:
         tx_nfm_profile_var,
         tx_ssb_bandwidth_var,
         tx_ssb_low_cut_var, tx_ssb_high_cut_var, tx_am_bandwidth_var,
-        tx_am_pre_emphasis_var,
+        tx_am_pre_emphasis_var, tx_icecast_bitrate_var,
     )
     for setting_variable in tx_setting_variables:
         setting_variable.trace_add("write", schedule_tx_settings_save)
@@ -1394,6 +1419,28 @@ def build_app() -> None:
                 "DRM mode supports microphone and playlist inputs, not desktop audio loopback."
             )
 
+        selected_icecast_destinations = []
+        for destination in icecast_destinations:
+            if not bool(destination.get("enabled", True)):
+                continue
+            if not str(destination.get("url") or "").strip() and not str(
+                destination.get("password") or ""
+            ):
+                continue
+            selected_icecast_destinations.append(
+                normalize_icecast_destination(destination)
+            )
+        try:
+            icecast_bitrate_kbps = int(tx_icecast_bitrate_var.get())
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Icecast bitrate must be a whole number.") from exc
+        if icecast_bitrate_kbps not in ICECAST_BITRATES:
+            raise ValueError(
+                "Icecast bitrate must be one of: "
+                + ", ".join(str(value) for value in ICECAST_BITRATES)
+                + " kbps."
+            )
+
         playlist_files = list(tx_playlist_files) if audio_source == "playlist" else []
         selected_device = (
             tx_audio_device_ids.get(tx_audio_device_var.get())
@@ -1425,6 +1472,8 @@ def build_app() -> None:
             "playlist_files": list(playlist_files),
             "playlist_shuffle": playlist_shuffle,
             "playlist_loop": playlist_loop,
+            "icecast_destinations": list(selected_icecast_destinations),
+            "icecast_bitrate_kbps": icecast_bitrate_kbps,
         }
         return {
             "config": config,
@@ -1433,6 +1482,8 @@ def build_app() -> None:
             "playlist_files": playlist_files,
             "playlist_shuffle": playlist_shuffle,
             "playlist_loop": playlist_loop,
+            "icecast_destinations": list(selected_icecast_destinations),
+            "icecast_bitrate_kbps": icecast_bitrate_kbps,
             "frequency_retry_context": retry_context,
         }
 
@@ -1446,6 +1497,8 @@ def build_app() -> None:
             playlist_files=request["playlist_files"],
             playlist_shuffle=request["playlist_shuffle"],
             playlist_loop=request["playlist_loop"],
+            icecast_destinations=request["icecast_destinations"],
+            icecast_bitrate_kbps=request["icecast_bitrate_kbps"],
         )
         live_reconfigure_state["active_request"] = request
         tx_status_var.set("Preparing transmission...")
@@ -1463,6 +1516,8 @@ def build_app() -> None:
             "playlist_files",
             "playlist_shuffle",
             "playlist_loop",
+            "icecast_destinations",
+            "icecast_bitrate_kbps",
         )
         return all(left.get(key) == right.get(key) for key in keys)
 
@@ -1797,6 +1852,8 @@ def build_app() -> None:
                 playlist_files=context["playlist_files"],
                 playlist_shuffle=context["playlist_shuffle"],
                 playlist_loop=context["playlist_loop"],
+                icecast_destinations=context.get("icecast_destinations", []),
+                icecast_bitrate_kbps=context.get("icecast_bitrate_kbps", 128),
             )
         except Exception as exc:
             frequency_retry_context = None
