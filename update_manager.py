@@ -8,6 +8,8 @@ import os
 import platform
 import re
 import shlex
+import shutil
+import time
 import subprocess
 import sys
 import tempfile
@@ -210,52 +212,127 @@ def _windows_quote(value: str) -> str:
 
 
 def _schedule_windows_update(installer: Path) -> None:
+    """Launch a detached helper that installs the package after MultiV exits."""
     executable = Path(sys.executable).resolve()
     install_dir = executable.parent
-    script_path = Path(tempfile.gettempdir()) / f"multiv-update-{uuid.uuid4().hex}.ps1"
     default_install_dir = Path(
         os.environ.get("ProgramFiles", r"C:\Program Files")
     ) / "MultiV"
+    script_path = Path(tempfile.gettempdir()) / f"multiv-update-{uuid.uuid4().hex}.ps1"
+    log_path = Path(tempfile.gettempdir()) / "MultiV-update.log"
+
     script = f"""$ErrorActionPreference = 'Stop'
 $ParentProcessId = {os.getpid()}
 $Installer = {_windows_quote(str(installer))}
 $InstallDir = {_windows_quote(str(install_dir))}
 $DefaultInstallDir = {_windows_quote(str(default_install_dir))}
+$OriginalExecutable = {_windows_quote(str(executable))}
+$LogPath = {_windows_quote(str(log_path))}
 $UninstallKey = 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{{7C8D40C3-9EAA-49E0-8CB1-7819402B4761}}_is1'
-while (Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue) {{
-    Start-Sleep -Milliseconds 300
+
+function Write-UpdateLog([string]$Message) {{
+    $Timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    Add-Content -LiteralPath $LogPath -Value "[$Timestamp] $Message"
 }}
+
 try {{
-    # ZIP-based portable installs have no Inno Setup registration. Move those
-    # users to the standard Program Files location during their first installer update.
+    Write-UpdateLog "Updater helper started. Waiting for MultiV process $ParentProcessId."
+    $Parent = $null
+    try {{
+        $Parent = [System.Diagnostics.Process]::GetProcessById($ParentProcessId)
+    }} catch [System.ArgumentException] {{
+        $Parent = $null
+    }}
+
+    if ($null -ne $Parent) {{
+        if (-not $Parent.WaitForExit(120000)) {{
+            throw "MultiV did not exit within 120 seconds. The installer was not started."
+        }}
+        $Parent.Dispose()
+    }}
+    Write-UpdateLog "MultiV has exited."
+
+    # Keep existing installer locations. Portable copies move to Program Files.
     if (-not (Test-Path -LiteralPath $UninstallKey)) {{
         $InstallDir = $DefaultInstallDir
     }}
-    $InstallerProcess = Start-Process -FilePath $Installer -ArgumentList @('/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-') -Verb RunAs -Wait -PassThru
-    if ($InstallerProcess.ExitCode -ne 0) {{
-        throw "The MultiV installer exited with code $($InstallerProcess.ExitCode)."
+    Write-UpdateLog "Starting installer for $InstallDir."
+
+    $InstallerArguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR="' + $InstallDir + '"'
+    $InstallerProcess = Start-Process -FilePath $Installer -ArgumentList $InstallerArguments -Verb RunAs -Wait -PassThru
+    if ($null -eq $InstallerProcess -or $InstallerProcess.ExitCode -ne 0) {{
+        $ExitCode = if ($null -eq $InstallerProcess) {{ 'unknown' }} else {{ $InstallerProcess.ExitCode }}
+        throw "The MultiV installer exited with code $ExitCode."
     }}
+    Write-UpdateLog "Installer completed successfully."
+
     $InstalledExecutable = Join-Path $InstallDir 'MultiV.exe'
-    if (-not (Test-Path -LiteralPath $InstalledExecutable)) {{
+    if (-not (Test-Path -LiteralPath $InstalledExecutable -PathType Leaf)) {{
         throw "The installer completed, but MultiV.exe was not found in $InstallDir."
     }}
+
+    Write-UpdateLog "Starting updated MultiV."
     Start-Process -FilePath $InstalledExecutable -WorkingDirectory $InstallDir
 }} catch {{
-    $_ | Out-File -FilePath (Join-Path $env:TEMP 'MultiV-update-error.log') -Append
+    $Failure = $_.Exception.Message
+    Write-UpdateLog "UPDATE FAILED: $Failure"
+
+    # A cancelled elevation prompt or failed install must not leave the user
+    # with a closed application. Restart the previous copy and show the log path.
+    if (Test-Path -LiteralPath $OriginalExecutable -PathType Leaf) {{
+        try {{
+            Start-Process -FilePath $OriginalExecutable -WorkingDirectory (Split-Path -Parent $OriginalExecutable)
+        }} catch {{
+            Write-UpdateLog "Could not restart the previous application: $($_.Exception.Message)"
+        }}
+    }}
+    try {{
+        Add-Type -AssemblyName PresentationFramework
+        $Message = "MultiV could not complete the update." + [Environment]::NewLine + [Environment]::NewLine + $Failure + [Environment]::NewLine + [Environment]::NewLine + "Details: $LogPath"
+        [System.Windows.MessageBox]::Show(
+            $Message,
+            "MultiV update failed",
+            [System.Windows.MessageBoxButton]::OK,
+            [System.Windows.MessageBoxImage]::Error
+        ) | Out-Null
+    }} catch {{
+        Write-UpdateLog "Could not display the update error dialog."
+    }}
 }} finally {{
     Remove-Item -LiteralPath $Installer -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 }}
 """
     script_path.write_text(script, encoding="utf-8")
+
+    powershell = (
+        Path(os.environ.get("SystemRoot", r"C:\Windows"))
+        / "System32"
+        / "WindowsPowerShell"
+        / "v1.0"
+        / "powershell.exe"
+    )
+    if not powershell.is_file():
+        located = shutil.which("powershell.exe")
+        if located:
+            powershell = Path(located)
+        else:
+            script_path.unlink(missing_ok=True)
+            installer.unlink(missing_ok=True)
+            raise RuntimeError(
+                "Windows PowerShell could not be found. The update was downloaded, "
+                "but MultiV has not been closed."
+            )
+
     flags = (
-        getattr(subprocess, "DETACHED_PROCESS", 0)
-        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
         | getattr(subprocess, "CREATE_NO_WINDOW", 0)
     )
     try:
-        subprocess.Popen(
+        helper = subprocess.Popen(
             [
-                "powershell.exe",
+                str(powershell),
+                "-NoLogo",
                 "-NoProfile",
                 "-NonInteractive",
                 "-ExecutionPolicy",
@@ -269,6 +346,20 @@ try {{
             creationflags=flags,
             close_fds=True,
         )
+        # Confirm that the detached helper actually started before allowing the
+        # GUI to close. This catches missing executables and immediate launch errors.
+        time.sleep(0.35)
+        exit_code = helper.poll()
+        if exit_code is not None:
+            details = ""
+            try:
+                details = log_path.read_text(encoding="utf-8", errors="replace")[-1_000:]
+            except OSError:
+                pass
+            raise RuntimeError(
+                f"The Windows updater helper exited immediately with code {exit_code}. "
+                + (details or "See MultiV-update.log in your temporary folder.")
+            )
     except Exception:
         script_path.unlink(missing_ok=True)
         installer.unlink(missing_ok=True)
