@@ -560,7 +560,7 @@ def build_app() -> None:
     shell_built = False
     active_scroll_canvas: tk.Canvas | None = None
     SCROLL_PIXELS_PER_NOTCH = 96
-    SCROLL_UNIT_PIXELS = 16
+    SCROLL_UNIT_PIXELS = 1
     scroll_canvases: list[tk.Canvas] = []
 
     def scroll_active_canvas(event, direction: int | None = None):
@@ -577,8 +577,6 @@ def build_app() -> None:
             bottom = top + canvas.winfo_height()
             if not (left <= event.x_root < right and top <= event.y_root < bottom):
                 return
-            if not canvas.bbox("all"):
-                return
         except tk.TclError:
             return
 
@@ -594,6 +592,10 @@ def build_app() -> None:
         if units:
             try:
                 canvas.yview_scroll(units, "units")
+                # Tk batches Canvas redraws as idle work. Flush that work after
+                # each wheel event so a continuous event stream cannot starve
+                # the visible scroll update.
+                canvas.update_idletasks()
             except tk.TclError:
                 return
         return "break"
@@ -4816,18 +4818,6 @@ def build_app() -> None:
                 button = make_button(nav_frame, label, lambda target=destination: navigate(target), kind="normal", padx=12, pady=7)
                 button.pack(side="left", padx=2, pady=2)
                 nav_buttons[destination] = button
-
-            txity_menu = ttk.Menubutton(topbar, text="TXITY ▾")
-            txity_menu.pack(side="left", padx=(8, 0))
-            txity_menu_items = tk.Menu(
-                txity_menu, tearoff=False,
-                background=palette["background"], foreground=palette["foreground"],
-                activebackground=palette["selectionBackground"],
-                activeforeground=palette["selectionForeground"],
-            )
-            txity_menu_items.add_command(label="Open TXITY website", command=lambda: webbrowser.open(BASE_URL))
-            txity_menu_items.add_command(label="Station directory", command=open_station_directory)
-            txity_menu.configure(menu=txity_menu_items)
 
             theme_button = make_button(
                 topbar, "Light mode" if theme_mode == "dark" else "Dark mode",
