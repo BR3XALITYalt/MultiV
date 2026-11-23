@@ -3021,6 +3021,70 @@ def build_app() -> None:
             wraplength=850,
         ).pack(anchor="w", pady=(0, 10))
 
+        built_in_server_frame = tk.LabelFrame(
+            icecast_card,
+            text="Built-in Icecast server",
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            font=("Segoe UI", 10, "bold"),
+            padx=10,
+            pady=8,
+            relief="groove",
+            borderwidth=1,
+        )
+        built_in_server_frame.pack(fill="x", pady=(0, 12))
+        tk.Checkbutton(
+            built_in_server_frame,
+            text="Host a stream from MultiV",
+            variable=tx_icecast_server_enabled_var,
+            bg=palette["surfaceContainerLow"],
+            fg=palette["onSurface"],
+            activebackground=palette["surfaceContainerLow"],
+            activeforeground=palette["onSurface"],
+            selectcolor=palette["surfaceContainerLowest"],
+            font=("Segoe UI", 9, "bold"),
+        ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 7))
+
+        def add_server_setting(label_text: str, variable: tk.StringVar, row: int, *, secret: bool = False, width: int = 18) -> None:
+            make_label(
+                built_in_server_frame,
+                label_text,
+                font=("Segoe UI", 9, "normal"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=4)
+            entry = tk.Entry(
+                built_in_server_frame,
+                textvariable=variable,
+                show="*" if secret else "",
+                width=width,
+                font=("Segoe UI", 9),
+                bg=palette["surfaceContainerLowest"],
+                fg=palette["onSurface"],
+                insertbackground=palette["onSurface"],
+                relief="flat",
+                borderwidth=1,
+                highlightthickness=1,
+                highlightbackground=palette["outline"],
+                highlightcolor=palette["primary"],
+            )
+            entry.grid(row=row, column=1, sticky="ew", ipady=4, padx=(0, 16), pady=4)
+            return entry
+
+        built_in_server_frame.grid_columnconfigure(1, weight=1)
+        add_server_setting("Port", tx_icecast_server_port_var, 1, width=8)
+        add_server_setting("Mountpoint", tx_icecast_server_mount_var, 2)
+        add_server_setting("Listener password (optional)", tx_icecast_server_password_var, 3, secret=True)
+        add_server_setting("Maximum listeners", tx_icecast_server_max_listeners_var, 4, width=8)
+        make_label(
+            built_in_server_frame,
+            "The server starts with transmission and stops when transmission stops. Stream URL: http://YOUR-IP:PORT/MOUNT. Use 0.0.0.0 to listen on all network interfaces. Router/firewall access may be needed for remote listeners.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(5, 0))
+
         icecast_list_frame = tk.Frame(
             icecast_card,
             bg=palette["surfaceContainerLow"],
