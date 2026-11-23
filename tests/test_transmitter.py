@@ -1,4 +1,5 @@
 import queue
+import threading
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -43,6 +44,21 @@ from transmitter import (
 
 
 class TransmitterProtocolTests(unittest.TestCase):
+
+    def test_early_worker_failure_cannot_leave_transmitter_busy(self):
+        events = queue.Queue()
+        transmitter = TxityTransmitter(object(), events)
+        transmitter._starting = True
+        transmitter._thread = threading.current_thread()
+
+        with mock.patch.object(transmitter, "_run", side_effect=RuntimeError("startup failed")):
+            transmitter._run_guarded()
+
+        self.assertFalse(transmitter.is_busy)
+        self.assertIsNone(transmitter._thread)
+        queued = [events.get_nowait(), events.get_nowait()]
+        self.assertEqual(queued[0]["kind"], "tx_error")
+        self.assertEqual(queued[1]["state"], "stopped")
 
     def test_icecast_only_start_does_not_require_txity_credentials(self):
         events = queue.Queue()
