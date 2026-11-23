@@ -221,6 +221,29 @@ class IcecastDestinationTests(unittest.TestCase):
             )
             self.assertEqual(broadcaster.bitrate, bitrate * 1000)
 
+    def test_available_encoders_produce_stream_packets(self):
+        import numpy as np
+        from icecast_output import available_icecast_formats
+
+        available = available_icecast_formats()
+        for audio_format in available:
+            with self.subTest(audio_format=audio_format):
+                broadcaster = IcecastBroadcaster(
+                    [{
+                        "url": f"http://{audio_format}.example/live",
+                        "password": "secret",
+                        "format": audio_format,
+                        "bitrate": 96,
+                    }],
+                    events=queue.Queue(),
+                )
+                group = broadcaster._groups[0]
+                group.input_queue.put(np.zeros(512, dtype=np.float32))
+                group.input_queue.put(None)
+                broadcaster._encode_group(group)
+                destination = broadcaster._destinations[0]
+                self.assertFalse(destination.packets.empty())
+
     def test_send_pcm_copies_finite_mono_samples_into_bounded_queue(self):
         import numpy as np
 
