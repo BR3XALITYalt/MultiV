@@ -893,10 +893,24 @@ class TxityTransmitter:
         if selected_source == "playlist" and not selected_playlist:
             raise ValueError("Add at least one supported audio file to the playlist.")
         selected_txity_enabled = bool(txity_enabled)
-        selected_icecast_destinations = [
-            normalize_icecast_destination(item)
-            for item in (icecast_destinations or [])
-        ]
+        selected_icecast_destinations = []
+        for item in icecast_destinations or []:
+            try:
+                selected_icecast_destinations.append(
+                    normalize_icecast_destination(item)
+                )
+            except Exception as exc:
+                destination_name = (
+                    str(item.get("url") or "Icecast destination")
+                    if isinstance(item, dict)
+                    else "Icecast destination"
+                )
+                self.events.put({
+                    "kind": "tx_icecast_state",
+                    "name": destination_name[:120],
+                    "state": "Invalid configuration",
+                    "text": f"Skipped this Icecast destination: {_safe_error(exc)}",
+                })
         selected_icecast_server_settings = dict(icecast_server_settings or {})
         icecast_output_enabled = bool(
             selected_icecast_destinations
@@ -1400,29 +1414,59 @@ class TxityTransmitter:
                         "text": f"Icecast output is not available in {unsupported_mode} mode.",
                     })
                 else:
-                    if bool(icecast_server_settings.get("enabled")):
-                        local_icecast_server = EmbeddedIcecastServer(
-                            host=str(icecast_server_settings.get("host") or "0.0.0.0"),
-                            port=int(icecast_server_settings.get("port", 8000)),
-                            mount=str(icecast_server_settings.get("mount") or "/live.mp3"),
-                            name=str(config.get("stationName") or "MultiV"),
-                            description=str(config.get("stationDescription") or ""),
-                            listener_password=str(icecast_server_settings.get("listener_password") or ""),
-                            max_listeners=int(icecast_server_settings.get("max_listeners", 25)),
-                            audio_format=str(icecast_server_settings.get("audio_format") or "ogg_opus"),
-                            bitrate_kbps=int(icecast_server_settings.get("bitrate_kbps", icecast_bitrate_kbps)),
+                    try:
+                        if bool(icecast_server_settings.get("enabled")):
+                            local_icecast_server = EmbeddedIcecastServer(
+                                host=str(icecast_server_settings.get("host") or "0.0.0.0"),
+                                port=int(icecast_server_settings.get("port", 8000)),
+                                mount=str(icecast_server_settings.get("mount") or "/live"),
+                                name=str(config.get("stationName") or "MultiV"),
+                                description=str(config.get("stationDescription") or ""),
+                                listener_password=str(icecast_server_settings.get("listener_password") or ""),
+                                max_listeners=int(icecast_server_settings.get("max_listeners", 25)),
+                                audio_format=str(icecast_server_settings.get("audio_format") or "ogg_opus"),
+                                bitrate_kbps=int(icecast_server_settings.get("bitrate_kbps", icecast_bitrate_kbps)),
+                                events=self.events,
+                            )
+                        icecast_broadcaster = IcecastBroadcaster(
+                            icecast_destinations,
+                            bitrate_kbps=icecast_bitrate_kbps,
+                            station_name=str(config.get("stationName") or "MultiV"),
+                            station_description=str(config.get("stationDescription") or ""),
                             events=self.events,
+                            sample_rate=SAMPLE_RATE_HZ,
+                            local_server=local_icecast_server,
                         )
-                    icecast_broadcaster = IcecastBroadcaster(
-                        icecast_destinations,
-                        bitrate_kbps=icecast_bitrate_kbps,
-                        station_name=str(config.get("stationName") or "MultiV"),
-                        station_description=str(config.get("stationDescription") or ""),
-                        events=self.events,
-                        sample_rate=SAMPLE_RATE_HZ,
-                        local_server=local_icecast_server,
-                    )
-                    icecast_broadcaster.start()
+                        icecast_broadcaster.start()
+                        if (
+                            not txity_enabled
+                            and not icecast_broadcaster._groups
+                            and not icecast_broadcaster._destinations
+                        ):
+                            raise RuntimeError("No Icecast output encoder could be started.")
+                    except Exception as exc:
+                        if icecast_broadcaster is not None:
+                            try:
+                                icecast_broadcaster.stop()
+                            except Exception:
+                                pass
+                        elif local_icecast_server is not None:
+                            try:
+                                local_icecast_server.stop()
+                            except Exception:
+                                pass
+                        icecast_broadcaster = None
+                        local_icecast_server = None
+                        self.events.put({
+                            "kind": "tx_icecast_state",
+                            "name": "Icecast",
+                            "state": "Start error",
+                            "text": f"Icecast could not start: {_safe_error(exc)}",
+                        })
+                        if not txity_enabled:
+                            raise RuntimeError(
+                                f"Icecast could not start: {_safe_error(exc)}"
+                            ) from exc
 
             drm_config_path: Path | None = None
             encoder_path: Path | None = None
