@@ -188,7 +188,7 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
                 self.assertEqual(call.args[0].id, "advanced_container")
 
         self.assertIn('advanced_toggle.pack(anchor="w"', self.source)
-        self.assertIn('advanced_container.pack(fill="x", before=audio_card', self.source)
+        self.assertIn('advanced_container.pack(fill="x", before=cw_card', self.source)
 
 
 if __name__ == "__main__":
