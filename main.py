@@ -2975,11 +2975,11 @@ def build_app() -> None:
                 output_row_widgets[provider_name].pack(fill="x", pady=(0, 8))
             for provider_name, menu in output_row_menus.items():
                 menu.entryconfigure(
-                    "Move up",
+                    0,
                     state="disabled" if output_order.index(provider_name) == 0 else "normal",
                 )
                 menu.entryconfigure(
-                    "Move down",
+                    1,
                     state=(
                         "disabled"
                         if output_order.index(provider_name) == len(output_order) - 1
