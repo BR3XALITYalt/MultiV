@@ -12,9 +12,13 @@ class SunValleyThemeTests(unittest.TestCase):
         self.assertEqual(dark["foreground"], "#fafafa")
         self.assertEqual(dark["accent"], "#57c8ff")
         self.assertEqual(dark["selectionBackground"], "#2f60d8")
+        self.assertEqual(dark["mutedForeground"], "#595959")
+        self.assertEqual(dark["outline"], "#595959")
         self.assertEqual(light["background"], "#fafafa")
         self.assertEqual(light["foreground"], "#1c1c1c")
         self.assertEqual(light["accent"], "#005fb8")
+        self.assertEqual(light["mutedForeground"], "#a0a0a0")
+        self.assertEqual(light["outline"], "#a0a0a0")
 
     def test_unknown_theme_is_rejected(self):
         with self.assertRaises(ValueError):
