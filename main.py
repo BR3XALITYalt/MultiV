@@ -1211,11 +1211,27 @@ def build_app() -> None:
         page = ttk.Frame(canvas)
         window_id = canvas.create_window((0, 0), window=page, anchor="nw")
 
-        def update_region(_event=None) -> None:
+        last_window_width = 0
+        last_scrollregion: tuple[int, int, int, int] | None = None
+
+        def update_region(event=None) -> None:
+            nonlocal last_window_width, last_scrollregion
+
+            # Only resize the embedded page when the viewport itself changes.
+            # Child layout events must not repeatedly write the canvas window width.
+            if event is not None and event.widget is canvas:
+                width = max(1, int(event.width))
+                if width != last_window_width:
+                    canvas.itemconfigure(window_id, width=width)
+                    last_window_width = width
+                return
+
+            # Content-size changes update only the scroll region, and only when
+            # its bounds actually changed. This avoids needless Tk geometry work.
             bounds = canvas.bbox("all")
-            if bounds:
+            if bounds and bounds != last_scrollregion:
                 canvas.configure(scrollregion=bounds)
-            canvas.itemconfigure(window_id, width=canvas.winfo_width())
+                last_scrollregion = bounds
 
         page.bind("<Configure>", update_region)
         canvas.bind("<Configure>", update_region)
