@@ -30,7 +30,7 @@ def _sun_valley_palette(mode: str) -> dict[str, str]:
             "onSurface": "#FAFAFA",
             "surfaceVariant": "#383838",
             "onSurfaceVariant": "#C6C6C6",
-            "outline": "#626262",
+            "outline": "#777777",
             "outlineVariant": "#414141",
             "inverseSurface": "#FAFAFA",
             "inverseOnSurface": "#1C1C1C",
@@ -89,7 +89,7 @@ def apply_tk_theme(root, mode: str = "dark") -> dict[str, str]:
 
     palette = _sun_valley_palette(mode)
     if root is not None:
-        sv_ttk.set_theme(mode)
+        sv_ttk.set_theme(mode, root=root)
         root.configure(background=palette["background"])
     return palette
 
