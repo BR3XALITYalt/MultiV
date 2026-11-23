@@ -13,7 +13,7 @@ MultiV stores station and transmission preferences in these locations:
 | Platform | File |
 | --- | --- |
 | Windows | `%APPDATA%\TXITPY\transmit-settings.json` |
-| Linux and macOS | `$XDG_CONFIG_HOME/TXITPY/transmit-settings.json`, or `~/.config/TXITPY/transmit-settings.json` |
+| Source builds | `<application directory>/data/transmit-settings.json` |
 
 On Windows, the Discord session token is stored at `%PROGRAMDATA%\TXITPY\token.txt`. On Linux and macOS, MultiV uses the application configuration directory.
 
