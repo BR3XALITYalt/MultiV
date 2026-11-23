@@ -14,6 +14,7 @@ import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from app_paths import app_data_path
 from typing import Callable, Iterable
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
@@ -108,11 +109,7 @@ DRM_PROGRAMME_TYPES = (
 
 
 def _cache_root() -> Path:
-    if os.name == "nt":
-        root = Path(os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or Path.home())
-        return root / "TXITPY" / "DRM"
-    root = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache"))
-    return root / "txitpy" / "drm"
+    return app_data_path("cache", "TXITPY", "DRM")
 
 
 
