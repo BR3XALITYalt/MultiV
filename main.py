@@ -164,7 +164,7 @@ def build_app() -> None:
         saved_fade_shape_id = "0"
     fade_shape_saved_value = f"{saved_fade_shape_id} - {fade_shape_names[saved_fade_shape_id]}"
 
-    # Keep Tk variables with the root; navigation and theme changes rebuild page widgets.
+    # Keep Tk variables and prebuilt page widgets alive for the lifetime of the root.
     connection_var = tk.StringVar(root, "Disconnected")
     account_var = tk.StringVar(root, "Not signed in to Discord")
     auth_status_var = tk.StringVar(root, "Checking TXITY server configuration...")
