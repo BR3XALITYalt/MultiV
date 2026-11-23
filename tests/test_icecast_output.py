@@ -231,7 +231,7 @@ class IcecastDestinationTests(unittest.TestCase):
         samples = np.array([0.25, float("nan"), float("inf")], dtype=np.float32)
         broadcaster.send_pcm(samples)
         samples[:] = 0.0
-        queued = broadcaster._input_queue.get_nowait()
+        queued = broadcaster._groups[0].input_queue.get_nowait()
         self.assertEqual(queued[0], 0.25)
         self.assertEqual(queued[1], 0.0)
         self.assertEqual(queued[2], 0.0)
