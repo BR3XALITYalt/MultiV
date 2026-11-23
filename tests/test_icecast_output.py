@@ -1,6 +1,7 @@
 import base64
 import queue
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 from icecast_output import (
@@ -237,6 +238,22 @@ class IcecastDestinationTests(unittest.TestCase):
         self.assertEqual(group.audio_format, "ogg_opus")
         self.assertEqual(group.bitrate_kbps, 96)
         self.assertIs(group.local_server, local_server)
+
+    def test_pcm_producer_does_not_wait_for_a_failed_encoder(self):
+        broadcaster = IcecastBroadcaster(
+            [],
+            events=queue.Queue(),
+            local_server=SimpleNamespace(audio_format="ogg_opus", bitrate_kbps=96),
+        )
+        group = broadcaster._groups[0]
+        group.input_queue = queue.Queue(maxsize=1)
+        group.input_queue.put(b"queued block")
+        group.thread = mock.Mock()
+        group.thread.is_alive.return_value = False
+
+        broadcaster.send_pcm([0.0, 0.1, 0.2], wait_for_space=True)
+
+        self.assertEqual(group.input_queue.qsize(), 1)
 
     def test_available_encoders_produce_stream_packets(self):
         import numpy as np
