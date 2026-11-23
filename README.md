@@ -73,7 +73,7 @@ See the [audio and playlist guide](wiki/Audio-Sources.md) for supported formats 
 
 Add up to eight Icecast destinations on the **Transmit** page. Each destination uses its server URL and mountpoint, source username, and source password. Choose a format and bitrate separately for every destination. Available formats depend on the encoders in the installed FFmpeg/PyAV build: MP3, AAC+ (HE-AAC), Ogg Vorbis, Ogg Opus, and Ogg FLAC. Ogg FLAC is lossless and has no bitrate setting.
 
-Icecast output runs alongside the TXITY transmission and uses the selected microphone, desktop-audio, or playlist source. It is unavailable in DRM and CW modes. Each server reconnects independently if its connection drops. See the [Icecast output guide](wiki/Icecast-Outputs.md) for configuration and connection details.
+TXITY and Icecast have independent enable switches. Icecast can run without a TXITY session, using the selected microphone, desktop-audio, or playlist source. Icecast output is unavailable in DRM and CW modes. Each remote server reconnects independently if its connection drops. See the [Icecast output guide](wiki/Icecast-Outputs.md) for configuration and connection details.
 
 ## Signal modes
 
@@ -83,7 +83,7 @@ See the [signal mode reference](wiki/Signal-Modes.md) before using NFM, RADE, or
 
 ## Station controls
 
-Use **Settings** to edit your station profile and logo. Use **Stations** to browse the TXITY station directory.
+Use **Settings** to edit your station profile and logo. Use the **TXITY** menu to open the station directory.
 
 MultiV also includes a browser control panel for station settings and transmission controls. The panel uses HTTP and is intended for a trusted local network only. Do not expose it to the public internet. See the [browser control panel guide](wiki/Browser-Control-Panel.md).
 
@@ -102,8 +102,10 @@ MultiV also includes a browser control panel for station settings and transmissi
 
 ## Built-in Icecast-compatible server
 
-Enable **Host a stream from MultiV** in the Icecast section to publish the same MP3 stream from a server hosted by MultiV. Configure its TCP port, mountpoint, optional listener password, and maximum simultaneous listeners. The server starts with the TXITY transmission and shuts down when transmission stops.
+Enable **Host a stream from MultiV** in the Icecast section to publish a stream from MultiV. Choose its audio format and bitrate, then configure the TCP port, mountpoint, optional listener password, and maximum simultaneous listeners. The server starts with audio transmission and stops when transmission stops.
 
-The built-in server provides an HTTP MP3 mount for common streaming players. It is an embedded Icecast-compatible listener endpoint, not the full upstream Icecast daemon: it does not provide the full Icecast administration API, source protocol, relay configuration, or statistics document.
+Available formats depend on the encoders in the installed FFmpeg/PyAV build: Ogg Opus, Ogg Vorbis, AAC+ (HE-AAC), Ogg FLAC, and MP3. Ogg FLAC is lossless and has no bitrate setting. Ogg Opus is the preferred default when available. AAC+ requires the libfdk_aac encoder and is limited to 128 kbps.
 
-The default bind address is all network interfaces. The local URL is `http://127.0.0.1:8000/live.mp3` when using the default port and mountpoint. Other devices on the LAN can use the host computer's LAN IP. Internet listeners may require router port forwarding and firewall access. Use a listener password when the stream should not be openly accessible.
+The built-in server provides one HTTP mount. It is an embedded Icecast-compatible listener endpoint, not the full upstream Icecast daemon: it does not provide the full Icecast administration API, source protocol, relay configuration, multiple mounts, or statistics document.
+
+The default bind address is all network interfaces. The local URL is `http://127.0.0.1:8000/live` when using the default port and mountpoint. Other devices on the LAN can use the host computer's LAN IP. Internet listeners may require router port forwarding and firewall access. Use a listener password when the stream should not be openly accessible.
