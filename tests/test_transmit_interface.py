@@ -238,6 +238,9 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIn('frame.pack_forget()', self.source)
         self.assertIn('("Accounts", "discord")', self.source)
 
+    def test_transmit_settings_use_application_data_folder(self):
+        self.assertIn('return app_data_path("transmit-settings.json")', self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
