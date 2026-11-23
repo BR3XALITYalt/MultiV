@@ -191,5 +191,18 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIn('advanced_container.pack(fill="x", before=cw_card', self.source)
 
 
+    def test_station_directory_is_in_the_txity_menu(self):
+        self.assertIn('def open_station_directory()', self.source)
+        self.assertIn('txity_menu_items.add_command(', self.source)
+        self.assertIn('label="Station directory"', self.source)
+        self.assertNotIn('("Stations", "stations")', self.source)
+        self.assertNotIn('elif current_page == "stations":', self.source)
+
+    def test_canvas_scroll_events_are_coalesced(self):
+        self.assertIn('pending_scroll_pixels += scroll_delta', self.source)
+        self.assertIn('root.after_idle(flush_pending_scroll)', self.source)
+        self.assertIn('yscrollincrement=SCROLL_UNIT_PIXELS', self.source)
+
+
 if __name__ == "__main__":
     unittest.main()
