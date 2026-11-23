@@ -6,6 +6,13 @@ MultiV is a multi-source, multi-stream client for virtual radio simulators. The 
 
 Call the application **MultiV**. Use **TXITY** for the service, website, station directory, and remote protocol.
 
+## Product behavior
+
+- MultiV is a provider-agnostic, multi-broadcast system. It is not exclusive to TXITY; treat TXITY as one output provider alongside Icecast and other supported providers.
+- Output providers must operate independently. Each output has its own enable/disable control, and disabling or disconnecting one provider must not disable, block, or otherwise affect other enabled providers.
+- Route the selected audio source to every enabled output concurrently. Do not make Icecast transmission depend on a TXITY connection or authentication session, or make TXITY transmission depend on Icecast availability.
+- Keep provider-specific configuration and connection state separate. Shared audio capture may feed multiple outputs, but each output's lifecycle and failure handling must remain isolated.
+
 ## Before editing
 
 - Read [DESIGN.md](DESIGN.md) before changing either interface.
