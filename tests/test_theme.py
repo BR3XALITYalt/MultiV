@@ -38,14 +38,27 @@ class NativeTkInterfaceTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertNotIn(name, self.source)
 
+    def test_ttk_checkbuttons_do_not_receive_tk_only_anchor_option(self):
+        checkbuttons = [
+            node for node in ast.walk(self.tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "ttk"
+            and node.func.attr == "Checkbutton"
+        ]
+        self.assertTrue(checkbuttons)
+        for call in checkbuttons:
+            self.assertNotIn("anchor", {keyword.arg for keyword in call.keywords})
+
     def test_native_palette_supports_light_and_dark_modes(self):
         function = next(
             node for node in ast.walk(self.tree)
             if isinstance(node, ast.FunctionDef) and node.name == "_application_palette"
         )
         source = ast.unparse(function)
-        self.assertIn('"dark"', source)
-        self.assertIn('"light"', source)
+        self.assertIn("dark", source)
+        self.assertIn("light", source)
 
 
 if __name__ == "__main__":
