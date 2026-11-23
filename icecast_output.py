@@ -385,6 +385,7 @@ class IcecastBroadcaster:
         if not normalized and local_server is None:
             raise ValueError("Add at least one enabled Icecast destination or enable the built-in server.")
         self.local_server = local_server
+        self.bitrate = default_bitrate * 1_000
         self.sample_rate = sample_rate
         self.events = events
         self._closing = threading.Event()
