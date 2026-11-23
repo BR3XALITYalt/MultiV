@@ -4850,18 +4850,23 @@ def build_app() -> None:
             active_scroll_canvas = None
             show_gate(page_frames["gate"])
             page_canvases["gate"] = active_scroll_canvas
+            page_frames["gate"].update_idletasks()
             active_scroll_canvas = None
             show_transmit(page_frames["transmit"])
             page_canvases["transmit"] = active_scroll_canvas
+            page_frames["transmit"].update_idletasks()
             active_scroll_canvas = None
             show_discord(page_frames["discord"])
             page_canvases["discord"] = active_scroll_canvas
+            page_frames["discord"].update_idletasks()
             active_scroll_canvas = None
             show_settings(page_frames["settings"])
             page_canvases["settings"] = active_scroll_canvas
+            page_frames["settings"].update_idletasks()
             active_scroll_canvas = None
             show_station_detail(page_frames["station_detail"])
             page_canvases["station_detail"] = active_scroll_canvas
+            page_frames["station_detail"].update_idletasks()
             shell_built = True
 
         requested = current_page
