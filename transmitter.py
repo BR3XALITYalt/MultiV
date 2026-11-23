@@ -1007,37 +1007,6 @@ class TxityTransmitter:
         audio_queue = self._audio_queue
         icecast_broadcaster: IcecastBroadcaster | None = None
         local_icecast_server = None
-        if icecast_destinations or bool(icecast_server_settings.get("enabled")):
-            if drm_mode or mode == "CW":
-                unsupported_mode = "DRM" if drm_mode else "CW"
-                self.events.put({
-                    "kind": "tx_icecast_state",
-                    "name": "Icecast",
-                    "state": "Unavailable",
-                    "text": f"Icecast output is not available in {unsupported_mode} mode.",
-                })
-            else:
-                if bool(icecast_server_settings.get("enabled")):
-                    local_icecast_server = EmbeddedIcecastServer(
-                        host=str(icecast_server_settings.get("host") or "0.0.0.0"),
-                        port=int(icecast_server_settings.get("port", 8000)),
-                        mount=str(icecast_server_settings.get("mount") or "/live.mp3"),
-                        name=str(config.get("stationName") or "MultiV"),
-                        description=str(config.get("stationDescription") or ""),
-                        listener_password=str(icecast_server_settings.get("listener_password") or ""),
-                        max_listeners=int(icecast_server_settings.get("max_listeners", 25)),
-                        events=self.events,
-                    )
-                icecast_broadcaster = IcecastBroadcaster(
-                    icecast_destinations,
-                    bitrate_kbps=icecast_bitrate_kbps,
-                    station_name=str(config.get("stationName") or "MultiV"),
-                    station_description=str(config.get("stationDescription") or ""),
-                    events=self.events,
-                    sample_rate=SAMPLE_RATE_HZ,
-                    local_server=local_icecast_server,
-                )
-                icecast_broadcaster.start()
         nfm_modulator = (
             StreamingNFMModulator(
                 if_hz=int(config.get("_txitpyNfmIfHz", NFM_IF_HZ)),
@@ -1394,6 +1363,40 @@ class TxityTransmitter:
         try:
             if self._stop_event.is_set():
                 return
+
+            icecast_broadcaster: IcecastBroadcaster | None = None
+            local_icecast_server = None
+            if icecast_destinations or bool(icecast_server_settings.get("enabled")):
+                if drm_mode or mode == "CW":
+                    unsupported_mode = "DRM" if drm_mode else "CW"
+                    self.events.put({
+                        "kind": "tx_icecast_state",
+                        "name": "Icecast",
+                        "state": "Unavailable",
+                        "text": f"Icecast output is not available in {unsupported_mode} mode.",
+                    })
+                else:
+                    if bool(icecast_server_settings.get("enabled")):
+                        local_icecast_server = EmbeddedIcecastServer(
+                            host=str(icecast_server_settings.get("host") or "0.0.0.0"),
+                            port=int(icecast_server_settings.get("port", 8000)),
+                            mount=str(icecast_server_settings.get("mount") or "/live.mp3"),
+                            name=str(config.get("stationName") or "MultiV"),
+                            description=str(config.get("stationDescription") or ""),
+                            listener_password=str(icecast_server_settings.get("listener_password") or ""),
+                            max_listeners=int(icecast_server_settings.get("max_listeners", 25)),
+                            events=self.events,
+                        )
+                    icecast_broadcaster = IcecastBroadcaster(
+                        icecast_destinations,
+                        bitrate_kbps=icecast_bitrate_kbps,
+                        station_name=str(config.get("stationName") or "MultiV"),
+                        station_description=str(config.get("stationDescription") or ""),
+                        events=self.events,
+                        sample_rate=SAMPLE_RATE_HZ,
+                        local_server=local_icecast_server,
+                    )
+                    icecast_broadcaster.start()
 
             drm_config_path: Path | None = None
             encoder_path: Path | None = None
