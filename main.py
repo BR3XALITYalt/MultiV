@@ -523,6 +523,7 @@ def build_app() -> None:
     frequency_retry_context: dict[str, Any] | None = None
     station_search_var = tk.StringVar(root, "")
     station_cards_frame: ttk.Frame | None = None
+    station_directory_window: tk.Toplevel | None = None
     selected_station_id = ""
     image_cache: dict[tuple[str, int], Any] = {}
     image_loading: set[str] = set()
@@ -953,6 +954,12 @@ def build_app() -> None:
     def open_station(station_id: str) -> None:
         nonlocal selected_station_id, current_page
         selected_station_id = station_id
+        if station_directory_window is not None:
+            try:
+                if station_directory_window.winfo_exists():
+                    station_directory_window.destroy()
+            except tk.TclError:
+                pass
         current_page = "station_detail"
         build_shell()
 
@@ -1249,6 +1256,40 @@ def build_app() -> None:
         station_cards_frame = ttk.Frame(page)
         station_cards_frame.pack(fill="x", expand=True)
         update_station_tree()
+
+    def open_station_directory() -> None:
+        nonlocal station_directory_window, active_scroll_canvas
+        if station_directory_window is not None:
+            try:
+                if station_directory_window.winfo_exists():
+                    station_directory_window.deiconify()
+                    station_directory_window.lift()
+                    station_directory_window.focus_force()
+                    return
+            except tk.TclError:
+                pass
+
+        previous_canvas = active_scroll_canvas
+        dialog = tk.Toplevel(root)
+        station_directory_window = dialog
+        dialog.title("TXITY station directory")
+        dialog.geometry("980x700")
+        dialog.minsize(720, 480)
+        dialog.configure(background=palette["background"])
+        dialog.transient(root)
+        show_stations(dialog)
+
+        def close_directory() -> None:
+            nonlocal station_directory_window, active_scroll_canvas
+            station_directory_window = None
+            active_scroll_canvas = previous_canvas
+            try:
+                dialog.destroy()
+            except tk.TclError:
+                pass
+
+        dialog.protocol("WM_DELETE_WINDOW", close_directory)
+        dialog.bind("<Escape>", lambda _event: close_directory())
 
     def update_frequency_check() -> None:
         try:
@@ -3755,7 +3796,7 @@ def build_app() -> None:
             None,
         )
         if row is None:
-            make_button(parent, "Back to stations", lambda: navigate("stations"), kind="tonal").pack(anchor="w")
+            make_button(parent, "Open station directory", open_station_directory, kind="tonal").pack(anchor="w")
             make_label(
                 parent,
                 "This station is no longer in the current listing.",
@@ -3767,7 +3808,7 @@ def build_app() -> None:
         make_button(
             page,
             "← Back to stations",
-            lambda: navigate("stations"),
+            open_station_directory,
             kind="text",
             padx=10,
             pady=7,
@@ -4509,15 +4550,11 @@ def build_app() -> None:
 
             destinations = (
                 ("Transmit", "transmit"),
-                ("Stations", "stations"),
                 ("Discord", "discord"),
                 ("Settings", "settings"),
             )
             for label, destination in destinations:
-                selected = (
-                    current_page == destination
-                    or (destination == "stations" and current_page == "station_detail")
-                )
+                selected = current_page == destination
                 nav_button = make_button(
                     navigation,
                     label,
@@ -4528,14 +4565,25 @@ def build_app() -> None:
                 )
                 nav_button.pack(side="left", padx=2, pady=2)
 
-            make_button(
-                topbar,
-                "Open TXITY",
-                lambda: webbrowser.open(BASE_URL),
-                kind="text",
-                padx=10,
-                pady=8,
-            ).pack(side="left", padx=(8, 0))
+            txity_menu = ttk.Menubutton(topbar, text="TXITY ▾")
+            txity_menu.pack(side="left", padx=(8, 0))
+            txity_menu_items = tk.Menu(
+                txity_menu,
+                tearoff=False,
+                background=palette["background"],
+                foreground=palette["foreground"],
+                activebackground=palette["selectionBackground"],
+                activeforeground=palette["selectionForeground"],
+            )
+            txity_menu_items.add_command(
+                label="Open TXITY website",
+                command=lambda: webbrowser.open(BASE_URL),
+            )
+            txity_menu_items.add_command(
+                label="Station directory",
+                command=open_station_directory,
+            )
+            txity_menu.configure(menu=txity_menu_items)
 
             make_button(
                 topbar,
@@ -4561,8 +4609,6 @@ def build_app() -> None:
                 show_transmit(content_frame)
             elif current_page == "settings":
                 show_settings(content_frame)
-            elif current_page == "stations":
-                show_stations(content_frame)
             elif current_page == "station_detail":
                 show_station_detail(content_frame)
             elif current_page == "discord":
