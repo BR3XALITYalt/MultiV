@@ -316,21 +316,43 @@ def build_app() -> None:
             "username": str(saved_destination.get("username") or "source")[:128],
             "password": str(saved_destination.get("password") or ""),
             "enabled": bool(saved_destination.get("enabled", True)),
+            "format": str(saved_destination.get("format") or "mp3"),
+            "bitrate": str(saved_destination.get("bitrate") or "128"),
         })
     tx_icecast_bitrate_var = tk.StringVar(
         root,
-        saved_text("icecast_bitrate_kbps", "128"),
+        saved_text("icecast_bitrate_kbps", "96"),
     )
     tx_icecast_status_var = tk.StringVar(root, "No Icecast destinations configured.")
     tx_icecast_states: dict[str, str] = {}
+    txity_output_enabled_var = tk.BooleanVar(
+        root, saved_bool("txity_output_enabled", True)
+    )
+    icecast_output_enabled_var = tk.BooleanVar(
+        root, saved_bool("icecast_output_enabled", True)
+    )
     tx_icecast_server_enabled_var = tk.BooleanVar(
         root, saved_bool("icecast_server_enabled", False)
     )
+    tx_icecast_server_format_var = tk.StringVar(
+        root, saved_text("icecast_server_format", "ogg_opus")
+    )
+    saved_output_order = saved_tx_settings.get("output_order", ["txity", "icecast"])
+    if not isinstance(saved_output_order, list):
+        saved_output_order = []
+    output_order = [
+        name for name in saved_output_order
+        if name in {"txity", "icecast"}
+    ]
+    output_order = list(dict.fromkeys(output_order))
+    for provider_name in ("txity", "icecast"):
+        if provider_name not in output_order:
+            output_order.append(provider_name)
     tx_icecast_server_port_var = tk.StringVar(
         root, saved_text("icecast_server_port", "8000")
     )
     tx_icecast_server_mount_var = tk.StringVar(
-        root, saved_text("icecast_server_mount", "/live.mp3")
+        root, saved_text("icecast_server_mount", "/live")
     )
     tx_icecast_server_password_var = tk.StringVar(
         root, saved_text("icecast_server_listener_password", "")
@@ -372,7 +394,11 @@ def build_app() -> None:
             "audio_device": tx_audio_device_var.get(),
             "icecast_bitrate_kbps": tx_icecast_bitrate_var.get(),
             "icecast_destinations": [dict(item) for item in icecast_destinations],
+            "txity_output_enabled": txity_output_enabled_var.get(),
+            "icecast_output_enabled": icecast_output_enabled_var.get(),
+            "output_order": list(output_order),
             "icecast_server_enabled": tx_icecast_server_enabled_var.get(),
+            "icecast_server_format": tx_icecast_server_format_var.get(),
             "icecast_server_port": tx_icecast_server_port_var.get(),
             "icecast_server_mount": tx_icecast_server_mount_var.get(),
             "icecast_server_listener_password": tx_icecast_server_password_var.get(),
@@ -2893,33 +2919,139 @@ def build_app() -> None:
             icecast_card,
             "Output destinations",
             font=("Segoe UI", 15, "bold"),
-            
         ).pack(anchor="w", pady=(0, 4))
         make_label(
             icecast_card,
-            "The selected input feeds the TXITY transmitter and can also be routed to MultiV’s built-in stream or multiple remote Icecast servers. Each remote destination has its own audio format and bitrate.",
+            "Choose which providers receive the selected audio. Each provider can be opened, disabled, and reordered independently.",
             font=("Segoe UI", 9, "normal"),
             color=palette["mutedForeground"],
-            
-            wraplength=850,
-        ).pack(anchor="w", pady=(0, 10))
-        make_label(
-            icecast_card,
-            "TXITY virtual transmitter",
-            font=("Segoe UI", 11, "bold"),
-            
-        ).pack(anchor="w", pady=(2, 3))
-        make_label(
-            icecast_card,
-            "The Start Transmission control publishes the selected input to TXITY. The destinations below receive that same live input in parallel.",
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
             wraplength=850,
         ).pack(anchor="w", pady=(0, 10))
 
+        output_rows_container = ttk.Frame(icecast_card)
+        output_rows_container.pack(fill="x")
+        output_row_widgets: dict[str, ttk.LabelFrame] = {}
+        output_row_bodies: dict[str, ttk.Frame] = {}
+        output_row_title_buttons: dict[str, ttk.Button] = {}
+        output_row_menus: dict[str, tk.Menu] = {}
+        output_row_expanded = {"txity": True, "icecast": True}
+
+        def refresh_output_order() -> None:
+            for provider_name in output_order:
+                output_row_widgets[provider_name].pack_forget()
+            for provider_name in output_order:
+                output_row_widgets[provider_name].pack(fill="x", pady=(0, 8))
+            for provider_name, menu in output_row_menus.items():
+                menu.entryconfigure(
+                    "Move up",
+                    state="disabled" if output_order.index(provider_name) == 0 else "normal",
+                )
+                menu.entryconfigure(
+                    "Move down",
+                    state=(
+                        "disabled"
+                        if output_order.index(provider_name) == len(output_order) - 1
+                        else "normal"
+                    ),
+                )
+
+        def move_output_provider(provider_name: str, offset: int) -> None:
+            current_index = output_order.index(provider_name)
+            target_index = current_index + offset
+            if not 0 <= target_index < len(output_order):
+                return
+            output_order[current_index], output_order[target_index] = (
+                output_order[target_index],
+                output_order[current_index],
+            )
+            refresh_output_order()
+            schedule_tx_settings_save()
+            schedule_live_reconfigure()
+
+        def toggle_output_provider_body(provider_name: str) -> None:
+            body = output_row_bodies[provider_name]
+            expanded = output_row_expanded[provider_name]
+            if expanded:
+                body.pack_forget()
+                output_row_expanded[provider_name] = False
+            else:
+                body.pack(fill="x", padx=6, pady=(4, 2))
+                output_row_expanded[provider_name] = True
+            output_row_title_buttons[provider_name].configure(
+                text=(
+                    ("TXITY" if provider_name == "txity" else "Icecast")
+                    + ("  \u25be" if output_row_expanded[provider_name] else "  \u25b8")
+                )
+            )
+
+        def provider_enabled_changed(*_args) -> None:
+            schedule_tx_settings_save()
+            schedule_live_reconfigure()
+
+        def create_output_provider_row(
+            provider_name: str,
+            title: str,
+            enabled_variable: tk.BooleanVar,
+        ) -> ttk.Frame:
+            row = ttk.LabelFrame(output_rows_container, padding=8)
+            header = ttk.Frame(row)
+            header.pack(fill="x")
+            menu_button = ttk.Menubutton(header, text="\u2261", direction="below")
+            menu = tk.Menu(menu_button, tearoff=False)
+            menu.add_command(
+                label="Move up",
+                command=lambda: move_output_provider(provider_name, -1),
+            )
+            menu.add_command(
+                label="Move down",
+                command=lambda: move_output_provider(provider_name, 1),
+            )
+            menu_button.configure(menu=menu)
+            menu_button.pack(side="left", padx=(0, 8))
+            output_row_menus[provider_name] = menu
+
+            title_button = ttk.Button(
+                header,
+                text=title + "  \u25be",
+                command=lambda: toggle_output_provider_body(provider_name),
+            )
+            title_button.pack(side="left", fill="x", expand=True)
+            output_row_title_buttons[provider_name] = title_button
+            ttk.Checkbutton(
+                header,
+                text="Enabled",
+                variable=enabled_variable,
+            ).pack(side="right", padx=(10, 2))
+            enabled_variable.trace_add("write", provider_enabled_changed)
+
+            body = ttk.Frame(row, padding=(6, 4, 6, 2))
+            body.pack(fill="x", padx=6, pady=(4, 2))
+            output_row_widgets[provider_name] = row
+            output_row_bodies[provider_name] = body
+            return body
+
+        txity_output_body = create_output_provider_row(
+            "txity",
+            "TXITY",
+            txity_output_enabled_var,
+        )
+        make_label(
+            txity_output_body,
+            "Sends the selected audio to the TXITY virtual transmitter using your signed-in TXITY session.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(0, 4))
+
+        icecast_output_body = create_output_provider_row(
+            "icecast",
+            "Icecast",
+            icecast_output_enabled_var,
+        )
+        refresh_output_order()
+
         built_in_server_frame = ttk.LabelFrame(
-            icecast_card,
+            icecast_output_body,
             padding=10,
             text="Built-in Icecast server",
         )
@@ -2953,24 +3085,94 @@ def build_app() -> None:
         add_server_setting("Mountpoint", tx_icecast_server_mount_var, 2)
         add_server_setting("Listener password (optional)", tx_icecast_server_password_var, 3, secret=True)
         add_server_setting("Maximum listeners", tx_icecast_server_max_listeners_var, 4, width=8)
+
+        available_server_formats = available_icecast_formats()
+        preferred_server_formats = ("ogg_opus", "ogg_vorbis", "aac_plus", "ogg_flac", "mp3")
+        selected_server_format = tx_icecast_server_format_var.get()
+        if selected_server_format not in available_server_formats:
+            selected_server_format = next(
+                (item for item in preferred_server_formats if item in available_server_formats),
+                next(iter(available_server_formats), "mp3"),
+            )
+            tx_icecast_server_format_var.set(selected_server_format)
+        server_format_label_to_key = {
+            label: key for key, label in available_server_formats.items()
+        }
+        server_format_label_var = tk.StringVar(
+            root,
+            available_server_formats.get(selected_server_format, "No encoders available"),
+        )
         make_label(
             built_in_server_frame,
-            "The server starts with transmission and stops when transmission stops. Stream URL: http://YOUR-IP:PORT/MOUNT. Use 0.0.0.0 to listen on all network interfaces. Router/firewall access may be needed for remote listeners.",
+            "Audio format",
             font=("Segoe UI", 9, "normal"),
             color=palette["mutedForeground"],
-            
-            wraplength=850,
-        ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(5, 0))
+        ).grid(row=5, column=0, sticky="w", padx=(0, 8), pady=4)
+        server_format_picker = ttk.Combobox(
+            built_in_server_frame,
+            textvariable=server_format_label_var,
+            values=tuple(available_server_formats.values()),
+            state="readonly" if available_server_formats else "disabled",
+            width=28,
+        )
+        server_format_picker.grid(row=5, column=1, sticky="ew", padx=(0, 16), pady=4)
+        style_tx_combobox(server_format_picker)
 
         make_label(
-            icecast_card,
+            built_in_server_frame,
+            "Bitrate (kbps)",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+        ).grid(row=6, column=0, sticky="w", padx=(0, 8), pady=4)
+        server_bitrate_picker = ttk.Combobox(
+            built_in_server_frame,
+            textvariable=tx_icecast_bitrate_var,
+            values=tuple(str(value) for value in ICECAST_BITRATES),
+            state="readonly",
+            width=10,
+        )
+        server_bitrate_picker.grid(row=6, column=1, sticky="w", padx=(0, 16), pady=4)
+        style_tx_combobox(server_bitrate_picker)
+
+        def update_builtin_server_format(*_args) -> None:
+            format_key = server_format_label_to_key.get(server_format_label_var.get())
+            if format_key is None:
+                return
+            tx_icecast_server_format_var.set(format_key)
+            if format_key == "ogg_flac":
+                tx_icecast_bitrate_var.set("0")
+                server_bitrate_picker.configure(state="disabled")
+            else:
+                if tx_icecast_bitrate_var.get() not in {str(value) for value in ICECAST_BITRATES}:
+                    tx_icecast_bitrate_var.set("96")
+                if format_key == "aac_plus" and int(tx_icecast_bitrate_var.get()) > 128:
+                    tx_icecast_bitrate_var.set("128")
+                elif format_key == "ogg_opus" and int(tx_icecast_bitrate_var.get()) < 48:
+                    tx_icecast_bitrate_var.set("48")
+                server_bitrate_picker.configure(state="readonly")
+            schedule_tx_settings_save()
+            schedule_live_reconfigure()
+
+        server_format_label_var.trace_add("write", update_builtin_server_format)
+        update_builtin_server_format()
+
+        make_label(
+            built_in_server_frame,
+            "The server starts with transmission and stops when transmission stops. Stream URL: http://YOUR-IP:PORT/MOUNT. The mountpoint can use any extension. Router/firewall access may be needed for remote listeners.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            wraplength=850,
+        ).grid(row=7, column=0, columnspan=4, sticky="w", pady=(5, 0))
+
+        make_label(
+            icecast_output_body,
             "Remote Icecast servers",
             font=("Segoe UI", 11, "bold"),
             
         ).pack(anchor="w", pady=(0, 6))
 
         icecast_list_frame = ttk.Frame(
-            icecast_card,
+            icecast_output_body,
         )
         icecast_list_frame.pack(fill="x")
         icecast_listbox = tk.Listbox(
@@ -3048,11 +3250,14 @@ def build_app() -> None:
             enabled_var = tk.BooleanVar(dialog, bool(existing.get("enabled", True)))
             available_formats = available_icecast_formats()
             format_labels = {label: key for key, label in available_formats.items()}
-            selected_format = str(existing.get("format") or "mp3")
+            selected_format = str(existing.get("format") or "ogg_opus")
             if selected_format not in available_formats:
-                selected_format = "mp3"
+                selected_format = next(
+                    (item for item in ("ogg_opus", "ogg_vorbis", "aac_plus", "ogg_flac", "mp3") if item in available_formats),
+                    "mp3",
+                )
             format_var = tk.StringVar(dialog, available_formats.get(selected_format, "MP3"))
-            bitrate_var = tk.StringVar(dialog, str(existing.get("bitrate") or "128"))
+            bitrate_var = tk.StringVar(dialog, str(existing.get("bitrate") or "96"))
 
             def add_dialog_field(label_text: str, variable: tk.StringVar, row: int, *, secret: bool = False) -> ttk.Entry:
                 make_label(
@@ -3252,7 +3457,7 @@ def build_app() -> None:
             schedule_live_reconfigure()
 
         icecast_actions = ttk.Frame(
-            icecast_card,
+            icecast_output_body,
         )
         icecast_actions.pack(fill="x", pady=(8, 0))
         make_button(
@@ -3280,29 +3485,8 @@ def build_app() -> None:
             pady=7,
         ).pack(side="left", padx=(4, 0))
 
-        bitrate_frame = ttk.Frame(
-            icecast_actions,
-        )
-        bitrate_frame.pack(side="right")
         make_label(
-            bitrate_frame,
-            "Built-in MP3 bitrate",
-            font=("Segoe UI", 9, "bold"),
-            color=palette["mutedForeground"],
-            
-        ).pack(side="left", padx=(0, 8))
-        icecast_bitrate_picker = ttk.Combobox(
-            bitrate_frame,
-            textvariable=tx_icecast_bitrate_var,
-            values=tuple(str(value) for value in ICECAST_BITRATES),
-            state="readonly",
-            width=7,
-            height=7,
-        )
-        icecast_bitrate_picker.pack(side="left")
-        style_tx_combobox(icecast_bitrate_picker)
-        make_label(
-            icecast_card,
+            icecast_output_body,
             variable=tx_icecast_status_var,
             font=("Segoe UI", 9, "normal"),
             color=palette["mutedForeground"],
