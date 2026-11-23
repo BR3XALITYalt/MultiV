@@ -1714,6 +1714,18 @@ def build_app() -> None:
             )
             update_transmit_button()
 
+    def has_configured_icecast_output() -> bool:
+        if not icecast_output_enabled_var.get():
+            return False
+        if tx_icecast_server_enabled_var.get():
+            return True
+        return any(
+            bool(destination.get("enabled", True))
+            and bool(str(destination.get("url") or "").strip())
+            and bool(str(destination.get("password") or ""))
+            for destination in icecast_destinations
+        )
+
     def toggle_transmission() -> None:
         nonlocal frequency_retry_context
         if live_reconfigure_state["stopping"]:
@@ -1745,7 +1757,7 @@ def build_app() -> None:
                 tx_playlist_status_var.set("Stopping playlist...")
             update_transmit_button()
             return
-        if txity_output_enabled_var.get() and not discord_authenticated:
+        if txity_output_enabled_var.get() and not discord_authenticated and not has_configured_icecast_output():
             navigate("discord")
             return
 
@@ -1821,7 +1833,7 @@ def build_app() -> None:
                 if action == "start":
                     if transmitter.is_busy:
                         web_gui_status_var.set("A transmission is already starting or active.")
-                    elif txity_output_enabled_var.get() and not discord_authenticated:
+                    elif txity_output_enabled_var.get() and not discord_authenticated and not has_configured_icecast_output():
                         web_gui_status_var.set(
                             "Sign in to Discord in the MultiV desktop app before sending to TXITY."
                         )
