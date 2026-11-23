@@ -970,7 +970,7 @@ def build_app() -> None:
 
     def navigate(page: str) -> None:
         nonlocal current_page
-        if not discord_authenticated and page not in {"discord", "settings"}:
+        if not discord_authenticated and page not in {"discord", "settings", "transmit"}:
             current_page = "discord"
             build_shell()
             return
