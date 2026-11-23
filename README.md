@@ -2,7 +2,7 @@
 
 **A multi-source, multi-stream client for virtual radio simulators.**
 
-MultiV is a desktop app for setting up a station and transmitting audio through a supported simulator. Choose one audio source for each transmission.
+MultiV is a desktop app for setting up a station and transmitting audio through a supported simulator. Choose one audio source for each transmission. The interface uses the Sun Valley ttk theme, with dark mode enabled by default and a light-mode switch in the top bar.
 
 ## Install
 
