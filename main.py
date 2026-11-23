@@ -71,12 +71,8 @@ BASE_URL = "https://txity.radiodiscussion.org"
 
 
 def tx_settings_file() -> Path:
-    """Return the per-user settings file path without storing account credentials."""
-    if os.name == "nt":
-        base = Path(os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming"))
-    else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
-    return base / "TXITPY" / "transmit-settings.json"
+    """Return the application-local transmit settings file."""
+    return app_data_path("transmit-settings.json")
 
 
 def load_tx_settings() -> dict[str, Any]:
