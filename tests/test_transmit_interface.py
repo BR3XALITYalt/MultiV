@@ -158,6 +158,7 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIn('"icecast_output_enabled": icecast_output_enabled_var.get()', self.source)
         self.assertIn('txity_enabled=request["txity_enabled"]', self.source)
         self.assertIn('if txity_output_enabled_var.get() and not discord_authenticated:', self.source)
+        self.assertIn('page not in {"discord", "settings", "transmit"}', self.source)
 
     def test_builtin_icecast_supports_codec_selection(self):
         self.assertIn('tx_icecast_server_format_var', self.source)
