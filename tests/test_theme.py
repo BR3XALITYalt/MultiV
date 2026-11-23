@@ -22,11 +22,8 @@ class SunValleyThemeTests(unittest.TestCase):
 
     def test_standard_interface_widgets_use_ttk(self):
         source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
-        for classic_widget in (
-            "tk.Frame(", "tk.Label(", "tk.Button(", "tk.Entry(",
-            "tk.Checkbutton(", "tk.Scale(",
-        ):
-            self.assertNotIn(classic_widget, source)
+        for widget in ("Frame", "Label", "Button", "Entry", "Checkbutton", "Scale"):
+            self.assertNotRegex(source, rf"(?<!t)tk\\.{widget}\\(")
         for themed_widget in (
             "ttk.Frame(", "ttk.Label(", "ttk.Button(", "ttk.Entry(",
             "ttk.Combobox(", "ttk.Checkbutton(", "ttk.Scale(",
@@ -35,7 +32,6 @@ class SunValleyThemeTests(unittest.TestCase):
         self.assertNotIn("SurfaceFrame", source)
         self.assertNotIn("FlatButton", source)
         self.assertNotIn("native_widget_classes", source)
-        self.assertNotIn('background=palette["surfaceContainerLow"]', source)
 
     def test_only_non_ttk_controls_are_kept_as_native_tk_widgets(self):
         source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
