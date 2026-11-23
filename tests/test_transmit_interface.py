@@ -58,6 +58,26 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertNotIn("drm_metadata_slot", self.source)
 
 
+    def test_topbar_has_no_txity_dropdown_button(self):
+        self.assertNotIn('ttk.Menubutton(topbar, text="TXITY', self.source)
+        self.assertNotIn("txity_menu_items", self.source)
+
+    def test_scroll_uses_pixel_granularity_and_flushes_idle_redraws(self):
+        self.assertIn("SCROLL_UNIT_PIXELS = 1", self.source)
+        scroll_handler = next(
+            node
+            for node in ast.walk(self.tree)
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "scroll_active_canvas"
+        )
+        calls = {
+            node.func.attr
+            for node in ast.walk(scroll_handler)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        }
+        self.assertIn("yview_scroll", calls)
+        self.assertIn("update_idletasks", calls)
+
     def test_start_stop_button_stays_in_transmit_header(self):
         assignment = next(
             node
