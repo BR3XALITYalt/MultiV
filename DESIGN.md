@@ -14,7 +14,7 @@ MultiV is a multi-source, multi-stream client for virtual radio simulators. User
 
 ### Visual system
 
-- **Palette:** Use Material surface roles for page and panel backgrounds. Use blue `#185ABC` for primary actions, links, and focus. Use cyan `#00677E` for secondary signal information. Reserve red for errors.
+- **Palette:** Use the existing light/dark colors for page and panel backgrounds. Use blue `#185ABC` for primary actions, links, and focus. Use cyan `#00677E` for secondary signal information. Reserve red for errors.
 - **Dark theme:** Keep the layout and information hierarchy the same in both themes. Change surface and text colors, not page structure.
 - **Typography:** Use Segoe UI. Use size and weight to establish hierarchy.
 - **Panels:** Use rectangular panels to group related controls or station records. Keep unrelated content on the page surface.
