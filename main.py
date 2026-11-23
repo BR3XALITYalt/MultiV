@@ -321,6 +321,21 @@ def build_app() -> None:
     )
     tx_icecast_status_var = tk.StringVar(root, "No Icecast destinations configured.")
     tx_icecast_states: dict[str, str] = {}
+    tx_icecast_server_enabled_var = tk.BooleanVar(
+        root, saved_bool("icecast_server_enabled", False)
+    )
+    tx_icecast_server_port_var = tk.StringVar(
+        root, saved_text("icecast_server_port", "8000")
+    )
+    tx_icecast_server_mount_var = tk.StringVar(
+        root, saved_text("icecast_server_mount", "/live.mp3")
+    )
+    tx_icecast_server_password_var = tk.StringVar(
+        root, saved_text("icecast_server_listener_password", "")
+    )
+    tx_icecast_server_max_listeners_var = tk.StringVar(
+        root, saved_text("icecast_server_max_listeners", "25")
+    )
 
     tx_status_var = tk.StringVar(root, "Not transmitting")
     tx_audio_device_ids: dict[str, int | None] = {"System default": None}
@@ -355,6 +370,11 @@ def build_app() -> None:
             "audio_device": tx_audio_device_var.get(),
             "icecast_bitrate_kbps": tx_icecast_bitrate_var.get(),
             "icecast_destinations": [dict(item) for item in icecast_destinations],
+            "icecast_server_enabled": tx_icecast_server_enabled_var.get(),
+            "icecast_server_port": tx_icecast_server_port_var.get(),
+            "icecast_server_mount": tx_icecast_server_mount_var.get(),
+            "icecast_server_listener_password": tx_icecast_server_password_var.get(),
+            "icecast_server_max_listeners": tx_icecast_server_max_listeners_var.get(),
             "playlist_files": list(tx_playlist_files),
             "playlist_sources": list(tx_playlist_sources),
             "playlist_excluded_files": sorted(tx_playlist_excluded_files),
@@ -466,6 +486,9 @@ def build_app() -> None:
         tx_ssb_bandwidth_var,
         tx_ssb_low_cut_var, tx_ssb_high_cut_var, tx_am_bandwidth_var,
         tx_am_pre_emphasis_var, tx_icecast_bitrate_var,
+        tx_icecast_server_enabled_var, tx_icecast_server_port_var,
+        tx_icecast_server_mount_var, tx_icecast_server_password_var,
+        tx_icecast_server_max_listeners_var,
     )
     for setting_variable in tx_setting_variables:
         setting_variable.trace_add("write", schedule_tx_settings_save)
@@ -1441,6 +1464,29 @@ def build_app() -> None:
                 + " kbps."
             )
 
+        try:
+            icecast_server_port = int(tx_icecast_server_port_var.get())
+            icecast_server_max_listeners = int(tx_icecast_server_max_listeners_var.get())
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Built-in Icecast port and listener limit must be whole numbers.") from exc
+        icecast_server_mount = tx_icecast_server_mount_var.get().strip()
+        if not 1 <= icecast_server_port <= 65535:
+            raise ValueError("Built-in Icecast port must be between 1 and 65535.")
+        if not 1 <= icecast_server_max_listeners <= 500:
+            raise ValueError("Built-in Icecast listener limit must be between 1 and 500.")
+        if not icecast_server_mount.startswith("/") or any(
+            char.isspace() or ord(char) < 32 for char in icecast_server_mount
+        ):
+            raise ValueError("Built-in Icecast mountpoint must start with / and contain no spaces.")
+        icecast_server_settings = {
+            "enabled": bool(tx_icecast_server_enabled_var.get()),
+            "host": "0.0.0.0",
+            "port": icecast_server_port,
+            "mount": icecast_server_mount,
+            "listener_password": tx_icecast_server_password_var.get(),
+            "max_listeners": icecast_server_max_listeners,
+        }
+
         playlist_files = list(tx_playlist_files) if audio_source == "playlist" else []
         selected_device = (
             tx_audio_device_ids.get(tx_audio_device_var.get())
@@ -1474,6 +1520,7 @@ def build_app() -> None:
             "playlist_loop": playlist_loop,
             "icecast_destinations": list(selected_icecast_destinations),
             "icecast_bitrate_kbps": icecast_bitrate_kbps,
+            "icecast_server_settings": dict(icecast_server_settings),
         }
         return {
             "config": config,
@@ -1484,6 +1531,7 @@ def build_app() -> None:
             "playlist_loop": playlist_loop,
             "icecast_destinations": list(selected_icecast_destinations),
             "icecast_bitrate_kbps": icecast_bitrate_kbps,
+            "icecast_server_settings": dict(icecast_server_settings),
             "frequency_retry_context": retry_context,
         }
 
@@ -1499,6 +1547,7 @@ def build_app() -> None:
             playlist_loop=request["playlist_loop"],
             icecast_destinations=request["icecast_destinations"],
             icecast_bitrate_kbps=request["icecast_bitrate_kbps"],
+            icecast_server_settings=request["icecast_server_settings"],
         )
         live_reconfigure_state["active_request"] = request
         tx_status_var.set("Preparing transmission...")
@@ -1518,6 +1567,7 @@ def build_app() -> None:
             "playlist_loop",
             "icecast_destinations",
             "icecast_bitrate_kbps",
+            "icecast_server_settings",
         )
         return all(left.get(key) == right.get(key) for key in keys)
 
@@ -1854,6 +1904,7 @@ def build_app() -> None:
                 playlist_loop=context["playlist_loop"],
                 icecast_destinations=context.get("icecast_destinations", []),
                 icecast_bitrate_kbps=context.get("icecast_bitrate_kbps", 128),
+                icecast_server_settings=context.get("icecast_server_settings", {}),
             )
         except Exception as exc:
             frequency_retry_context = None
