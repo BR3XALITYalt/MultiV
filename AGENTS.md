@@ -12,6 +12,8 @@ Call the application **MultiV**. Use **TXITY** for the service, website, station
 - Output providers must operate independently. Each output has its own enable/disable control, and disabling or disconnecting one provider must not disable, block, or otherwise affect other enabled providers.
 - Route the selected audio source to every enabled output concurrently. Do not make Icecast transmission depend on a TXITY connection or authentication session, or make TXITY transmission depend on Icecast availability.
 - Keep provider-specific configuration and connection state separate. Shared audio capture may feed multiple outputs, but each output's lifecycle and failure handling must remain isolated.
+- In the Transmit page, present TXITY and Icecast as separate collapsible output rows. Each row has an independent enable toggle and a hamburger menu with move-up/move-down ordering actions. Persist the enabled state and order.
+- Remove Stations from the main navigation. Put Station directory in the TXITY menu and open it in a separate window containing the searchable live station list. Station details must provide a route back to that window.
 
 ## Before editing
 
