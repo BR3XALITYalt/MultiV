@@ -59,7 +59,7 @@ class EmbeddedIcecastServer:
         *,
         host: str = "0.0.0.0",
         port: int = 8000,
-        mount: str = "/live.mp3",
+        mount: str = "/live",
         name: str = "MultiV",
         description: str = "",
         listener_password: str = "",
@@ -70,7 +70,7 @@ class EmbeddedIcecastServer:
     ) -> None:
         self.host = str(host or "0.0.0.0").strip()
         self.port = int(port)
-        self.mount = "/" + str(mount or "live.mp3").strip().lstrip("/")
+        self.mount = "/" + str(mount or "live").strip().lstrip("/")
         self.name = self._header(name) or "MultiV"
         self.description = self._header(description)
         self.listener_password = str(listener_password or "")
