@@ -466,7 +466,7 @@ class CommandLineTests(unittest.TestCase):
             "--mode", "DRM",
             "--audio-source", "loopback",
         ])
-        with self.assertRaisesRegex(ValueError, "DRM mode supports"):
+        with self.assertRaisesRegex(ValueError, "Desktop audio loopback is unavailable with DRM"):
             build_headless_plan(
                 {"station_name": "DRM Test"},
                 args,
