@@ -62,6 +62,7 @@ class EmbeddedIcecastServer:
         description: str = "",
         listener_password: str = "",
         max_listeners: int = 25,
+        bitrate_kbps: int = 128,
         events: Any = None,
     ) -> None:
         self.host = str(host or "0.0.0.0").strip()
@@ -71,6 +72,9 @@ class EmbeddedIcecastServer:
         self.description = self._header(description)
         self.listener_password = str(listener_password or "")
         self.max_listeners = int(max_listeners)
+        self.bitrate_kbps = int(bitrate_kbps)
+        if self.bitrate_kbps not in {64, 96, 128, 160, 192, 256, 320}:
+            raise ValueError("Built-in Icecast MP3 bitrate is invalid.")
         self.events = events
         if not 1 <= self.port <= 65535:
             raise ValueError("Embedded Icecast port must be between 1 and 65535.")
@@ -147,7 +151,7 @@ class EmbeddedIcecastServer:
                     self.send_header("Connection", "close")
                     self.send_header("icy-name", owner.name)
                     self.send_header("icy-description", owner.description)
-                    self.send_header("icy-br", "128")
+                    self.send_header("icy-br", str(owner.bitrate_kbps))
                     self.send_header("icy-pub", "0")
                     self.end_headers()
                     while not owner._stopping.is_set() and not listener.closed.is_set():
