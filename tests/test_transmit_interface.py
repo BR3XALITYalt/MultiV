@@ -156,6 +156,13 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIn('icecast_server_settings=request["icecast_server_settings"]', self.source)
         self.assertIn('icecast_server_settings', self.source)
 
+    def test_icecast_destination_editor_has_per_output_format_and_bitrate(self):
+        self.assertIn('available_icecast_formats()', self.source)
+        self.assertIn('"Audio format"', self.source)
+        self.assertIn('"Bitrate (kbps)"', self.source)
+        self.assertIn('"format": format_labels.get(format_var.get(), "mp3")', self.source)
+        self.assertIn('"bitrate": bitrate_var.get()', self.source)
+
     def test_icecast_connection_events_update_destination_status(self):
         self.assertIn('elif kind == "tx_icecast_state":', self.source)
         self.assertIn('tx_icecast_states[destination_name] = destination_state', self.source)
