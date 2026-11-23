@@ -184,7 +184,7 @@ def build_app() -> None:
     ][:7]
     tx_frequency_check_var = tk.StringVar(root, "Waiting for TXITY station data.")
     saved_mode = saved_text("mode", "AM").strip().upper()
-    elif saved_mode == "AM (DEV)":
+    if saved_mode == "AM (DEV)":
         saved_mode = "AM"
     tx_mode_var = tk.StringVar(root, saved_mode)
     tx_mode_display_var = tk.StringVar(
