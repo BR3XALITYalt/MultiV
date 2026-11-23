@@ -490,7 +490,7 @@ class IcecastBroadcaster:
             if wait_for_space:
                 while not self._closing.is_set():
                     worker = group.thread
-                    if worker is not None and not worker.is_alive():
+                    if worker is None or not worker.is_alive():
                         break
                     try:
                         group.input_queue.put(block, timeout=0.1)
