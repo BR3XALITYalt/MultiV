@@ -2333,8 +2333,8 @@ def build_app() -> None:
         stereo_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
         stereo_frame.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
         drm_stereo_check = ttk.Checkbutton(
-            style="Switch.TCheckbutton",
             stereo_frame,
+            style="Switch.TCheckbutton",
             text="Stereo audio",
             variable=tx_drm_stereo_var,
             cursor="hand2",
@@ -2640,8 +2640,8 @@ def build_app() -> None:
         ).pack(anchor="e", pady=(3, 0))
 
         sharing = ttk.Checkbutton(
-            style="Switch.TCheckbutton",
             signal_card,
+            style="Switch.TCheckbutton",
             text="Allow shared frequency overlap with stations that also enable sharing",
             variable=tx_allow_overlap_var,
             command=update_frequency_check,
@@ -2681,8 +2681,8 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 8))
         fade_enabled = ttk.Checkbutton(
-            style="Switch.TCheckbutton",
             fade_card,
+            style="Switch.TCheckbutton",
             text="Enable signal fading",
             variable=tx_fade_enabled_var,
             cursor="hand2",
@@ -2756,8 +2756,8 @@ def build_app() -> None:
         agc_row = tk.Frame(audio_filter_card, bg=palette["surfaceContainerLow"])
         agc_row.pack(fill="x", padx=6, pady=(0, 8))
         agc_toggle = ttk.Checkbutton(
-            style="Switch.TCheckbutton",
             agc_row,
+            style="Switch.TCheckbutton",
             text="Server AGC enabled",
             variable=tx_agc_enabled_var,
             cursor="hand2",
@@ -2897,8 +2897,8 @@ def build_app() -> None:
         update_nfm_bandwidth_visibility()
 
         am_pre_emphasis = ttk.Checkbutton(
-            style="Switch.TCheckbutton",
             audio_filter_card,
+            style="Switch.TCheckbutton",
             text="AM pre-emphasis (brighter audio)",
             variable=tx_am_pre_emphasis_var,
             cursor="hand2",
@@ -2949,14 +2949,14 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(0, 10))
 
         built_in_server_frame = ttk.LabelFrame(
-            padding=10,
             icecast_card,
+            padding=10,
             text="Built-in Icecast server",
         )
         built_in_server_frame.pack(fill="x", pady=(0, 12))
         ttk.Checkbutton(
-            style="Switch.TCheckbutton",
             built_in_server_frame,
+            style="Switch.TCheckbutton",
             text="Host a stream from MultiV",
             variable=tx_icecast_server_enabled_var,
         ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 7))
@@ -3165,8 +3165,8 @@ def build_app() -> None:
             update_format_controls()
 
             ttk.Checkbutton(
-            style="Switch.TCheckbutton",
                 fields,
+            style="Switch.TCheckbutton",
                 text="Enable this destination",
                 variable=enabled_var,
             ).grid(row=10, column=0, sticky="w", pady=(12, 4))
@@ -3650,8 +3650,8 @@ def build_app() -> None:
             ("Loop playlist", tx_playlist_loop_var),
         ):
             option = ttk.Checkbutton(
-            style="Switch.TCheckbutton",
                 playlist_options,
+            style="Switch.TCheckbutton",
                 text=label,
                 variable=variable,
                 cursor="hand2",
@@ -3787,8 +3787,8 @@ def build_app() -> None:
         add_tx_entry(cw_fields, "Message", tx_cw_text_var, column=0, row=0)
         add_tx_entry(cw_fields, "Speed (5-60 WPM)", tx_cw_wpm_var, column=1, row=0)
         cw_loop = ttk.Checkbutton(
-            style="Switch.TCheckbutton",
             cw_card,
+            style="Switch.TCheckbutton",
             text="Repeat CW message",
             variable=tx_cw_loop_var,
             cursor="hand2",
@@ -4401,8 +4401,8 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(0, 10))
 
         enabled = ttk.Checkbutton(
-            style="Switch.TCheckbutton",
             web_card,
+            style="Switch.TCheckbutton",
             text="Enable Web GUI",
             variable=web_gui_enabled_var,
             command=toggle_web_gui,
