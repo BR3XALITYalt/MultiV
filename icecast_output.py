@@ -575,8 +575,8 @@ class IcecastBroadcaster:
                 pending = np.concatenate((pending, block))
                 while pending.size >= frame_size:
                     remaining = next_deadline - time.perf_counter()
-                    if remaining > 0 and self._closing.wait(remaining):
-                        break
+                    if remaining > 0 and not self._closing.is_set():
+                        self._closing.wait(remaining)
                     now = time.perf_counter()
                     if now - next_deadline > 0.5:
                         next_deadline = now
