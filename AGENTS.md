@@ -25,7 +25,7 @@ Call the application **MultiV**. Use **TXITY** for the service, website, station
 
 ## Interface rules
 
-- Keep the desktop app's Material 3-inspired palette, native Tkinter controls, rectangular panels, and horizontal navigation unless the task requires a change.
+- Keep the desktop app's light/dark color palette, native Tkinter controls, rectangular panels, and horizontal navigation unless the task requires a change.
 - Keep the browser panel consistent with its current layout. Add gradients, animation, activity indicators, or panels only when they serve a documented purpose.
 - Follow the ENERGY, RHYTHM, and MOTION dials in [DESIGN.md](DESIGN.md). Record the reason for any major visual change.
 - Make controls keyboard-accessible. Give each input a visible label, keep focus visible, and maintain readable contrast. Do not use color as the only status indicator.
