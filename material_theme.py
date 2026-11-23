@@ -1,194 +1,106 @@
-"""TeleDrive-inspired Material 3 palette and native rectangular Tk widgets."""
+"""Sun Valley ttk integration and matching colors for legacy Tk widgets."""
 
 from __future__ import annotations
 
+import sv_ttk
 
-MATERIAL_3_EXPRESSIVE = {
-    "name": "txitpy-m3",
-    "display_name": "TXITPY Material 3",
-    "light": {
-        "primary": "#185ABC",
+
+def _sun_valley_palette(mode: str) -> dict[str, str]:
+    if mode == "dark":
+        return {
+            "primary": "#57C8FF",
+            "onPrimary": "#001E2B",
+            "primaryContainer": "#2F60D8",
+            "onPrimaryContainer": "#FFFFFF",
+            "secondary": "#C5C5C5",
+            "onSecondary": "#1C1C1C",
+            "secondaryContainer": "#333333",
+            "onSecondaryContainer": "#F5F5F5",
+            "tertiary": "#8BD5FF",
+            "onTertiary": "#002B40",
+            "tertiaryContainer": "#164B70",
+            "onTertiaryContainer": "#D8F0FF",
+            "error": "#FFB4AB",
+            "onError": "#690005",
+            "errorContainer": "#93000A",
+            "onErrorContainer": "#FFDAD6",
+            "background": "#1C1C1C",
+            "onBackground": "#FAFAFA",
+            "surface": "#1C1C1C",
+            "onSurface": "#FAFAFA",
+            "surfaceVariant": "#383838",
+            "onSurfaceVariant": "#C6C6C6",
+            "outline": "#626262",
+            "outlineVariant": "#414141",
+            "inverseSurface": "#FAFAFA",
+            "inverseOnSurface": "#1C1C1C",
+            "inversePrimary": "#005A80",
+            "surfaceDim": "#171717",
+            "surfaceBright": "#303030",
+            "surfaceContainerLowest": "#202020",
+            "surfaceContainerLow": "#242424",
+            "surfaceContainer": "#282828",
+            "surfaceContainerHigh": "#2D2D2D",
+            "surfaceContainerHighest": "#383838",
+        }
+
+    return {
+        "primary": "#005FB8",
         "onPrimary": "#FFFFFF",
-        "primaryContainer": "#D9E2FF",
-        "onPrimaryContainer": "#001945",
-        "secondary": "#575E71",
+        "primaryContainer": "#DCEAFE",
+        "onPrimaryContainer": "#001D35",
+        "secondary": "#5B5B5B",
         "onSecondary": "#FFFFFF",
-        "secondaryContainer": "#DBE2F9",
-        "onSecondaryContainer": "#141B2C",
-        "tertiary": "#00677E",
+        "secondaryContainer": "#E8E8E8",
+        "onSecondaryContainer": "#202020",
+        "tertiary": "#006A8E",
         "onTertiary": "#FFFFFF",
-        "tertiaryContainer": "#B4EBFF",
-        "onTertiaryContainer": "#001F28",
+        "tertiaryContainer": "#C8E8F8",
+        "onTertiaryContainer": "#001F2A",
         "error": "#BA1A1A",
         "onError": "#FFFFFF",
         "errorContainer": "#FFDAD6",
         "onErrorContainer": "#410002",
-        "background": "#F9F9FF",
-        "onBackground": "#1A1B20",
-        "surface": "#F9F9FF",
-        "onSurface": "#1A1B20",
-        "surfaceVariant": "#E1E2EC",
-        "onSurfaceVariant": "#44464F",
-        "outline": "#757780",
-        "outlineVariant": "#C5C6D0",
-        "inverseSurface": "#2F3036",
-        "inverseOnSurface": "#F1F0F7",
-        "inversePrimary": "#B0C6FF",
-        "surfaceDim": "#D9D9E0",
-        "surfaceBright": "#F9F9FF",
+        "background": "#FAFAFA",
+        "onBackground": "#1C1C1C",
+        "surface": "#FAFAFA",
+        "onSurface": "#1C1C1C",
+        "surfaceVariant": "#E8E8E8",
+        "onSurfaceVariant": "#505050",
+        "outline": "#8A8A8A",
+        "outlineVariant": "#D0D0D0",
+        "inverseSurface": "#303030",
+        "inverseOnSurface": "#F5F5F5",
+        "inversePrimary": "#8CCBFF",
+        "surfaceDim": "#E5E5E5",
+        "surfaceBright": "#FAFAFA",
         "surfaceContainerLowest": "#FFFFFF",
-        "surfaceContainerLow": "#F3F3FA",
-        "surfaceContainer": "#EDEDF4",
-        "surfaceContainerHigh": "#E8E7EE",
-        "surfaceContainerHighest": "#E2E2E9",
-    },
-    "dark": {
-        "primary": "#B0C6FF",
-        "onPrimary": "#002D6E",
-        "primaryContainer": "#00429B",
-        "onPrimaryContainer": "#D9E2FF",
-        "secondary": "#BFC6DC",
-        "onSecondary": "#293042",
-        "secondaryContainer": "#3F4759",
-        "onSecondaryContainer": "#DBE2F9",
-        "tertiary": "#5CD5F9",
-        "onTertiary": "#003642",
-        "tertiaryContainer": "#004E5F",
-        "onTertiaryContainer": "#B4EBFF",
-        "error": "#FFB4AB",
-        "onError": "#690005",
-        "errorContainer": "#93000A",
-        "onErrorContainer": "#FFDAD6",
-        "background": "#111318",
-        "onBackground": "#E2E2E9",
-        "surface": "#111318",
-        "onSurface": "#E2E2E9",
-        "surfaceVariant": "#44464F",
-        "onSurfaceVariant": "#C5C6D0",
-        "outline": "#8F9099",
-        "outlineVariant": "#44464F",
-        "inverseSurface": "#E2E2E9",
-        "inverseOnSurface": "#2F3036",
-        "inversePrimary": "#1B6EF3",
-        "surfaceDim": "#111318",
-        "surfaceBright": "#37393E",
-        "surfaceContainerLowest": "#0C0E13",
-        "surfaceContainerLow": "#1A1B20",
-        "surfaceContainer": "#1E1F25",
-        "surfaceContainerHigh": "#282A2F",
-        "surfaceContainerHighest": "#33353A",
-    },
-}
+        "surfaceContainerLow": "#F4F4F4",
+        "surfaceContainer": "#EEEEEE",
+        "surfaceContainerHigh": "#E8E8E8",
+        "surfaceContainerHighest": "#DEDEDE",
+    }
 
 
-def apply_tk_theme(root, mode: str = "light") -> dict[str, str]:
-    """Apply the selected Material palette to Tk and return its color roles."""
+def apply_tk_theme(root, mode: str = "dark") -> dict[str, str]:
+    """Apply the official Sun Valley ttk theme and return matching Tk colors."""
     if mode not in {"light", "dark"}:
         raise ValueError("Theme mode must be 'light' or 'dark'.")
 
-    scheme = MATERIAL_3_EXPRESSIVE[mode]
-    if root is None:
-        return dict(scheme)
-
-    from tkinter import ttk
-
-    root.configure(background=scheme["background"])
-    style = ttk.Style(root)
-    style.theme_use("clam")
-
-    style.configure(
-        ".",
-        font=("Segoe UI", 10),
-        background=scheme["background"],
-        foreground=scheme["onSurface"],
-    )
-    style.configure("TFrame", background=scheme["background"])
-    style.configure(
-        "TLabel",
-        background=scheme["background"],
-        foreground=scheme["onSurface"],
-    )
-    style.configure(
-        "TEntry",
-        fieldbackground=scheme["surfaceContainerLowest"],
-        foreground=scheme["onSurface"],
-        insertcolor=scheme["onSurface"],
-        bordercolor=scheme["outline"],
-        lightcolor=scheme["outline"],
-        darkcolor=scheme["outline"],
-        padding=(12, 8),
-    )
-    style.map(
-        "TEntry",
-        fieldbackground=[("disabled", scheme["surfaceContainer"]), ("!disabled", scheme["surfaceContainerLowest"])],
-        foreground=[("disabled", scheme["onSurfaceVariant"]), ("!disabled", scheme["onSurface"])],
-    )
-    style.configure(
-        "Material.TEntry",
-        fieldbackground=scheme["surfaceContainerLowest"],
-        foreground=scheme["onSurface"],
-        insertcolor=scheme["onSurface"],
-        bordercolor=scheme["outline"],
-        lightcolor=scheme["outline"],
-        darkcolor=scheme["outline"],
-        padding=(12, 8),
-    )
-    style.map(
-        "Material.TEntry",
-        fieldbackground=[("focus", scheme["surfaceContainerLowest"])],
-        bordercolor=[("focus", scheme["primary"])],
-    )
-    style.configure(
-        "Material.Treeview",
-        background=scheme["surfaceContainerLowest"],
-        fieldbackground=scheme["surfaceContainerLowest"],
-        foreground=scheme["onSurface"],
-        rowheight=34,
-        borderwidth=0,
-        relief="flat",
-        font=("Segoe UI", 9),
-    )
-    style.map(
-        "Material.Treeview",
-        background=[("selected", scheme["primaryContainer"])],
-        foreground=[("selected", scheme["onPrimaryContainer"])],
-    )
-    style.configure(
-        "Material.Treeview.Heading",
-        background=scheme["surfaceContainerHigh"],
-        foreground=scheme["onSurfaceVariant"],
-        font=("Segoe UI", 9, "bold"),
-        padding=(10, 9),
-        borderwidth=0,
-        relief="flat",
-    )
-    style.map(
-        "Material.Treeview.Heading",
-        background=[("active", scheme["surfaceContainerHighest"])],
-    )
-    style.configure(
-        "Vertical.TScrollbar",
-        background=scheme["surfaceContainerHigh"],
-        troughcolor=scheme["surfaceContainerLow"],
-        bordercolor=scheme["surfaceContainerLow"],
-        arrowcolor=scheme["onSurfaceVariant"],
-    )
-    style.configure(
-        "Horizontal.TScrollbar",
-        background=scheme["surfaceContainerHigh"],
-        troughcolor=scheme["surfaceContainerLow"],
-        bordercolor=scheme["surfaceContainerLow"],
-        arrowcolor=scheme["onSurfaceVariant"],
-    )
-    return dict(scheme)
-
+    palette = _sun_valley_palette(mode)
+    if root is not None:
+        sv_ttk.set_theme(mode)
+        root.configure(background=palette["background"])
+    return palette
 
 
 def native_widget_classes(tk):
-    """Create native rectangular surfaces and buttons without custom drawing."""
+    """Provide the legacy surface and button interfaces using Sun Valley ttk."""
+
+    from tkinter import ttk
 
     class SurfaceFrame(tk.Frame):
-        """A rectangular surface with a thin outline and predictable padding."""
+        """A flat Tk surface that follows the selected Sun Valley color palette."""
 
         def __init__(
             self,
@@ -205,7 +117,6 @@ def native_widget_classes(tk):
             self._surface_background = background
             self._outside_background = outside or parent.cget("bg")
             self._outline_color = outline or background
-
             super().__init__(
                 parent,
                 bg=background,
@@ -219,8 +130,8 @@ def native_widget_classes(tk):
                 width=width if width is not None else 0,
             )
 
-    class FlatButton(tk.Button):
-        """A native rectangular button with clear hover and keyboard focus states."""
+    class FlatButton(ttk.Button):
+        """Compatibility wrapper that renders with Sun Valley's native button."""
 
         def __init__(
             self,
@@ -241,54 +152,18 @@ def native_widget_classes(tk):
             anchor: str = "center",
             min_width: int = 0,
         ) -> None:
-            self._normal_background = background
-            self._normal_foreground = foreground
-            self._hover_background = hover_background
-            self._hover_foreground = hover_foreground or foreground
-            self._focus_color = focus_color or foreground
-
             options = {
                 "text": text,
                 "command": command,
-                "font": font,
-                "bg": background,
-                "fg": foreground,
-                "activebackground": hover_background,
-                "activeforeground": self._hover_foreground,
-                "disabledforeground": foreground,
-                "relief": "flat",
-                "overrelief": "flat",
-                "bd": 0,
-                "borderwidth": 0,
-                "highlightthickness": 1,
-                "highlightbackground": outside or parent.cget("bg"),
-                "highlightcolor": self._focus_color,
-                "padx": padding_x,
-                "pady": padding_y,
-                "anchor": anchor,
+                "style": "TButton",
                 "cursor": "hand2",
+                "padding": (padding_x, padding_y),
                 "takefocus": True,
+                "anchor": anchor,
             }
             if min_width > 0:
                 options["width"] = min_width
             super().__init__(parent, **options)
-            self.bind("<Enter>", self._on_enter, add="+")
-            self.bind("<Leave>", self._on_leave, add="+")
-
-        def _on_enter(self, _event=None) -> None:
-            self.configure(
-                bg=self._hover_background,
-                fg=self._hover_foreground,
-                activebackground=self._hover_background,
-                activeforeground=self._hover_foreground,
-            )
-
-        def _on_leave(self, _event=None) -> None:
-            self.configure(
-                bg=self._normal_background,
-                fg=self._normal_foreground,
-                activebackground=self._hover_background,
-                activeforeground=self._hover_foreground,
-            )
+            self.configure(font=font)
 
     return SurfaceFrame, FlatButton
