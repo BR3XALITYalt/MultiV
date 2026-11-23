@@ -92,6 +92,7 @@ MultiV also includes a browser control panel for station settings and transmissi
 - [Reference guide](wiki/Home.md)
 - [Audio sources and playlists](wiki/Audio-Sources.md)
 - [Icecast outputs](wiki/Icecast-Outputs.md)
+- [Built-in Icecast-compatible server](wiki/Built-in-Icecast-Server.md)
 - [Signal modes](wiki/Signal-Modes.md)
 - [Browser control panel](wiki/Browser-Control-Panel.md)
 - [Configuration and command line](wiki/Configuration-and-CLI.md)
