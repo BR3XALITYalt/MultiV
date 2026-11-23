@@ -975,6 +975,13 @@ def build_app() -> None:
     def open_station(station_id: str) -> None:
         nonlocal selected_station_id, current_page
         selected_station_id = station_id
+        if shell_built and "station_detail" in page_frames:
+            detail_frame = page_frames["station_detail"]
+            for child in detail_frame.winfo_children():
+                child.destroy()
+            active_scroll_canvas = None
+            show_station_detail(detail_frame)
+            page_canvases["station_detail"] = active_scroll_canvas
         if station_directory_window is not None:
             try:
                 if station_directory_window.winfo_exists():
@@ -4825,14 +4832,19 @@ def build_app() -> None:
 
             # Construct every main page once. Navigation only changes which
             # already-built frame is visible, avoiding widget churn while scrolling.
+            active_scroll_canvas = None
             show_gate(page_frames["gate"])
             page_canvases["gate"] = active_scroll_canvas
+            active_scroll_canvas = None
             show_transmit(page_frames["transmit"])
             page_canvases["transmit"] = active_scroll_canvas
+            active_scroll_canvas = None
             show_discord(page_frames["discord"])
             page_canvases["discord"] = active_scroll_canvas
+            active_scroll_canvas = None
             show_settings(page_frames["settings"])
             page_canvases["settings"] = active_scroll_canvas
+            active_scroll_canvas = None
             show_station_detail(page_frames["station_detail"])
             page_canvases["station_detail"] = active_scroll_canvas
             shell_built = True
