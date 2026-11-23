@@ -151,6 +151,41 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIn('tx_icecast_bitrate_var', self.source)
         self.assertIn('schedule_live_reconfigure()', self.source)
 
+    def test_audio_input_is_reordered_before_output_card_as_a_sibling(self):
+        reorder_calls = [
+            node
+            for node in ast.walk(self.tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "pack_configure"
+        ]
+        self.assertTrue(
+            any(
+                isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "audio_card"
+                and any(
+                    keyword.arg == "before"
+                    and isinstance(keyword.value, ast.Name)
+                    and keyword.value.id == "icecast_card"
+                    for keyword in node.keywords
+                )
+                for node in reorder_calls
+            )
+        )
+        self.assertFalse(
+            any(
+                isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "icecast_card"
+                and any(
+                    keyword.arg == "before"
+                    and isinstance(keyword.value, ast.Name)
+                    and keyword.value.id == "station_card"
+                    for keyword in node.keywords
+                )
+                for node in reorder_calls
+            )
+        )
+
     def test_txity_configuration_is_inside_its_collapsible_row(self):
         self.assertIn("station_card = make_card(txity_output_body, padding=16)", self.source)
         self.assertIn("signal_card = make_card(txity_output_body, padding=16)", self.source)
