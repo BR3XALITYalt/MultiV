@@ -144,6 +144,7 @@ class EmbeddedIcecastServer:
                         self.send_error(503, "Listener limit reached")
                         return
                     owner._listeners.add(listener)
+                    owner._emit("Listener connected", f"{len(owner._listeners)} listener(s)")
                 try:
                     self.send_response(200)
                     self.send_header("Content-Type", "audio/mpeg")
@@ -169,6 +170,8 @@ class EmbeddedIcecastServer:
                     listener.close()
                     with owner._lock:
                         owner._listeners.discard(listener)
+                        remaining = len(owner._listeners)
+                    owner._emit("Listener disconnected", f"{remaining} listener(s)")
 
         try:
             self._server = ThreadingHTTPServer((self.host, self.port), Handler)
