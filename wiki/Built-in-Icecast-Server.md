@@ -11,7 +11,7 @@ MultiV can host an HTTP MP3 stream itself, without an external Icecast provider.
 5. Set the maximum number of simultaneous listeners.
 6. Start the MultiV transmission.
 
-The server starts with the transmission and stops when the transmission stops. The stream uses the selected MP3 bitrate and is encoded once for both built-in listeners and external Icecast destinations.
+The server starts with the transmission and stops when the transmission stops. The built-in listener stream remains MP3 and uses the separate **Built-in MP3 bitrate** setting. External Icecast destinations can each select their own codec and bitrate.
 
 ## Connect
 
