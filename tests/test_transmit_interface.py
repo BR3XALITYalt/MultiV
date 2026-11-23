@@ -227,10 +227,16 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertNotIn('("Stations", "stations")', self.source)
         self.assertNotIn('elif current_page == "stations":', self.source)
 
-    def test_canvas_scroll_events_are_coalesced(self):
-        self.assertIn('pending_scroll_pixels += scroll_delta', self.source)
-        self.assertIn('root.after_idle(flush_pending_scroll)', self.source)
+    def test_canvas_scroll_is_applied_without_idle_queue(self):
+        self.assertIn('canvas.yview_scroll(units, "units")', self.source)
+        self.assertNotIn('root.after_idle(flush_pending_scroll)', self.source)
         self.assertIn('yscrollincrement=SCROLL_UNIT_PIXELS', self.source)
+
+    def test_main_pages_are_prebuilt_and_reused(self):
+        self.assertIn('for page_name in ("gate", "transmit", "discord", "settings", "station_detail")', self.source)
+        self.assertIn('show_transmit(page_frames["transmit"])', self.source)
+        self.assertIn('frame.pack_forget()', self.source)
+        self.assertIn('("Accounts", "discord")', self.source)
 
 
 if __name__ == "__main__":
