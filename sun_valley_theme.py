@@ -11,23 +11,23 @@ def _sun_valley_palette(mode: str) -> dict[str, str]:
         return {
             "background": "#1c1c1c",
             "foreground": "#fafafa",
-            "mutedForeground": "#c5c5c5",
+            "mutedForeground": "#595959",
             "accent": "#57c8ff",
             "selectionBackground": "#2f60d8",
             "selectionForeground": "#ffffff",
             "outline": "#595959",
-            "outlineVariant": "#383838",
+            "outlineVariant": "#595959",
         }
     if mode == "light":
         return {
             "background": "#fafafa",
             "foreground": "#1c1c1c",
-            "mutedForeground": "#5b5b5b",
+            "mutedForeground": "#a0a0a0",
             "accent": "#005fb8",
             "selectionBackground": "#2f60d8",
             "selectionForeground": "#ffffff",
             "outline": "#a0a0a0",
-            "outlineVariant": "#d0d0d0",
+            "outlineVariant": "#a0a0a0",
         }
     raise ValueError("Theme mode must be 'light' or 'dark'.")
 
