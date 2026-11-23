@@ -51,6 +51,7 @@ from icecast_output import (
     IcecastBroadcaster,
     normalize_icecast_destination,
 )
+from icecast_server import EmbeddedIcecastServer
 
 
 BASE_URL = "https://txity.radiodiscussion.org"
@@ -878,6 +879,7 @@ class TxityTransmitter:
         playlist_loop: bool = False,
         icecast_destinations: list[dict[str, Any]] | None = None,
         icecast_bitrate_kbps: int = 128,
+        icecast_server_settings: dict[str, Any] | None = None,
     ) -> None:
         selected_source = str(audio_source or "mic").casefold()
         if selected_source not in SUPPORTED_AUDIO_SOURCES:
@@ -930,6 +932,7 @@ class TxityTransmitter:
                     bool(playlist_loop),
                     selected_icecast_destinations,
                     selected_icecast_bitrate,
+                    dict(icecast_server_settings or {}),
                 ),
                 daemon=True,
                 name="txity-transmitter",
@@ -965,6 +968,7 @@ class TxityTransmitter:
         playlist_loop: bool,
         icecast_destinations: list[dict[str, Any]],
         icecast_bitrate_kbps: int,
+        icecast_server_settings: dict[str, Any],
     ) -> None:
         import numpy as np
         import websocket
@@ -1002,7 +1006,8 @@ class TxityTransmitter:
         audio_capture_error: list[str] = []
         audio_queue = self._audio_queue
         icecast_broadcaster: IcecastBroadcaster | None = None
-        if icecast_destinations:
+        local_icecast_server = None
+        if icecast_destinations or bool(icecast_server_settings.get("enabled")):
             if drm_mode or mode == "CW":
                 unsupported_mode = "DRM" if drm_mode else "CW"
                 self.events.put({
@@ -1012,6 +1017,17 @@ class TxityTransmitter:
                     "text": f"Icecast output is not available in {unsupported_mode} mode.",
                 })
             else:
+                if bool(icecast_server_settings.get("enabled")):
+                    local_icecast_server = EmbeddedIcecastServer(
+                        host=str(icecast_server_settings.get("host") or "0.0.0.0"),
+                        port=int(icecast_server_settings.get("port", 8000)),
+                        mount=str(icecast_server_settings.get("mount") or "/live.mp3"),
+                        name=str(config.get("stationName") or "MultiV"),
+                        description=str(config.get("stationDescription") or ""),
+                        listener_password=str(icecast_server_settings.get("listener_password") or ""),
+                        max_listeners=int(icecast_server_settings.get("max_listeners", 25)),
+                        events=self.events,
+                    )
                 icecast_broadcaster = IcecastBroadcaster(
                     icecast_destinations,
                     bitrate_kbps=icecast_bitrate_kbps,
@@ -1019,6 +1035,7 @@ class TxityTransmitter:
                     station_description=str(config.get("stationDescription") or ""),
                     events=self.events,
                     sample_rate=SAMPLE_RATE_HZ,
+                    local_server=local_icecast_server,
                 )
                 icecast_broadcaster.start()
         nfm_modulator = (
