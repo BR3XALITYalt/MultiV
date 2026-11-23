@@ -138,7 +138,11 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
     def test_icecast_destination_management_is_available_on_transmit_page(self):
         self.assertIn('icecast_card = make_card(page, padding=16)', self.source)
         self.assertIn('"Output destinations"', self.source)
-        self.assertIn('"TXITY virtual transmitter"', self.source)
+        self.assertIn('txity_output_body = create_output_provider_row(', self.source)
+        self.assertIn('icecast_output_body = create_output_provider_row(', self.source)
+        self.assertIn('label="Move up"', self.source)
+        self.assertIn('label="Move down"', self.source)
+        self.assertIn('output_order', self.source)
         self.assertIn('"Remote Icecast servers"', self.source)
         self.assertIn('"Audio input"', self.source)
         self.assertIn('def edit_icecast_destination(', self.source)
@@ -146,6 +150,21 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIn('def remove_selected_icecast_destination(', self.source)
         self.assertIn('tx_icecast_bitrate_var', self.source)
         self.assertIn('schedule_live_reconfigure()', self.source)
+
+    def test_provider_toggles_are_independent_and_persisted(self):
+        self.assertIn("txity_output_enabled_var", self.source)
+        self.assertIn("icecast_output_enabled_var", self.source)
+        self.assertIn('"txity_output_enabled": txity_output_enabled_var.get()', self.source)
+        self.assertIn('"icecast_output_enabled": icecast_output_enabled_var.get()', self.source)
+        self.assertIn('txity_enabled=request["txity_enabled"]', self.source)
+        self.assertIn('if txity_output_enabled_var.get() and not discord_authenticated:', self.source)
+
+    def test_builtin_icecast_supports_codec_selection(self):
+        self.assertIn('tx_icecast_server_format_var', self.source)
+        self.assertIn('"audio_format": selected_server_format', self.source)
+        self.assertIn('"bitrate_kbps": built_in_server_bitrate', self.source)
+        self.assertIn('("ogg_opus", "ogg_vorbis", "aac_plus", "ogg_flac", "mp3")', self.source)
+        self.assertIn('text="Bitrate (kbps)"', self.source)
 
     def test_embedded_icecast_server_settings_are_saved_and_passed_to_transmitter(self):
         for setting in (
