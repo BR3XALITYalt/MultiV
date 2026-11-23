@@ -1473,6 +1473,7 @@ def build_app() -> None:
         if not txity_enabled and not icecast_enabled:
             raise ValueError("Enable at least one output: TXITY or Icecast.")
 
+        icecast_configuration_errors: list[str] = []
         selected_icecast_destinations = []
         if icecast_enabled:
             for destination in icecast_destinations:
@@ -1482,63 +1483,97 @@ def build_app() -> None:
                     destination.get("password") or ""
                 ):
                     continue
-                selected_icecast_destinations.append(
-                    normalize_icecast_destination(destination)
-                )
+                try:
+                    selected_icecast_destinations.append(
+                        normalize_icecast_destination(destination)
+                    )
+                except Exception as exc:
+                    destination_name = str(destination.get("url") or "Icecast destination")
+                    icecast_configuration_errors.append(
+                        f"{destination_name}: {safe_error_text(str(exc), 180)}"
+                    )
 
         selected_server_format = tx_icecast_server_format_var.get().strip().casefold()
-        server_format_spec = ICECAST_FORMATS.get(selected_server_format)
-        if server_format_spec is None:
-            raise ValueError("Choose an available built-in Icecast audio format.")
-        if server_format_spec.get("lossless"):
-            icecast_bitrate_kbps = 128
-            built_in_server_bitrate = 0
-        else:
-            try:
-                built_in_server_bitrate = int(tx_icecast_bitrate_var.get())
-            except (TypeError, ValueError) as exc:
-                raise ValueError("Built-in Icecast bitrate must be a whole number.") from exc
-            if built_in_server_bitrate not in ICECAST_BITRATES:
-                raise ValueError(
-                    "Built-in Icecast bitrate must be one of: "
-                    + ", ".join(str(value) for value in ICECAST_BITRATES)
-                    + " kbps."
-                )
-            if selected_server_format == "aac_plus" and built_in_server_bitrate > 128:
-                raise ValueError("AAC+ bitrate must be 128 kbps or lower.")
-            if selected_server_format == "ogg_opus" and built_in_server_bitrate < 48:
-                raise ValueError("Ogg Opus bitrate must be at least 48 kbps.")
-            icecast_bitrate_kbps = built_in_server_bitrate
-
-        try:
-            icecast_server_port = int(tx_icecast_server_port_var.get())
-            icecast_server_max_listeners = int(tx_icecast_server_max_listeners_var.get())
-        except (TypeError, ValueError) as exc:
-            raise ValueError("Built-in Icecast port and listener limit must be whole numbers.") from exc
-        icecast_server_mount = tx_icecast_server_mount_var.get().strip()
-        if not 1 <= icecast_server_port <= 65535:
-            raise ValueError("Built-in Icecast port must be between 1 and 65535.")
-        if not 1 <= icecast_server_max_listeners <= 500:
-            raise ValueError("Built-in Icecast listener limit must be between 1 and 500.")
-        if not icecast_server_mount.startswith("/") or any(
-            char.isspace() or ord(char) < 32 for char in icecast_server_mount
-        ):
-            raise ValueError("Built-in Icecast mountpoint must start with / and contain no spaces.")
+        if selected_server_format not in ICECAST_FORMATS:
+            selected_server_format = "ogg_opus" if "ogg_opus" in ICECAST_FORMATS else "mp3"
+        icecast_bitrate_kbps = 128
+        built_in_server_bitrate = 0 if ICECAST_FORMATS[selected_server_format].get("lossless") else 96
         built_in_server_enabled = (
             icecast_enabled and bool(tx_icecast_server_enabled_var.get())
         )
         icecast_server_settings = {
-            "enabled": built_in_server_enabled,
+            "enabled": False,
             "host": "0.0.0.0",
-            "port": icecast_server_port,
-            "mount": icecast_server_mount,
+            "port": 8000,
+            "mount": "/live",
             "listener_password": tx_icecast_server_password_var.get(),
-            "max_listeners": icecast_server_max_listeners,
+            "max_listeners": 25,
             "audio_format": selected_server_format,
             "bitrate_kbps": built_in_server_bitrate,
         }
+
+        if built_in_server_enabled:
+            try:
+                server_format_spec = ICECAST_FORMATS[selected_server_format]
+                if server_format_spec.get("lossless"):
+                    built_in_server_bitrate = 0
+                    icecast_bitrate_kbps = 128
+                else:
+                    try:
+                        built_in_server_bitrate = int(tx_icecast_bitrate_var.get())
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError("Built-in Icecast bitrate must be a whole number.") from exc
+                    if built_in_server_bitrate not in ICECAST_BITRATES:
+                        raise ValueError(
+                            "Built-in Icecast bitrate must be one of: "
+                            + ", ".join(str(value) for value in ICECAST_BITRATES)
+                            + " kbps."
+                        )
+                    if selected_server_format == "aac_plus" and built_in_server_bitrate > 128:
+                        raise ValueError("AAC+ bitrate must be 128 kbps or lower.")
+                    if selected_server_format == "ogg_opus" and built_in_server_bitrate < 48:
+                        raise ValueError("Ogg Opus bitrate must be at least 48 kbps.")
+                    icecast_bitrate_kbps = built_in_server_bitrate
+
+                icecast_server_port = int(tx_icecast_server_port_var.get())
+                icecast_server_max_listeners = int(tx_icecast_server_max_listeners_var.get())
+                icecast_server_mount = tx_icecast_server_mount_var.get().strip()
+                if not 1 <= icecast_server_port <= 65535:
+                    raise ValueError("Built-in Icecast port must be between 1 and 65535.")
+                if not 1 <= icecast_server_max_listeners <= 500:
+                    raise ValueError("Built-in Icecast listener limit must be between 1 and 500.")
+                if not icecast_server_mount.startswith("/") or any(
+                    char.isspace() or ord(char) < 32 for char in icecast_server_mount
+                ):
+                    raise ValueError("Built-in Icecast mountpoint must start with / and contain no spaces.")
+
+                icecast_server_settings = {
+                    "enabled": True,
+                    "host": "0.0.0.0",
+                    "port": icecast_server_port,
+                    "mount": icecast_server_mount,
+                    "listener_password": tx_icecast_server_password_var.get(),
+                    "max_listeners": icecast_server_max_listeners,
+                    "audio_format": selected_server_format,
+                    "bitrate_kbps": built_in_server_bitrate,
+                }
+            except (TypeError, ValueError) as exc:
+                built_in_server_enabled = False
+                icecast_configuration_errors.append(
+                    "Built-in Icecast server: " + safe_error_text(str(exc), 220)
+                )
+
+        if icecast_configuration_errors:
+            tx_icecast_status_var.set(
+                "Icecast configuration issue: " + "; ".join(icecast_configuration_errors)[:420]
+            )
+
         if not txity_enabled and not selected_icecast_destinations and not built_in_server_enabled:
-            raise ValueError("Enable the Icecast server or add an enabled remote Icecast destination.")
+            detail = "; ".join(icecast_configuration_errors)
+            raise ValueError(
+                detail
+                or "Enable the built-in Icecast server or add an enabled remote Icecast destination."
+            )
 
         playlist_files = list(tx_playlist_files) if audio_source == "playlist" else []
         selected_device = (
