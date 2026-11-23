@@ -13,6 +13,7 @@ import os
 import sys
 import threading
 from pathlib import Path
+from app_paths import app_data_path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
@@ -280,9 +281,7 @@ def main(argv: list[str] | None = None) -> int:
         installed_version = "unknown"
     report_stage(f"Loaded pywebview {installed_version}.")
 
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    profile_root = Path(local_app_data) if local_app_data else Path.home()
-    profile_path = profile_root / "TXITPY" / "BrowserProfile"
+    profile_path = app_data_path("browser-profile")
     report_stage(f"Preparing browser profile at {profile_path}.")
     try:
         profile_path.mkdir(parents=True, exist_ok=True)
