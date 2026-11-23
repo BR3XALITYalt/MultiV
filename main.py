@@ -558,6 +558,7 @@ def build_app() -> None:
     theme_button: Any = None
     page_frames: dict[str, ttk.Frame] = {}
     page_canvases: dict[str, tk.Canvas | None] = {}
+    nav_buttons: dict[str, Any] = {}
     shell_built = False
     active_scroll_canvas: tk.Canvas | None = None
     SCROLL_PIXELS_PER_NOTCH = 96
@@ -4798,7 +4799,6 @@ def build_app() -> None:
 
             nav_frame = ttk.Frame(topbar)
             nav_frame.pack(side="left", fill="y")
-            nav_buttons: dict[str, Any] = {}
             for label, destination in (("Transmit", "transmit"), ("Accounts", "discord"), ("Settings", "settings")):
                 button = make_button(nav_frame, label, lambda target=destination: navigate(target), kind="normal", padx=12, pady=7)
                 button.pack(side="left", padx=2, pady=2)
@@ -4858,6 +4858,12 @@ def build_app() -> None:
             if name == requested:
                 frame.pack(fill="both", expand=True)
         active_scroll_canvas = page_canvases.get(requested)
+        selected_nav = "transmit" if requested == "station_detail" else requested
+        for destination, button in nav_buttons.items():
+            try:
+                button.configure(style="Accent.TButton" if destination == selected_nav else "TButton")
+            except tk.TclError:
+                pass
         if theme_button is not None:
             theme_button.configure(text="Light mode" if theme_mode == "dark" else "Dark mode")
 
