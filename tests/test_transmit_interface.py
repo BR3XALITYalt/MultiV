@@ -262,6 +262,15 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertNotIn('("Stations", "stations")', self.source)
         self.assertNotIn('elif current_page == "stations":', self.source)
 
+    def test_scroll_canvas_updates_viewport_width_separately_from_content_region(self):
+        start = self.source.index("def create_scrollable_page(")
+        end = self.source.index("def show_stations(", start)
+        helper = self.source[start:end]
+        self.assertIn("if event is not None and event.widget is canvas:", helper)
+        self.assertIn("canvas.itemconfigure(window_id, width=width)", helper)
+        self.assertIn("bounds != last_scrollregion", helper)
+        self.assertNotIn("canvas.itemconfigure(window_id, width=canvas.winfo_width())", helper)
+
     def test_canvas_scroll_is_applied_without_idle_queue(self):
         self.assertIn('canvas.yview_scroll(units, "units")', self.source)
         self.assertNotIn('root.after_idle(flush_pending_scroll)', self.source)
