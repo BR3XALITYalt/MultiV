@@ -57,7 +57,7 @@ jobs:
           if manual:
               requested = os.environ.get("REQUESTED_VERSION", "").strip()
               if requested:
-                  match = re.fullmatch(r"(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)", requested)
+                  match = re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", requested)
                   if not match:
                       raise SystemExit("Release version must use MAJOR.MINOR.PATCH, for example 2.0.0.")
                   selected = tuple(map(int, match.groups()))
