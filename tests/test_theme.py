@@ -23,7 +23,7 @@ class SunValleyThemeTests(unittest.TestCase):
     def test_standard_interface_widgets_use_ttk(self):
         source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
         for widget in ("Frame", "Label", "Button", "Entry", "Checkbutton", "Scale"):
-            self.assertNotRegex(source, rf"(?<!t)tk\\.{widget}\\(")
+            self.assertNotRegex(source, rf"(?<!t)tk\.{widget}\(")
         for themed_widget in (
             "ttk.Frame(", "ttk.Label(", "ttk.Button(", "ttk.Entry(",
             "ttk.Combobox(", "ttk.Checkbutton(", "ttk.Scale(",
