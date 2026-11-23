@@ -302,7 +302,7 @@ def build_headless_plan(
     if mode == "CW":
         audio_source = "mic"
     if mode == "DRM" and audio_source == "loopback":
-        raise ValueError("DRM mode supports microphone and playlist inputs, not desktop audio loopback.")
+        raise ValueError("Desktop audio loopback is unavailable with DRM. Select a microphone or playlist.")
 
     selected_device: int | None = None
     selected_device_name = (
