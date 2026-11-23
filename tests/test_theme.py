@@ -1,52 +1,51 @@
-import tkinter as tk
+import ast
 import unittest
-from tkinter import ttk
-
-from material_theme import (
-    _sun_valley_palette,
-    apply_tk_theme,
-    native_widget_classes,
-)
+from pathlib import Path
 
 
-REQUIRED_ROLES = {
-    "primary", "onPrimary", "primaryContainer", "onPrimaryContainer",
-    "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer",
-    "tertiary", "onTertiary", "tertiaryContainer", "onTertiaryContainer",
-    "error", "onError", "errorContainer", "onErrorContainer",
-    "background", "onBackground", "surface", "onSurface", "surfaceVariant",
-    "onSurfaceVariant", "outline", "outlineVariant", "inverseSurface",
-    "inverseOnSurface", "inversePrimary", "surfaceDim", "surfaceBright",
-    "surfaceContainerLowest", "surfaceContainerLow", "surfaceContainer",
-    "surfaceContainerHigh", "surfaceContainerHighest",
-}
+MAIN_FILE = Path(__file__).resolve().parents[1] / "main.py"
 
 
-class SunValleyThemeTests(unittest.TestCase):
-    def test_palette_contains_all_legacy_tk_color_roles(self):
-        for mode in ("light", "dark"):
-            with self.subTest(mode=mode):
-                self.assertTrue(REQUIRED_ROLES.issubset(_sun_valley_palette(mode)))
+class NativeTkInterfaceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = MAIN_FILE.read_text(encoding="utf-8")
+        cls.tree = ast.parse(cls.source)
 
-    def test_dark_palette_matches_sun_valley_dark_identity(self):
-        palette = apply_tk_theme(None, "dark")
-        self.assertEqual(palette["background"], "#1C1C1C")
-        self.assertEqual(palette["onSurface"], "#FAFAFA")
-        self.assertEqual(palette["primary"], "#57C8FF")
+    def test_external_theme_dependency_is_removed(self):
+        for name in ("material_theme", "sv_ttk", "SurfaceFrame", "FlatButton"):
+            with self.subTest(name=name):
+                self.assertNotIn(name, self.source)
 
-    def test_light_palette_matches_sun_valley_light_identity(self):
-        palette = apply_tk_theme(None, "light")
-        self.assertEqual(palette["background"], "#FAFAFA")
-        self.assertEqual(palette["onSurface"], "#1C1C1C")
-        self.assertEqual(palette["primary"], "#005FB8")
+    def test_app_buttons_use_native_tk_button(self):
+        helper = next(
+            node for node in ast.walk(self.tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "make_colored_button"
+        )
+        self.assertTrue(
+            any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "tk"
+                and node.func.attr == "Button"
+                for node in ast.walk(helper)
+            )
+        )
 
-    def test_unknown_theme_is_rejected(self):
-        with self.assertRaises(ValueError):
-            apply_tk_theme(None, "automatic")
+    def test_custom_ttk_styles_are_not_required(self):
+        for name in ("Switch.TCheckbutton", "Accent.TButton", "TXITY.Horizontal.TProgressbar"):
+            with self.subTest(name=name):
+                self.assertNotIn(name, self.source)
 
-    def test_button_compatibility_class_uses_ttk(self):
-        _surface_frame, button_class = native_widget_classes(tk)
-        self.assertTrue(issubclass(button_class, ttk.Button))
+    def test_native_palette_supports_light_and_dark_modes(self):
+        function = next(
+            node for node in ast.walk(self.tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "_application_palette"
+        )
+        source = ast.unparse(function)
+        self.assertIn('"dark"', source)
+        self.assertIn('"light"', source)
 
 
 if __name__ == "__main__":
