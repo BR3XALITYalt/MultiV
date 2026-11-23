@@ -287,7 +287,7 @@ class TxityClient:
                     status_received.set()
                     self.events.put({
                         "kind": "connection",
-                        "text": "Connected; receiving live TXITY status.",
+                        "text": "Connected",
                     })
                 self.events.put({"kind": "status", "data": data})
             elif message_type in {"notice", "kicked", "banned"}:
