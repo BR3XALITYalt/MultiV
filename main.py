@@ -977,6 +977,9 @@ def build_app() -> None:
         selected_station_id = station_id
         if shell_built and "station_detail" in page_frames:
             detail_frame = page_frames["station_detail"]
+            old_detail_canvas = page_canvases.get("station_detail")
+            if old_detail_canvas in scroll_canvases:
+                scroll_canvases.remove(old_detail_canvas)
             for child in detail_frame.winfo_children():
                 child.destroy()
             active_scroll_canvas = None
