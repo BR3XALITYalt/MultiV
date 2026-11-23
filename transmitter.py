@@ -329,8 +329,6 @@ def mode_bandwidth_hz(
     """Return a TXITY channel-width estimate, preferring station-reported values."""
     station = station if isinstance(station, dict) else {}
     mode_name = str(mode or "AM").strip().upper()
-    if mode_name == "DRM [EXPERIMENTAL]":
-        mode_name = "DRM"
     field_names = ["bandwidthHz", "occupiedBandwidthHz", "rfBandwidthHz"]
     if mode_name in {"AM", "DSB", "DRM"}:
         field_names.append("amBandwidthHz")
@@ -472,8 +470,6 @@ def build_transmit_config(
         raise ValueError("Sign in with Discord before starting transmission.")
 
     selected_mode = str(mode or "AM").strip().upper()
-    if selected_mode == "DRM [EXPERIMENTAL]":
-        selected_mode = "DRM"
     if selected_mode not in SUPPORTED_MODES:
         raise ValueError(f"Unsupported transmission mode: {selected_mode}.")
     if selected_mode == "DRM":
