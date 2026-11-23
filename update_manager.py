@@ -262,7 +262,7 @@ try {{
     }}
     Write-UpdateLog "Starting installer for $InstallDir."
 
-    $InstallerArguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR="' + $InstallDir + '"'
+    $InstallerArguments = '/NORESTART /SP- /DIR="' + $InstallDir + '"'
     $InstallerProcess = Start-Process -FilePath $Installer -ArgumentList $InstallerArguments -Verb RunAs -Wait -PassThru
     if ($null -eq $InstallerProcess -or $InstallerProcess.ExitCode -ne 0) {{
         $ExitCode = if ($null -eq $InstallerProcess) {{ 'unknown' }} else {{ $InstallerProcess.ExitCode }}
