@@ -1480,6 +1480,7 @@ def build_app() -> None:
                 "Audio playlist": "playlist",
             }.get(tx_audio_source_var.get(), "mic")
 
+        # Input-source validation is separate from the shared output destinations.
         if config.get("_txitpyMode") == "DRM" and audio_source == "loopback":
             raise ValueError(
                 "Desktop audio loopback is unavailable with DRM. Select a microphone or playlist."
