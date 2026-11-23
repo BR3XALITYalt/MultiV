@@ -107,6 +107,56 @@ class IcecastDestinationTests(unittest.TestCase):
         self.assertIn("ice-name: Station", request)
         self.assertIn("ice-description: Station description", request)
 
+    def test_normalizes_butt_style_formats(self):
+        cases = {
+            "mp3": ("audio/mpeg", 128),
+            "ogg_vorbis": ("application/ogg", 128),
+            "ogg_opus": ("application/ogg", 128),
+            "ogg_flac": ("application/ogg", 0),
+            "aac_plus": ("audio/aacp", 96),
+        }
+        for audio_format, (content_type, bitrate) in cases.items():
+            with self.subTest(audio_format=audio_format):
+                result = normalize_icecast_destination({
+                    "url": "http://radio.example/live",
+                    "password": "secret",
+                    "format": audio_format,
+                    "bitrate": bitrate or 128,
+                })
+                from icecast_output import ICECAST_FORMATS
+                self.assertEqual(ICECAST_FORMATS[audio_format]["content_type"], content_type)
+                self.assertEqual(int(result["bitrate"]), bitrate)
+
+    def test_rejects_invalid_codec_bitrate_combinations(self):
+        with self.assertRaisesRegex(ValueError, "AAC"):
+            normalize_icecast_destination({
+                "url": "http://radio.example/live", "password": "secret",
+                "format": "aac_plus", "bitrate": 192,
+            })
+        with self.assertRaisesRegex(ValueError, "Opus"):
+            normalize_icecast_destination({
+                "url": "http://radio.example/live", "password": "secret",
+                "format": "ogg_opus", "bitrate": 32,
+            })
+
+    def test_destinations_with_different_formats_get_separate_encoder_groups(self):
+        broadcaster = IcecastBroadcaster(
+            [
+                {"url": "http://radio-one.example/live", "password": "one",
+                 "format": "mp3", "bitrate": 128},
+                {"url": "http://radio-two.example/live", "password": "two",
+                 "format": "ogg_opus", "bitrate": 96},
+                {"url": "http://radio-three.example/live", "password": "three",
+                 "format": "ogg_opus", "bitrate": 96},
+            ],
+            events=queue.Queue(),
+        )
+        self.assertEqual(
+            [(group.audio_format, group.bitrate_kbps) for group in broadcaster._groups],
+            [("mp3", 128), ("ogg_opus", 96)],
+        )
+        self.assertEqual(len(broadcaster._groups[1].destinations), 2)
+
     def test_rejects_non_success_server_response(self):
         fake = FakeSocket(b"HTTP/1.0 401 Unauthorized\r\n\r\n")
         destination = _Destination(
