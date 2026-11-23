@@ -40,6 +40,7 @@ jobs:
               if match:
                   versions.append(tuple(map(int, match.groups())))
           manual = os.environ["EVENT_NAME"] == "workflow_dispatch"
+          run_number = int(os.environ["RUN_NUMBER"])
           latest = max(
               versions,
               default=(0, 1, -1) if manual else (0, 1, 0),
@@ -48,7 +49,10 @@ jobs:
               version = f"{latest[0]}.{latest[1]}.{latest[2] + 1}"
               release_version = f"v{version}"
           else:
-              version = f"{latest[0]}.{latest[1]}.{latest[2]}-dev"
+              # Every rolling build gets a distinct patch component. The
+              # workflow run number is monotonic across pushes and reruns.
+              rolling_patch = latest[2] + run_number
+              version = f"{latest[0]}.{latest[1]}.{rolling_patch}-dev"
               release_version = ""
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"app_version={version}\n")
