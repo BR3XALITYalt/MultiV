@@ -239,6 +239,37 @@ class IcecastDestinationTests(unittest.TestCase):
         self.assertEqual(group.bitrate_kbps, 96)
         self.assertIs(group.local_server, local_server)
 
+    def test_builtin_server_start_failure_keeps_remote_destinations_running(self):
+        local_server = mock.Mock()
+        local_server.start.side_effect = OSError("port already in use")
+        broadcaster = IcecastBroadcaster(
+            [{
+                "url": "http://radio.example:8000/live",
+                "password": "secret",
+                "format": "mp3",
+                "bitrate": 128,
+            }],
+            events=queue.Queue(),
+            local_server=local_server,
+        )
+        broadcaster._destinations[0].run = mock.Mock()
+        broadcaster._encode_group = mock.Mock()
+        created_threads = []
+
+        def fake_thread(*_args, **_kwargs):
+            thread = mock.Mock()
+            created_threads.append(thread)
+            return thread
+
+        with mock.patch("icecast_output.threading.Thread", side_effect=fake_thread):
+            broadcaster.start()
+
+        self.assertIsNone(broadcaster.local_server)
+        self.assertIsNone(broadcaster._groups[0].local_server)
+        self.assertEqual(len(created_threads), 2)
+        local_server.stop.assert_not_called()
+        broadcaster.stop()
+
     def test_pcm_producer_does_not_wait_for_a_failed_encoder(self):
         broadcaster = IcecastBroadcaster(
             [],
