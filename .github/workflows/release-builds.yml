@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (for example 2.0.0). Leave blank to auto-increment the patch version."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -27,6 +33,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           RUN_NUMBER: ${{ github.run_number }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
+          REQUESTED_VERSION: ${{ inputs.version }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -48,7 +55,20 @@ jobs:
               default=(0, 1, -1) if manual else (0, 1, 0),
           )
           if manual:
-              version = f"{latest[0]}.{latest[1]}.{latest[2] + 1}"
+              requested = os.environ.get("REQUESTED_VERSION", "").strip()
+              if requested:
+                  match = re.fullmatch(r"(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)", requested)
+                  if not match:
+                      raise SystemExit("Release version must use MAJOR.MINOR.PATCH, for example 2.0.0.")
+                  selected = tuple(map(int, match.groups()))
+                  if selected <= latest:
+                      raise SystemExit(
+                          f"Requested version {requested} must be newer than the latest release "
+                          f"{'.'.join(map(str, latest))}."
+                      )
+                  version = requested
+              else:
+                  version = f"{latest[0]}.{latest[1]}.{latest[2] + 1}"
               release_version = f"v{version}"
           else:
               # Every rolling build gets a distinct patch component. The
