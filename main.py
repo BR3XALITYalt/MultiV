@@ -118,7 +118,7 @@ def build_app() -> None:
     auth_manager = DiscordAuthManager(client.events)
     transmitter = TxityTransmitter(client, client.events)
 
-    theme_mode = _system_theme_mode()
+    theme_mode = "dark"
 
     root = tk.Tk()
     try:
@@ -635,7 +635,7 @@ def build_app() -> None:
             foreground = palette["onSurface"]
             hover_background = palette["surfaceContainerHigh"]
             hover_foreground = palette["onSurface"]
-        return FlatButton(
+        button = FlatButton(
             parent,
             text,
             command,
@@ -650,6 +650,11 @@ def build_app() -> None:
             padding_x=padx,
             padding_y=pady,
         )
+        button.configure(
+            style="Accent.TButton" if kind == "primary" else "TButton",
+            padding=(padx, pady),
+        )
+        return button
 
     def set_station_logo_upload_button_enabled(enabled: bool) -> None:
         nonlocal station_logo_upload_button
@@ -2001,35 +2006,8 @@ def build_app() -> None:
             return entry
 
         def style_tx_combobox(widget: ttk.Combobox) -> None:
-            style = ttk.Style(root)
-            style.configure(
-                "TXITY.Transmit.TCombobox",
-                fieldbackground=palette["surfaceContainerLowest"],
-                background=palette["surfaceContainerHigh"],
-                foreground=palette["onSurface"],
-                arrowcolor=palette["onSurface"],
-                bordercolor=palette["outline"],
-                lightcolor=palette["outline"],
-                darkcolor=palette["outline"],
-                padding=(10, 8),
-            )
-            style.map(
-                "TXITY.Transmit.TCombobox",
-                fieldbackground=[
-                    ("readonly", palette["surfaceContainerLowest"]),
-                    ("disabled", palette["surfaceContainer"]),
-                ],
-                foreground=[
-                    ("readonly", palette["onSurface"]),
-                    ("disabled", palette["onSurfaceVariant"]),
-                ],
-                bordercolor=[
-                    ("focus", palette["primary"]),
-                    ("!focus", palette["outline"]),
-                ],
-            )
-            widget.configure(style="TXITY.Transmit.TCombobox", font=("Segoe UI", 11))
-            # Let the page scroll when the pointer is over a closed combobox.
+            # Keep the native Sun Valley combobox layout and states.
+            widget.configure(style="TCombobox", font=("Segoe UI", 10))
             widget.bind("<MouseWheel>", scroll_active_canvas)
             widget.bind("<Button-4>", lambda event: scroll_active_canvas(event, -1))
             widget.bind("<Button-5>", lambda event: scroll_active_canvas(event, 1))
@@ -3013,13 +2991,27 @@ def build_app() -> None:
         icecast_card.pack(fill="x", pady=(0, 12))
         make_label(
             icecast_card,
-            "Icecast outputs",
+            "Output destinations",
             font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
         make_label(
             icecast_card,
-            "Send the selected audio source to one or more Icecast servers alongside the TXITY transmission. Outputs use mono MP3 at 48 kHz.",
+            "The selected input feeds the TXITY transmitter and can also be routed to MultiV’s built-in stream or multiple remote Icecast servers. Each remote destination has its own audio format and bitrate.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(0, 10))
+        make_label(
+            icecast_card,
+            "TXITY virtual transmitter",
+            font=("Segoe UI", 11, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(2, 3))
+        make_label(
+            icecast_card,
+            "The Start Transmission control publishes the selected input to TXITY. The destinations below receive that same live input in parallel.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3089,6 +3081,13 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
             wraplength=850,
         ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(5, 0))
+
+        make_label(
+            icecast_card,
+            "Remote Icecast servers",
+            font=("Segoe UI", 11, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 6))
 
         icecast_list_frame = tk.Frame(
             icecast_card,
@@ -3456,7 +3455,7 @@ def build_app() -> None:
 
         make_label(
             audio_card,
-            "Audio source",
+            "Audio input",
             font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 10))
@@ -3470,7 +3469,7 @@ def build_app() -> None:
         source_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
         make_label(
             source_frame,
-            "Audio source",
+            "Input method",
             font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
@@ -3519,7 +3518,7 @@ def build_app() -> None:
         )
         make_label(
             playlist_frame,
-            "Playlist",
+            "Playlist source",
             font=("Segoe UI", 10, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 5))
@@ -4792,6 +4791,10 @@ def build_app() -> None:
                     font=("Segoe UI", 10, "bold" if selected else "normal"),
                     padding_x=14,
                     padding_y=9,
+                )
+                nav_button.configure(
+                    style="Accent.TButton" if selected else "TButton",
+                    padding=(12, 7),
                 )
                 nav_button.pack(side="left", padx=2, pady=2)
 
