@@ -241,6 +241,8 @@ class IcecastDestinationTests(unittest.TestCase):
 
     def test_builtin_server_start_failure_keeps_remote_destinations_running(self):
         local_server = mock.Mock()
+        local_server.audio_format = "mp3"
+        local_server.bitrate_kbps = 128
         local_server.start.side_effect = OSError("port already in use")
         broadcaster = IcecastBroadcaster(
             [{
