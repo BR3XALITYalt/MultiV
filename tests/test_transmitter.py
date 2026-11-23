@@ -1,31 +1,4 @@
-    def test_icecast_only_start_does_not_require_txity_credentials(self):
-        events = __import__("queue").Queue()
-        transmitter = TxityTransmitter(object(), events)
-        fake_thread = mock.Mock()
-        with mock.patch("transmitter.threading.Thread", return_value=fake_thread) as thread_factory:
-            transmitter.start(
-                {"mode": "AM", "_txitpyMode": "AM"},
-                audio_source="mic",
-                icecast_server_settings={
-                    "enabled": True,
-                    "audio_format": "ogg_opus",
-                    "bitrate_kbps": 96,
-                },
-                txity_enabled=False,
-            )
-
-        thread_args = thread_factory.call_args.kwargs["args"]
-        self.assertFalse(thread_args[-1])
-        fake_thread.start.assert_called_once()
-
-    def test_start_rejects_when_no_output_provider_is_enabled(self):
-        transmitter = TxityTransmitter(object(), __import__("queue").Queue())
-        with self.assertRaisesRegex(ValueError, "Enable TXITY"):
-            transmitter.start(
-                {"mode": "AM", "_txitpyMode": "AM"},
-                txity_enabled=False,
-            )
-
+import queue
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -70,6 +43,34 @@ from transmitter import (
 
 
 class TransmitterProtocolTests(unittest.TestCase):
+
+    def test_icecast_only_start_does_not_require_txity_credentials(self):
+        events = __import__("queue").Queue()
+        transmitter = TxityTransmitter(object(), events)
+        fake_thread = mock.Mock()
+        with mock.patch("transmitter.threading.Thread", return_value=fake_thread) as thread_factory:
+            transmitter.start(
+                {"mode": "AM", "_txitpyMode": "AM"},
+                audio_source="mic",
+                icecast_server_settings={
+                    "enabled": True,
+                    "audio_format": "ogg_opus",
+                    "bitrate_kbps": 96,
+                },
+                txity_enabled=False,
+            )
+
+        thread_args = thread_factory.call_args.kwargs["args"]
+        self.assertFalse(thread_args[-1])
+        fake_thread.start.assert_called_once()
+
+    def test_start_rejects_when_no_output_provider_is_enabled(self):
+        transmitter = TxityTransmitter(object(), __import__("queue").Queue())
+        with self.assertRaisesRegex(ValueError, "Enable TXITY"):
+            transmitter.start(
+                {"mode": "AM", "_txitpyMode": "AM"},
+                txity_enabled=False,
+            )
     def test_linux_loopback_lists_pulseaudio_and_pipewire_monitor_sources(self):
         devices = [
             {"name": "Built-in Audio Analog Stereo", "max_input_channels": 2, "hostapi": 0},
