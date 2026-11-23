@@ -422,8 +422,30 @@ class IcecastBroadcaster:
         ]
 
     def start(self) -> None:
-        if self.local_server is not None:
-            self.local_server.start()
+        local_server = self.local_server
+        if local_server is not None:
+            try:
+                local_server.start()
+            except Exception as exc:
+                self.events.put({
+                    "kind": "tx_icecast_state",
+                    "name": "Built-in server",
+                    "state": "Start error",
+                    "text": f"Could not start the built-in Icecast server: {str(exc)[:220]}",
+                })
+                self.local_server = None
+                for group in self._groups:
+                    if group.local_server is local_server:
+                        group.local_server = None
+                self._groups = [
+                    group for group in self._groups
+                    if group.destinations or group.local_server is not None
+                ]
+                if not self._destinations:
+                    raise RuntimeError(
+                        "The built-in Icecast server could not start and no remote Icecast destinations are available."
+                    ) from exc
+
         for destination in self._destinations:
             destination.thread = threading.Thread(
                 target=destination.run,
@@ -467,6 +489,9 @@ class IcecastBroadcaster:
         for group in self._groups:
             if wait_for_space:
                 while not self._closing.is_set():
+                    worker = group.thread
+                    if worker is not None and not worker.is_alive():
+                        break
                     try:
                         group.input_queue.put(block, timeout=0.1)
                         break
