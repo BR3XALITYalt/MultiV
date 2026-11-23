@@ -224,6 +224,11 @@ class _Destination:
                 connection = self.connect()
                 with self.socket_lock:
                     self.active_socket = connection
+                while True:
+                    try:
+                        self.packets.get_nowait()
+                    except queue.Empty:
+                        break
                 self.retry_attempt = 0
                 delay = 1.0
                 self.emit("Connected")
@@ -429,10 +434,12 @@ class IcecastBroadcaster:
             codec.open()
             frame_size = int(codec.frame_size or MP3_FRAME_SAMPLES)
 
-            while not self._closing.is_set():
+            while True:
                 try:
                     block = self._input_queue.get(timeout=0.2)
                 except queue.Empty:
+                    if self._closing.is_set():
+                        break
                     continue
                 if block is None:
                     break
