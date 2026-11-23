@@ -253,6 +253,48 @@ try {{
     }}
     Write-UpdateLog "MultiV has exited."
 
+    # PyInstaller helper processes can outlive the GUI and keep DLLs in
+    # the installation's _internal directory locked. Wait briefly, then
+    # terminate only processes whose executable is inside this installation.
+    $InstallRoot = [System.IO.Path]::GetFullPath($InstallDir).TrimEnd('\\') + '\\'
+    function Get-MultiVChildProcesses {{
+        $Processes = @()
+        try {{
+            $Processes = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {{
+                $_.ProcessId -ne $PID -and
+                $_.ExecutablePath -and
+                $_.ExecutablePath.StartsWith($InstallRoot, [System.StringComparison]::OrdinalIgnoreCase)
+            }})
+        }} catch {{
+            Write-UpdateLog "Could not enumerate all installation processes: $($_.Exception.Message)"
+        }}
+        return $Processes
+    }}
+
+    $Deadline = [DateTime]::UtcNow.AddSeconds(15)
+    $Remaining = @(Get-MultiVChildProcesses)
+    while ($Remaining.Count -gt 0 -and [DateTime]::UtcNow -lt $Deadline) {{
+        Start-Sleep -Milliseconds 250
+        $Remaining = @(Get-MultiVChildProcesses)
+    }}
+    if ($Remaining.Count -gt 0) {{
+        foreach ($ProcessInfo in $Remaining) {{
+            try {{
+                Write-UpdateLog "Closing leftover process $($ProcessInfo.Name) (PID $($ProcessInfo.ProcessId))."
+                Stop-Process -Id $ProcessInfo.ProcessId -Force -ErrorAction Stop
+            }} catch {{
+                Write-UpdateLog "Could not close PID $($ProcessInfo.ProcessId): $($_.Exception.Message)"
+            }}
+        }}
+        Start-Sleep -Milliseconds 750
+        $Remaining = @(Get-MultiVChildProcesses)
+    }}
+    if ($Remaining.Count -gt 0) {{
+        $Pids = ($Remaining | ForEach-Object {{ "$($_.Name) PID $($_.ProcessId)" }}) -join ', '
+        throw "MultiV helper processes are still using installation files: $Pids"
+    }}
+    Write-UpdateLog "No remaining MultiV processes are holding installation files."
+
     # Keep existing installer locations. Portable copies move to Program Files.
     if (
         -not (Test-Path -LiteralPath $MachineUninstallKey) -and
