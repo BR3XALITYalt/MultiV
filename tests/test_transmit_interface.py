@@ -18,7 +18,9 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIn('"text": "Connected"', client_source)
 
     def test_drm_mode_has_no_experimental_or_support_copy(self):
+        transmitter_source = (MAIN_FILE.parent / "transmitter.py").read_text(encoding="utf-8")
         self.assertNotIn("DRM [EXPERIMENTAL]", self.source)
+        self.assertNotIn("DRM [EXPERIMENTAL]", transmitter_source)
         self.assertNotIn("DRM mode supports", self.source)
         self.assertIn('"DRM": "DRM digital radio mode."', self.source)
 
