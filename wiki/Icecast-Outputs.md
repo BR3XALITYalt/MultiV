@@ -15,14 +15,21 @@ The URL must use HTTP or HTTPS and must not contain embedded credentials, query 
 
 MultiV supports up to eight destinations. Select a destination and choose **Edit** or **Remove** to manage it. Disabled destinations remain saved but are not connected.
 
-## Audio format
+## Audio format per destination
 
-- Codec: MP3 using libmp3lame
-- Sample rate: 48 kHz
-- Channels: mono
-- Bitrates: 64, 96, 128, 160, 192, 256, or 320 kbps
+Open a destination's **Edit** dialog and choose its audio format and bitrate. The format is saved independently for each server.
 
-The bitrate applies to all enabled destinations. MultiV encodes the audio once and sends the encoded stream to each destination.
+MultiV follows the codec choices documented by BUTT (Broadcast Using This Tool):
+
+- **MP3** - MPEG Layer III, sent as `audio/mpeg`
+- **AAC+ (HE-AAC)** - available only when the installed FFmpeg build includes the FDK-AAC encoder; sent as `audio/aacp`
+- **Ogg Vorbis** - Ogg container, sent as `application/ogg`
+- **Ogg Opus** - Ogg container, sent as `application/ogg`
+- **Ogg FLAC** - lossless FLAC in an Ogg container; bitrate is not applicable
+
+MultiV checks which encoders are available and only offers those formats in the destination editor. MP3, AAC+, Vorbis, and Opus expose a per-destination bitrate selector. AAC+ is limited to 128 kbps or below; Ogg Opus starts at 48 kbps. Ogg FLAC is lossless.
+
+The audio source is 48 kHz mono. Destinations with the same codec and bitrate share one encoder; destinations with different settings receive separately encoded streams. The built-in server remains MP3 and uses the separate **Built-in MP3 bitrate** setting.
 
 ## Transmission behavior
 
