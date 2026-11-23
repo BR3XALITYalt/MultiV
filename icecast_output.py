@@ -272,6 +272,7 @@ class IcecastBroadcaster:
         station_description: str = "",
         events: Any,
         sample_rate: int = ICECAST_SAMPLE_RATE,
+        local_server: Any = None,
     ) -> None:
         try:
             bitrate = int(bitrate_kbps)
@@ -287,9 +288,10 @@ class IcecastBroadcaster:
             raise ValueError("Icecast audio input must use 48 kHz PCM.")
 
         normalized = [normalize_icecast_destination(item) for item in destinations]
-        if not normalized:
-            raise ValueError("Add at least one enabled Icecast destination.")
+        if not normalized and local_server is None:
+            raise ValueError("Add an enabled Icecast destination or enable the built-in server.")
 
+        self.local_server = local_server
         self.bitrate = bitrate * 1_000
         self.sample_rate = sample_rate
         self.events = events
@@ -308,6 +310,8 @@ class IcecastBroadcaster:
         ]
 
     def start(self) -> None:
+        if self.local_server is not None:
+            self.local_server.start()
         for destination in self._destinations:
             destination.thread = threading.Thread(
                 target=destination.run,
@@ -383,6 +387,16 @@ class IcecastBroadcaster:
             encoder.join(timeout=wait)
 
         self._stopped.set()
+        if self.local_server is not None:
+            try:
+                self.local_server.stop()
+            except Exception as exc:
+                self.events.put({
+                    "kind": "tx_icecast_state",
+                    "name": "Built-in server",
+                    "state": "Stop error",
+                    "text": f"Could not stop built-in Icecast server: {str(exc)[:200]}",
+                })
         for destination in self._destinations:
             destination.stop_event.set()
             destination.close_socket()
@@ -414,6 +428,8 @@ class IcecastBroadcaster:
             return
         for destination in self._destinations:
             destination.enqueue_packet(payload)
+        if self.local_server is not None:
+            self.local_server.publish(payload)
 
     def _encode_audio(self) -> None:
         import av
