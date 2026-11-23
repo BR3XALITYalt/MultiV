@@ -532,9 +532,30 @@ def build_app() -> None:
     content_frame: ttk.Frame | None = None
     nav_frame: ttk.Frame | None = None
     active_scroll_canvas: tk.Canvas | None = None
-    SCROLL_PIXELS_PER_NOTCH = 102
+    SCROLL_PIXELS_PER_NOTCH = 96
+    SCROLL_UNIT_PIXELS = 16
+    pending_scroll_pixels = 0.0
+    scroll_flush_scheduled = False
+
+    def flush_pending_scroll() -> None:
+        nonlocal pending_scroll_pixels, scroll_flush_scheduled
+        scroll_flush_scheduled = False
+        canvas = active_scroll_canvas
+        if canvas is None or abs(pending_scroll_pixels) < SCROLL_UNIT_PIXELS / 2:
+            return
+        try:
+            if not canvas.winfo_exists() or not canvas.bbox("all"):
+                pending_scroll_pixels = 0.0
+                return
+            units = int(round(pending_scroll_pixels / SCROLL_UNIT_PIXELS))
+            if units:
+                pending_scroll_pixels -= units * SCROLL_UNIT_PIXELS
+                canvas.yview_scroll(units, "units")
+        except tk.TclError:
+            pending_scroll_pixels = 0.0
 
     def scroll_active_canvas(event, direction: int | None = None):
+        nonlocal pending_scroll_pixels, scroll_flush_scheduled
         canvas = active_scroll_canvas
         if canvas is None:
             return
@@ -561,7 +582,10 @@ def build_app() -> None:
                 return
             scroll_delta = -(float(delta) / 120.0) * SCROLL_PIXELS_PER_NOTCH
 
-        canvas.yview_scroll(int(round(scroll_delta)), "units")
+        pending_scroll_pixels += scroll_delta
+        if not scroll_flush_scheduled:
+            scroll_flush_scheduled = True
+            root.after_idle(flush_pending_scroll)
         return "break"
 
     root.bind_all("<MouseWheel>", scroll_active_canvas, add="+")
@@ -1147,7 +1171,7 @@ def build_app() -> None:
             background=palette["background"],
             highlightthickness=0,
             borderwidth=0,
-            yscrollincrement=1,
+            yscrollincrement=SCROLL_UNIT_PIXELS,
         )
         page = ttk.Frame(canvas)
         window_id = canvas.create_window((0, 0), window=page, anchor="nw")
