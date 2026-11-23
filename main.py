@@ -646,7 +646,6 @@ def build_app() -> None:
             outside=outside,
             outline=background,
             focus_color=palette["primary"],
-            font=("Segoe UI", 10, "bold" if kind == "primary" else "normal"),
             padding_x=padx,
             padding_y=pady,
         )
@@ -728,13 +727,8 @@ def build_app() -> None:
         label = tk.Label(
             parent,
             text=placeholder,
-            font=("Segoe UI", max(16, size // 5), "bold"),
-            fg=palette["onSurfaceVariant"],
-            bg=palette["surfaceContainerHigh"],
             width=max(5, size // 9),
             height=max(3, size // 18),
-            relief="flat",
-            borderwidth=0,
             anchor="center",
         )
         if not url:
@@ -783,7 +777,6 @@ def build_app() -> None:
                     text="",
                     width=size,
                     height=size,
-                    bg=label.cget("bg"),
                 )
                 label.image = photo
                 applied += 1
@@ -808,9 +801,6 @@ def build_app() -> None:
         if card_root:
             widget.configure(
                 takefocus=True,
-                highlightthickness=2,
-                highlightbackground=palette["outline"],
-                highlightcolor=palette["primary"],
             )
 
             def open_with_keyboard(_event=None, target=station_id):
@@ -1067,14 +1057,12 @@ def build_app() -> None:
             make_label(
                 details,
                 str(row.get("station", "Unknown station")),
-                font=("Segoe UI", 13, "bold"),
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="w")
             description = str(row.get("description") or "No description yet.")
             make_label(
                 details,
                 description,
-                font=("Segoe UI", 9, "normal"),
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
                 wraplength=260,
@@ -1082,7 +1070,6 @@ def build_app() -> None:
             make_label(
                 details,
                 f"Discord: {row.get('operator') or 'Unknown'}",
-                font=("Segoe UI", 8, "normal"),
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="w")
@@ -1092,20 +1079,17 @@ def build_app() -> None:
             make_label(
                 meta,
                 str(row.get("frequency") or "Frequency unknown"),
-                font=("Segoe UI", 12, "bold"),
                 color=palette["primary"],
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="e", pady=(4, 8))
             make_label(
                 meta,
                 str(row.get("rating") or "Not rated"),
-                font=("Segoe UI", 9, "bold"),
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="e", pady=(0, 6))
             make_label(
                 meta,
                 f"{row.get('mode') or 'Mode unknown'} · {row.get('on_air') or 'On-air time unknown'}",
-                font=("Segoe UI", 8, "normal"),
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
                 justify="right",
@@ -1136,14 +1120,12 @@ def build_app() -> None:
         make_label(
             card,
             "MultiV",
-            font=("Segoe UI", 30, "bold"),
             background=palette["surfaceContainerLow"],
             color=palette["primary"],
         ).pack(anchor="w")
         make_label(
             card,
             "Sign in with Discord",
-            font=("Segoe UI", 21, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(14, 6))
         make_label(
@@ -1151,7 +1133,6 @@ def build_app() -> None:
             "MultiV is a multi-source client for virtual radio simulators. "
             "Choose a microphone, desktop audio, or playlist, then transmit through a supported simulator connection. "
             "TXITY is the active connection today.",
-            font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=440,
@@ -1160,14 +1141,12 @@ def build_app() -> None:
         make_label(
             card,
             variable=account_var,
-            font=("Segoe UI", 11, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 8))
 
         status_label = make_label(
             card,
             variable=auth_status_var,
-            font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=440,
@@ -1186,7 +1165,6 @@ def build_app() -> None:
         make_label(
             card,
             "TXITY authentication is handled by TXITY's official Discord sign-in page.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=440,
@@ -1197,8 +1175,6 @@ def build_app() -> None:
         canvas = tk.Canvas(
             parent,
             background=palette["background"],
-            highlightthickness=0,
-            borderwidth=0,
             yscrollincrement=1,
         )
         page = tk.Frame(canvas, background=palette["background"])
@@ -1223,13 +1199,11 @@ def build_app() -> None:
         make_label(
             page,
             "Stations",
-            font=("Segoe UI", 27, "bold"),
             background=palette["background"],
         ).pack(anchor="w", pady=(6, 2))
         make_label(
             page,
             "Live transmitters running on TXITY.",
-            font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
         ).pack(anchor="w", pady=(0, 17))
@@ -1237,7 +1211,6 @@ def build_app() -> None:
         make_label(
             page,
             "Search stations",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
         ).pack(anchor="w", pady=(0, 5))
@@ -1255,20 +1228,9 @@ def build_app() -> None:
             padding_y=5,
         )
         search_shell.pack(side="left", fill="x", expand=True)
-        search = tk.Entry(
+        search = ttk.Entry
             search_shell,
             textvariable=station_search_var,
-            font=("Segoe UI", 10),
-            bg=palette["surfaceContainerLowest"],
-            fg=palette["onSurface"],
-            insertbackground=palette["onSurface"],
-            selectbackground=palette["primaryContainer"],
-            selectforeground=palette["onPrimaryContainer"],
-            relief="flat",
-            borderwidth=0,
-            highlightthickness=2,
-            highlightbackground=palette["outline"],
-            highlightcolor=palette["primary"],
         )
         search.pack(fill="x", expand=True, ipady=5)
         search.bind("<KeyRelease>", lambda _event: update_station_tree())
@@ -1285,14 +1247,12 @@ def build_app() -> None:
         make_label(
             status_bar,
             variable=station_status_var,
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
         ).pack(side="left")
         make_label(
             status_bar,
             variable=station_count_var,
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
         ).pack(side="right")
@@ -1934,20 +1894,17 @@ def build_app() -> None:
         make_label(
             hero,
             "MultiV",
-            font=("Segoe UI", 28, "bold"),
             background=palette["background"],
         ).pack(side="left")
         make_label(
             hero,
             "Transmit",
-            font=("Segoe UI", 11, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
         ).pack(side="left", padx=(12, 0), pady=(9, 0))
         make_label(
             hero,
             variable=connection_var,
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
         ).pack(side="right", pady=(10, 0))
@@ -1963,7 +1920,6 @@ def build_app() -> None:
         make_label(
             hero,
             variable=tx_status_var,
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
             wraplength=440,
@@ -1977,30 +1933,18 @@ def build_app() -> None:
             *,
             column: int,
             row: int,
-        ) -> tk.Entry:
+        ) -> ttk.Entry:
             wrapper = tk.Frame(parent_frame, bg=palette["surfaceContainerLow"])
             wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
             make_label(
                 wrapper,
                 label,
-                font=("Segoe UI", 9, "bold"),
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="w", pady=(0, 4))
-            entry = tk.Entry(
+            entry = ttk.Entry
                 wrapper,
                 textvariable=variable,
-                font=("Segoe UI", 10),
-                bg=palette["surfaceContainerLowest"],
-                fg=palette["onSurface"],
-                insertbackground=palette["onSurface"],
-                selectbackground=palette["primaryContainer"],
-                selectforeground=palette["onPrimaryContainer"],
-                relief="flat",
-                borderwidth=1,
-                highlightthickness=1,
-                highlightbackground=palette["outline"],
-                highlightcolor=palette["primary"],
             )
             entry.pack(fill="x", ipady=7)
             return entry
@@ -2017,7 +1961,6 @@ def build_app() -> None:
         make_label(
             station_card,
             "Station",
-            font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 10))
 
@@ -2030,7 +1973,6 @@ def build_app() -> None:
 
         frequency_fields_frame = tk.Frame(
             station_fields,
-            bg=palette["surfaceContainerLow"],
         )
         frequency_fields_frame.grid(
             row=1,
@@ -2077,33 +2019,20 @@ def build_app() -> None:
             for index, (label_text, variable, removable) in enumerate(frequency_rows):
                 wrapper = tk.Frame(
                     frequency_fields_frame,
-                    bg=palette["surfaceContainerLow"],
                 )
                 wrapper.pack(fill="x", pady=(0, 8 if index < len(frequency_rows) - 1 else 0))
                 make_label(
                     wrapper,
                     label_text,
-                    font=("Segoe UI", 9, "bold"),
                     color=palette["onSurfaceVariant"],
                     background=palette["surfaceContainerLow"],
                 ).pack(anchor="w", pady=(0, 4))
 
                 input_row = tk.Frame(wrapper, bg=palette["surfaceContainerLow"])
                 input_row.pack(fill="x")
-                entry = tk.Entry(
+                entry = ttk.Entry
                     input_row,
                     textvariable=variable,
-                    font=("Segoe UI", 10),
-                    bg=palette["surfaceContainerLowest"],
-                    fg=palette["onSurface"],
-                    insertbackground=palette["onSurface"],
-                    selectbackground=palette["primaryContainer"],
-                    selectforeground=palette["onPrimaryContainer"],
-                    relief="flat",
-                    borderwidth=1,
-                    highlightthickness=1,
-                    highlightbackground=palette["outline"],
-                    highlightcolor=palette["primary"],
                 )
                 entry.pack(side="left", fill="x", expand=True, ipady=7)
 
@@ -2130,7 +2059,6 @@ def build_app() -> None:
         make_label(
             station_card,
             variable=tx_frequency_check_var,
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=860,
@@ -2146,13 +2074,11 @@ def build_app() -> None:
         make_label(
             drm_metadata_card,
             "DRM service metadata",
-            font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
         make_label(
             drm_metadata_card,
             "These values are broadcast in the DRM service information. A blank service label uses the station name.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=860,
@@ -2182,7 +2108,6 @@ def build_app() -> None:
         make_label(
             language_frame,
             "Language",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
@@ -2201,7 +2126,6 @@ def build_app() -> None:
         make_label(
             programme_type_frame,
             "Programme type",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
@@ -2233,7 +2157,6 @@ def build_app() -> None:
         make_label(
             drm_metadata_card,
             "Audio settings",
-            font=("Segoe UI", 12, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(14, 8))
 
@@ -2247,7 +2170,6 @@ def build_app() -> None:
         make_label(
             codec_frame,
             "Audio codec",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
@@ -2263,7 +2185,6 @@ def build_app() -> None:
         make_label(
             codec_frame,
             "xHE-AAC is designed for better quality at low bitrates. Use HE-AAC for older decoders.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=400,
@@ -2274,7 +2195,6 @@ def build_app() -> None:
         make_label(
             interleaving_frame,
             "Interleaving",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
@@ -2290,7 +2210,6 @@ def build_app() -> None:
         make_label(
             interleaving_frame,
             "Long interleaving improves resistance to fading, with a little more decoding delay.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=400,
@@ -2301,7 +2220,6 @@ def build_app() -> None:
         make_label(
             msc_frame,
             "MSC modulation",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
@@ -2317,7 +2235,6 @@ def build_app() -> None:
         make_label(
             msc_frame,
             "16-QAM is more robust but carries less audio data. 64-QAM has more capacity when reception is strong.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=400,
@@ -2337,7 +2254,6 @@ def build_app() -> None:
         make_label(
             drm_profile_frame,
             "Quality profile",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
@@ -2354,7 +2270,6 @@ def build_app() -> None:
         make_label(
             drm_profile_frame,
             "The preset sets channel width, MSC modulation, stereo, and long interleaving. You can change MSC modulation and stereo below.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=400,
@@ -2362,28 +2277,18 @@ def build_app() -> None:
 
         stereo_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
         stereo_frame.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
-        drm_stereo_check = tk.Checkbutton(
+        drm_stereo_check = ttk.Checkbutton
             stereo_frame,
             text="Stereo audio",
             variable=tx_drm_stereo_var,
-            bg=palette["surfaceContainerLow"],
-            fg=palette["onSurface"],
-            activebackground=palette["surfaceContainerLow"],
-            activeforeground=palette["onSurface"],
-            selectcolor=palette["surfaceContainerHighest"],
-            highlightthickness=2,
-            highlightbackground=palette["surfaceContainerLow"],
-            highlightcolor=palette["primary"],
             cursor="hand2",
             takefocus=True,
-            bd=0,
             anchor="w",
         )
         drm_stereo_check.pack(anchor="w", padx=6, pady=(8, 4))
         make_label(
             stereo_frame,
             "Stereo consumes more of the available audio capacity. Mono is usually clearer at the same low bitrate.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=400,
@@ -2398,7 +2303,6 @@ def build_app() -> None:
         make_label(
             signal_card,
             "Signal settings",
-            font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 10))
 
@@ -2412,7 +2316,6 @@ def build_app() -> None:
         make_label(
             mode_frame,
             "Signal type",
-            font=("Segoe UI", 10, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 5))
@@ -2429,7 +2332,6 @@ def build_app() -> None:
         mode_help = make_label(
             mode_frame,
             variable=tx_mode_help_var,
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=570,
@@ -2643,7 +2545,6 @@ def build_app() -> None:
         make_label(
             power_frame,
             "Station power",
-            font=("Segoe UI", 10, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 6))
@@ -2655,44 +2556,25 @@ def build_app() -> None:
             resolution=1,
             orient="horizontal",
             showvalue=True,
-            highlightthickness=2,
-            highlightbackground=palette["surfaceContainerLow"],
-            highlightcolor=palette["primary"],
             cursor="hand2",
             takefocus=True,
-            borderwidth=0,
-            relief="flat",
-            bg=palette["surfaceContainerLow"],
-            fg=palette["onSurface"],
             troughcolor=palette["surfaceContainerHighest"],
-            activebackground=palette["primary"],
-            font=("Segoe UI", 9),
         )
         power_scale.pack(fill="x", expand=True, pady=(1, 0))
         make_label(
             power_frame,
             variable=tx_power_readout_var,
-            font=("Segoe UI", 10, "bold"),
             color=palette["primary"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="e", pady=(3, 0))
 
-        sharing = tk.Checkbutton(
+        sharing = ttk.Checkbutton
             signal_card,
             text="Allow shared frequency overlap with stations that also enable sharing",
             variable=tx_allow_overlap_var,
             command=update_frequency_check,
-            bg=palette["surfaceContainerLow"],
-            fg=palette["onSurface"],
-            activebackground=palette["surfaceContainerLow"],
-            activeforeground=palette["onSurface"],
-            selectcolor=palette["surfaceContainerHighest"],
-            highlightthickness=2,
-            highlightbackground=palette["surfaceContainerLow"],
-            highlightcolor=palette["primary"],
             cursor="hand2",
             takefocus=True,
-            bd=0,
             anchor="w",
         )
         sharing.pack(anchor="w", padx=6, pady=(8, 0))
@@ -2723,24 +2605,14 @@ def build_app() -> None:
         make_label(
             fade_card,
             "Signal fading",
-            font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 8))
-        fade_enabled = tk.Checkbutton(
+        fade_enabled = ttk.Checkbutton
             fade_card,
             text="Enable signal fading",
             variable=tx_fade_enabled_var,
-            bg=palette["surfaceContainerLow"],
-            fg=palette["onSurface"],
-            activebackground=palette["surfaceContainerLow"],
-            activeforeground=palette["onSurface"],
-            selectcolor=palette["surfaceContainerHighest"],
-            highlightthickness=2,
-            highlightbackground=palette["surfaceContainerLow"],
-            highlightcolor=palette["primary"],
             cursor="hand2",
             takefocus=True,
-            bd=0,
             anchor="w",
         )
         fade_enabled.pack(anchor="w", padx=6, pady=(0, 6))
@@ -2761,7 +2633,6 @@ def build_app() -> None:
         make_label(
             fade_shape_frame,
             "Fade style",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 5))
@@ -2786,7 +2657,6 @@ def build_app() -> None:
         make_label(
             fade_shape_frame,
             variable=fade_shape_help_var,
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(5, 0))
@@ -2804,26 +2674,16 @@ def build_app() -> None:
         make_label(
             audio_filter_card,
             "Audio processing and filters",
-            font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 8))
         agc_row = tk.Frame(audio_filter_card, bg=palette["surfaceContainerLow"])
         agc_row.pack(fill="x", padx=6, pady=(0, 8))
-        agc_toggle = tk.Checkbutton(
+        agc_toggle = ttk.Checkbutton
             agc_row,
             text="Server AGC enabled",
             variable=tx_agc_enabled_var,
-            bg=palette["surfaceContainerLow"],
-            fg=palette["onSurface"],
-            activebackground=palette["surfaceContainerLow"],
-            activeforeground=palette["onSurface"],
-            selectcolor=palette["surfaceContainerHighest"],
-            highlightthickness=2,
-            highlightbackground=palette["surfaceContainerLow"],
-            highlightcolor=palette["primary"],
             cursor="hand2",
             takefocus=True,
-            bd=0,
             anchor="w",
         )
         agc_toggle.pack(side="left")
@@ -2847,7 +2707,6 @@ def build_app() -> None:
             make_label(
                 wrapper,
                 label,
-                font=("Segoe UI", 9, "bold"),
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="w")
@@ -2867,24 +2726,14 @@ def build_app() -> None:
                 resolution=step,
                 orient="horizontal",
                 showvalue=False,
-                highlightthickness=2,
-                highlightbackground=palette["surfaceContainerLow"],
-                highlightcolor=palette["primary"],
                 cursor="hand2",
                 takefocus=True,
-                borderwidth=0,
-                relief="flat",
-                bg=palette["surfaceContainerLow"],
-                fg=palette["onSurface"],
                 troughcolor=palette["surfaceContainerHighest"],
-                activebackground=palette["primary"],
-                font=("Segoe UI", 9),
             )
             scale.pack(fill="x", pady=(1, 0))
             make_label(
                 wrapper,
                 variable=value_var,
-                font=("Segoe UI", 9, "bold"),
                 color=palette["primary"],
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="e")
@@ -2925,7 +2774,6 @@ def build_app() -> None:
         make_label(
             nfm_profile_frame,
             "NFM audio profile",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
@@ -2941,7 +2789,6 @@ def build_app() -> None:
         make_label(
             nfm_profile_frame,
             "Wide opens the voice band to 3 kHz and increases the estimated occupied bandwidth to 11 kHz.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=400,
@@ -2958,28 +2805,18 @@ def build_app() -> None:
         tx_mode_var.trace_add("write", update_nfm_bandwidth_visibility)
         update_nfm_bandwidth_visibility()
 
-        am_pre_emphasis = tk.Checkbutton(
+        am_pre_emphasis = ttk.Checkbutton
             audio_filter_card,
             text="AM pre-emphasis (brighter audio)",
             variable=tx_am_pre_emphasis_var,
-            bg=palette["surfaceContainerLow"],
-            fg=palette["onSurface"],
-            activebackground=palette["surfaceContainerLow"],
-            activeforeground=palette["onSurface"],
-            selectcolor=palette["surfaceContainerHighest"],
-            highlightthickness=2,
-            highlightbackground=palette["surfaceContainerLow"],
-            highlightcolor=palette["primary"],
             cursor="hand2",
             takefocus=True,
-            bd=0,
             anchor="w",
         )
         am_pre_emphasis.pack(anchor="w", padx=6, pady=(7, 0))
         make_label(
             audio_filter_card,
             "Changes apply automatically during transmission. The signal briefly stops while MultiV rebuilds the active audio path and starts again.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=850,
@@ -2992,13 +2829,11 @@ def build_app() -> None:
         make_label(
             icecast_card,
             "Output destinations",
-            font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
         make_label(
             icecast_card,
             "The selected input feeds the TXITY transmitter and can also be routed to MultiV’s built-in stream or multiple remote Icecast servers. Each remote destination has its own audio format and bitrate.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=850,
@@ -3006,13 +2841,11 @@ def build_app() -> None:
         make_label(
             icecast_card,
             "TXITY virtual transmitter",
-            font=("Segoe UI", 11, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(2, 3))
         make_label(
             icecast_card,
             "The Start Transmission control publishes the selected input to TXITY. The destinations below receive that same live input in parallel.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=850,
@@ -3021,49 +2854,28 @@ def build_app() -> None:
         built_in_server_frame = tk.LabelFrame(
             icecast_card,
             text="Built-in Icecast server",
-            bg=palette["surfaceContainerLow"],
-            fg=palette["onSurface"],
-            font=("Segoe UI", 10, "bold"),
             padx=10,
             pady=8,
-            relief="groove",
-            borderwidth=1,
         )
         built_in_server_frame.pack(fill="x", pady=(0, 12))
-        tk.Checkbutton(
+        ttk.Checkbutton
             built_in_server_frame,
             text="Host a stream from MultiV",
             variable=tx_icecast_server_enabled_var,
-            bg=palette["surfaceContainerLow"],
-            fg=palette["onSurface"],
-            activebackground=palette["surfaceContainerLow"],
-            activeforeground=palette["onSurface"],
-            selectcolor=palette["surfaceContainerLowest"],
-            font=("Segoe UI", 9, "bold"),
         ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 7))
 
         def add_server_setting(label_text: str, variable: tk.StringVar, row: int, *, secret: bool = False, width: int = 18) -> None:
             make_label(
                 built_in_server_frame,
                 label_text,
-                font=("Segoe UI", 9, "normal"),
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
             ).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=4)
-            entry = tk.Entry(
+            entry = ttk.Entry
                 built_in_server_frame,
                 textvariable=variable,
                 show="*" if secret else "",
                 width=width,
-                font=("Segoe UI", 9),
-                bg=palette["surfaceContainerLowest"],
-                fg=palette["onSurface"],
-                insertbackground=palette["onSurface"],
-                relief="flat",
-                borderwidth=1,
-                highlightthickness=1,
-                highlightbackground=palette["outline"],
-                highlightcolor=palette["primary"],
             )
             entry.grid(row=row, column=1, sticky="ew", ipady=4, padx=(0, 16), pady=4)
             return entry
@@ -3076,7 +2888,6 @@ def build_app() -> None:
         make_label(
             built_in_server_frame,
             "The server starts with transmission and stops when transmission stops. Stream URL: http://YOUR-IP:PORT/MOUNT. Use 0.0.0.0 to listen on all network interfaces. Router/firewall access may be needed for remote listeners.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=850,
@@ -3085,13 +2896,11 @@ def build_app() -> None:
         make_label(
             icecast_card,
             "Remote Icecast servers",
-            font=("Segoe UI", 11, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 6))
 
         icecast_list_frame = tk.Frame(
             icecast_card,
-            bg=palette["surfaceContainerLow"],
         )
         icecast_list_frame.pack(fill="x")
         icecast_listbox = tk.Listbox(
@@ -3099,16 +2908,6 @@ def build_app() -> None:
             height=4,
             exportselection=False,
             activestyle="none",
-            bg=palette["surfaceContainerLowest"],
-            fg=palette["onSurface"],
-            selectbackground=palette["primary"],
-            selectforeground=palette["onPrimary"],
-            highlightthickness=1,
-            highlightbackground=palette["outline"],
-            highlightcolor=palette["primary"],
-            relief="flat",
-            borderwidth=1,
-            font=("Segoe UI", 9),
             takefocus=True,
         )
         icecast_listbox.pack(fill="x", expand=True)
@@ -3162,7 +2961,6 @@ def build_app() -> None:
 
             fields = tk.Frame(
                 dialog,
-                bg=palette["surfaceContainerLow"],
                 padx=18,
                 pady=16,
             )
@@ -3180,27 +2978,17 @@ def build_app() -> None:
             format_var = tk.StringVar(dialog, available_formats.get(selected_format, "MP3"))
             bitrate_var = tk.StringVar(dialog, str(existing.get("bitrate") or "128"))
 
-            def add_dialog_field(label_text: str, variable: tk.StringVar, row: int, *, secret: bool = False) -> tk.Entry:
+            def add_dialog_field(label_text: str, variable: tk.StringVar, row: int, *, secret: bool = False) -> ttk.Entry:
                 make_label(
                     fields,
                     label_text,
-                    font=("Segoe UI", 9, "bold"),
                     color=palette["onSurfaceVariant"],
                     background=palette["surfaceContainerLow"],
                 ).grid(row=row * 2, column=0, sticky="w", pady=(8 if row else 0, 4))
-                entry = tk.Entry(
+                entry = ttk.Entry
                     fields,
                     textvariable=variable,
                     show="*" if secret else "",
-                    font=("Segoe UI", 10),
-                    bg=palette["surfaceContainerLowest"],
-                    fg=palette["onSurface"],
-                    insertbackground=palette["onSurface"],
-                    relief="flat",
-                    borderwidth=1,
-                    highlightthickness=1,
-                    highlightbackground=palette["outline"],
-                    highlightcolor=palette["primary"],
                     width=54,
                 )
                 entry.grid(row=row * 2 + 1, column=0, sticky="ew", ipady=6)
@@ -3213,7 +3001,6 @@ def build_app() -> None:
             make_label(
                 fields,
                 "Audio format",
-                font=("Segoe UI", 9, "bold"),
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
             ).grid(row=6, column=0, sticky="w", pady=(8, 4))
@@ -3230,7 +3017,6 @@ def build_app() -> None:
             make_label(
                 fields,
                 "Bitrate (kbps)",
-                font=("Segoe UI", 9, "bold"),
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
             ).grid(row=8, column=0, sticky="w", pady=(8, 4))
@@ -3261,22 +3047,15 @@ def build_app() -> None:
             format_var.trace_add("write", update_format_controls)
             update_format_controls()
 
-            tk.Checkbutton(
+            ttk.Checkbutton
                 fields,
                 text="Enable this destination",
                 variable=enabled_var,
-                bg=palette["surfaceContainerLow"],
-                fg=palette["onSurface"],
-                activebackground=palette["surfaceContainerLow"],
-                activeforeground=palette["onSurface"],
-                selectcolor=palette["surfaceContainerLowest"],
-                font=("Segoe UI", 9),
             ).grid(row=10, column=0, sticky="w", pady=(12, 4))
 
             make_label(
                 fields,
                 "Use http:// or https:// and include a mountpoint, such as /live.mp3. Credentials are sent using HTTP Basic authentication.",
-                font=("Segoe UI", 9, "normal"),
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
                 wraplength=430,
@@ -3393,7 +3172,6 @@ def build_app() -> None:
 
         icecast_actions = tk.Frame(
             icecast_card,
-            bg=palette["surfaceContainerLow"],
         )
         icecast_actions.pack(fill="x", pady=(8, 0))
         make_button(
@@ -3423,13 +3201,11 @@ def build_app() -> None:
 
         bitrate_frame = tk.Frame(
             icecast_actions,
-            bg=palette["surfaceContainerLow"],
         )
         bitrate_frame.pack(side="right")
         make_label(
             bitrate_frame,
             "Built-in MP3 bitrate",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(side="left", padx=(0, 8))
@@ -3446,7 +3222,6 @@ def build_app() -> None:
         make_label(
             icecast_card,
             variable=tx_icecast_status_var,
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=850,
@@ -3456,7 +3231,6 @@ def build_app() -> None:
         make_label(
             audio_card,
             "Audio input",
-            font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 10))
 
@@ -3470,7 +3244,6 @@ def build_app() -> None:
         make_label(
             source_frame,
             "Input method",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 5))
@@ -3493,7 +3266,6 @@ def build_app() -> None:
         make_label(
             device_frame,
             variable=tx_audio_device_label_var,
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 5))
@@ -3519,14 +3291,12 @@ def build_app() -> None:
         make_label(
             playlist_frame,
             "Playlist source",
-            font=("Segoe UI", 10, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 5))
         playlist_count_var = tk.StringVar(root, f"{len(tx_playlist_files)} tracks")
         make_label(
             playlist_frame,
             variable=playlist_count_var,
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
@@ -3539,16 +3309,6 @@ def build_app() -> None:
             selectmode="extended",
             exportselection=False,
             activestyle="none",
-            bg=palette["surfaceContainerLowest"],
-            fg=palette["onSurface"],
-            selectbackground=palette["primary"],
-            selectforeground=palette["onPrimary"],
-            highlightthickness=2,
-            highlightbackground=palette["outlineVariant"],
-            highlightcolor=palette["primary"],
-            relief="flat",
-            borderwidth=1,
-            font=("Segoe UI", 9),
             takefocus=True,
         )
         playlist_listbox.pack(side="left", fill="both", expand=True)
@@ -3751,21 +3511,12 @@ def build_app() -> None:
             ("Shuffle playlist", tx_playlist_shuffle_var),
             ("Loop playlist", tx_playlist_loop_var),
         ):
-            option = tk.Checkbutton(
+            option = ttk.Checkbutton
                 playlist_options,
                 text=label,
                 variable=variable,
-                bg=palette["surfaceContainerLow"],
-                fg=palette["onSurface"],
-                activebackground=palette["surfaceContainerLow"],
-                activeforeground=palette["onSurface"],
-                selectcolor=palette["surfaceContainerHighest"],
-                highlightthickness=2,
-                highlightbackground=palette["surfaceContainerLow"],
-                highlightcolor=palette["primary"],
                 cursor="hand2",
                 takefocus=True,
-                bd=0,
                 anchor="w",
             )
             option.pack(side="left", padx=(0, 18))
@@ -3773,7 +3524,6 @@ def build_app() -> None:
         make_label(
             playlist_frame,
             variable=tx_playlist_status_var,
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=850,
@@ -3781,7 +3531,6 @@ def build_app() -> None:
         make_label(
             playlist_frame,
             "Supported files: WAV, FLAC, OGG, AIFF, MP3, M4A, and Opus. MultiV refreshes added folders when their contents change.",
-            font=("Segoe UI", 8, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=850,
@@ -3876,7 +3625,6 @@ def build_app() -> None:
             audio_card,
             "Choose a microphone, desktop output, or playlist. DRM mode supports microphone and playlist input. "
             "CW mode uses its configured message instead of an audio source.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=850,
@@ -3887,7 +3635,6 @@ def build_app() -> None:
         make_label(
             cw_card,
             "CW message",
-            font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 8))
         cw_fields = tk.Frame(cw_card, bg=palette["surfaceContainerLow"])
@@ -3896,21 +3643,12 @@ def build_app() -> None:
         cw_fields.grid_columnconfigure(1, weight=1, uniform="cw-fields")
         add_tx_entry(cw_fields, "Message", tx_cw_text_var, column=0, row=0)
         add_tx_entry(cw_fields, "Speed (5-60 WPM)", tx_cw_wpm_var, column=1, row=0)
-        cw_loop = tk.Checkbutton(
+        cw_loop = ttk.Checkbutton
             cw_card,
             text="Repeat CW message",
             variable=tx_cw_loop_var,
-            bg=palette["surfaceContainerLow"],
-            fg=palette["onSurface"],
-            activebackground=palette["surfaceContainerLow"],
-            activeforeground=palette["onSurface"],
-            selectcolor=palette["surfaceContainerHighest"],
-            highlightthickness=2,
-            highlightbackground=palette["surfaceContainerLow"],
-            highlightcolor=palette["primary"],
             cursor="hand2",
             takefocus=True,
-            bd=0,
             anchor="w",
         )
         cw_loop.pack(anchor="w", padx=6, pady=(8, 0))
@@ -3920,7 +3658,6 @@ def build_app() -> None:
         make_label(
             connect_card,
             "How to connect",
-            font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w")
         make_label(
@@ -3928,7 +3665,6 @@ def build_app() -> None:
             "For TXITY, connect your SDR++ client to the virtual SDR++ Server endpoint shown by TXITY. "
             "Choose a microphone, desktop-audio device, or playlist in MultiV, then start the transmission. "
             "MultiV sends audio to the virtual service; it does not control local RF hardware.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=850,
@@ -3954,7 +3690,6 @@ def build_app() -> None:
         make_label(
             page,
             "This transmission sends one selected audio source to one TXITY virtual station.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
             wraplength=850,
@@ -3988,14 +3723,12 @@ def build_app() -> None:
         make_label(
             page,
             "LIVE STATION",
-            font=("Segoe UI", 9, "bold"),
             color=palette["primary"],
             background=palette["background"],
         ).pack(anchor="w")
         make_label(
             page,
             str(row.get("station", "Unknown station")),
-            font=("Segoe UI", 28, "bold"),
             background=palette["background"],
             wraplength=900,
         ).pack(anchor="w", pady=(2, 1))
@@ -4007,7 +3740,6 @@ def build_app() -> None:
         make_label(
             page,
             short_description,
-            font=("Segoe UI", 11, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
             wraplength=900,
@@ -4026,14 +3758,12 @@ def build_app() -> None:
         make_label(
             heading,
             str(row.get("frequency") or "Frequency not reported"),
-            font=("Segoe UI", 18, "bold"),
             color=palette["primary"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(4, 8))
         make_label(
             heading,
             f"{row.get('mode') or 'Mode not reported'}  ·  {row.get('on_air') or 'On-air time not reported'}",
-            font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 8))
@@ -4042,13 +3772,11 @@ def build_app() -> None:
             f"★ {row.get('rating_average'):.2f} ({row.get('rating_count', 0)})"
             if isinstance(row.get("rating_average"), (int, float)) and row.get("rating_count")
             else "Not rated yet",
-            font=("Segoe UI", 11, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w")
         make_label(
             heading,
             f"♡ {row.get('likes', 0)} likes",
-            font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(7, 0))
@@ -4070,7 +3798,6 @@ def build_app() -> None:
         make_label(
             owner,
             f"Discord user: {row.get('operator') or 'Unknown'}",
-            font=("Segoe UI", 10, "normal"),
             background=palette["surfaceContainerLow"],
         ).pack(side="left", anchor="center")
 
@@ -4079,7 +3806,6 @@ def build_app() -> None:
             make_label(
                 profile,
                 profile_details,
-                font=("Segoe UI", 10, "normal"),
                 background=palette["surfaceContainerLow"],
                 wraplength=820,
                 justify="left",
@@ -4092,14 +3818,12 @@ def build_app() -> None:
             make_label(
                 layout_card,
                 "Station page",
-                font=("Segoe UI", 15, "bold"),
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="w", pady=(0, 10))
             layout_height = page_layout.get("height", 420)
             layout_height = max(320, min(1_200, int(layout_height)))
             layout = tk.Frame(
                 layout_card,
-                bg=palette["surfaceContainerLowest"],
                 height=layout_height,
             )
             layout.pack(fill="x")
@@ -4139,7 +3863,6 @@ def build_app() -> None:
                     text_widget = make_label(
                         layout,
                         str(block.get("text") or ""),
-                        font=(font_name if font_name != "system-ui" else "Segoe UI", font_size, font_style),
                         background=palette["surfaceContainerLowest"],
                         justify=text_align,
                         anchor="center" if text_align == "center" else ("e" if text_align == "right" else "w"),
@@ -4158,13 +3881,11 @@ def build_app() -> None:
             make_label(
                 details_card,
                 "Station details",
-                font=("Segoe UI", 15, "bold"),
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="w", pady=(0, 8))
             make_label(
                 details_card,
                 details_text,
-                font=("Segoe UI", 10, "normal"),
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
                 wraplength=840,
@@ -4180,7 +3901,6 @@ def build_app() -> None:
             make_label(
                 gallery_card,
                 "Images",
-                font=("Segoe UI", 15, "bold"),
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="w", pady=(0, 10))
             gallery = tk.Frame(gallery_card, bg=palette["surfaceContainerLow"])
@@ -4197,7 +3917,6 @@ def build_app() -> None:
         make_label(
             comments_card,
             f"Comments ({row.get('comment_count', len(comments))})",
-            font=("Segoe UI", 16, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 12))
         if not comments:
@@ -4226,13 +3945,11 @@ def build_app() -> None:
                 make_label(
                     comment_body,
                     f"{comment_title}  {timestamp}".strip(),
-                    font=("Segoe UI", 9, "bold"),
                     background=palette["surfaceContainerLow"],
                 ).pack(anchor="w")
                 make_label(
                     comment_body,
                     str(comment.get("text") or ""),
-                    font=("Segoe UI", 9, "normal"),
                     color=palette["onSurfaceVariant"],
                     background=palette["surfaceContainerLow"],
                     wraplength=790,
@@ -4378,7 +4095,6 @@ def build_app() -> None:
         make_label(
             page,
             "Settings",
-            font=("Segoe UI", 25, "bold"),
             background=palette["background"],
         ).pack(anchor="w", pady=(8, 18))
 
@@ -4387,13 +4103,11 @@ def build_app() -> None:
         make_label(
             profile_card,
             "Station profile",
-            font=("Segoe UI", 16, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 6))
         make_label(
             profile_card,
             "MultiV sends these values to TXITY as your public station logo and station-page details.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=820,
@@ -4404,21 +4118,12 @@ def build_app() -> None:
         make_label(
             logo_frame,
             "Station logo URL",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 5))
-        logo_entry = tk.Entry(
+        logo_entry = ttk.Entry
             logo_frame,
             textvariable=tx_logo_url_var,
-            font=("Segoe UI", 10),
-            bg=palette["surfaceContainerLowest"],
-            fg=palette["onSurface"],
-            insertbackground=palette["onSurface"],
-            relief="flat",
-            highlightthickness=1,
-            highlightbackground=palette["outline"],
-            highlightcolor=palette["primary"],
         )
         logo_entry.pack(fill="x", ipady=7)
 
@@ -4457,7 +4162,6 @@ def build_app() -> None:
         make_label(
             logo_frame,
             "PNG, JPEG, WebP, or GIF. Maximum file size: 5 MB.",
-            font=("Segoe UI", 8, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(5, 0))
@@ -4465,7 +4169,6 @@ def build_app() -> None:
         make_label(
             logo_frame,
             variable=tx_logo_upload_status_var,
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=820,
@@ -4474,7 +4177,6 @@ def build_app() -> None:
         make_label(
             profile_card,
             "Station page details",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 5))
@@ -4482,15 +4184,6 @@ def build_app() -> None:
             profile_card,
             height=6,
             wrap="word",
-            font=("Segoe UI", 10),
-            bg=palette["surfaceContainerLowest"],
-            fg=palette["onSurface"],
-            insertbackground=palette["onSurface"],
-            relief="flat",
-            borderwidth=1,
-            highlightthickness=1,
-            highlightbackground=palette["outline"],
-            highlightcolor=palette["primary"],
         )
         details_text.insert("1.0", tx_details_var.get())
         details_text.pack(fill="x", ipady=5)
@@ -4503,7 +4196,6 @@ def build_app() -> None:
         make_label(
             profile_card,
             "Displayed when someone opens your station page. Maximum 1,200 characters.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(6, 0))
@@ -4513,59 +4205,41 @@ def build_app() -> None:
         make_label(
             web_card,
             "Browser control panel",
-            font=("Segoe UI", 16, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 6))
         make_label(
             web_card,
             "Serve the MultiV control interface to devices on your local network, using the TXITY transmit and station-page layout.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=820,
         ).pack(anchor="w", pady=(0, 10))
 
-        enabled = tk.Checkbutton(
+        enabled = ttk.Checkbutton
             web_card,
             text="Enable Web GUI",
             variable=web_gui_enabled_var,
             command=toggle_web_gui,
-            font=("Segoe UI", 10, "bold"),
-            bg=palette["surfaceContainerLow"],
-            fg=palette["onSurface"],
-            activebackground=palette["surfaceContainerLow"],
-            activeforeground=palette["onSurface"],
-            selectcolor=palette["surfaceContainerLowest"],
         )
         enabled.pack(anchor="w", pady=(2, 12))
 
         make_label(
             web_card,
             "Set or change password",
-            font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 5))
         password_row = tk.Frame(web_card, bg=palette["surfaceContainerLow"])
         password_row.pack(fill="x")
-        password_entry = tk.Entry(
+        password_entry = ttk.Entry
             password_row,
             textvariable=web_gui_password_var,
             show="*",
-            font=("Segoe UI", 10),
-            bg=palette["surfaceContainerLowest"],
-            fg=palette["onSurface"],
-            insertbackground=palette["onSurface"],
-            relief="flat",
-            highlightthickness=1,
-            highlightbackground=palette["outline"],
-            highlightcolor=palette["primary"],
         )
         password_entry.pack(side="left", fill="x", expand=True, ipady=7, padx=(0, 8))
         make_label(
             web_card,
             "Use at least 12 characters. MultiV stores a salted PBKDF2 hash of your password.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(5, 8))
@@ -4579,7 +4253,6 @@ def build_app() -> None:
         make_label(
             web_card,
             variable=web_gui_status_var,
-            font=("Segoe UI", 9, "normal"),
             color=palette["primary"],
             background=palette["surfaceContainerLow"],
             wraplength=820,
@@ -4587,7 +4260,6 @@ def build_app() -> None:
         make_label(
             web_card,
             "Address: http://127.0.0.1:23234 on this computer. Other devices use this computer's LAN IP on port 23234. The password is hashed in the settings file, but HTTP does not encrypt traffic. Use this only on a trusted network and do not forward the port to the internet.",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=820,
@@ -4604,20 +4276,17 @@ def build_app() -> None:
         make_label(
             update_card,
             "Application updates",
-            font=("Segoe UI", 16, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 6))
         make_label(
             update_card,
             f"Version {APP_VERSION}",
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 6))
         make_label(
             update_card,
             variable=update_status_var,
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=820,
@@ -4654,7 +4323,6 @@ def build_app() -> None:
         make_label(
             page,
             "Discord account",
-            font=("Segoe UI", 25, "bold"),
             background=palette["background"],
         ).pack(anchor="w", pady=(8, 18))
 
@@ -4664,14 +4332,12 @@ def build_app() -> None:
         make_label(
             card,
             variable=account_var,
-            font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w")
 
         make_label(
             card,
             variable=auth_status_var,
-            font=("Segoe UI", 10, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=780,
@@ -4701,7 +4367,6 @@ def build_app() -> None:
         make_label(
             card,
             description,
-            font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
             wraplength=780,
@@ -4710,7 +4375,6 @@ def build_app() -> None:
         make_label(
             page,
             f"Server: {BASE_URL}",
-            font=("Segoe UI", 9, "normal"),
             color=palette["primary"],
             background=palette["background"],
         ).pack(anchor="w", pady=(18, 0))
@@ -4745,7 +4409,6 @@ def build_app() -> None:
         make_label(
             topbar,
             "MultiV",
-            font=("Segoe UI", 17, "bold"),
             color=palette["primary"],
             background=palette["surfaceContainerLow"],
         ).pack(side="left", padx=(2, 12))
@@ -4788,7 +4451,6 @@ def build_app() -> None:
                         if selected else palette["surfaceContainerLow"]
                     ),
                     focus_color=palette["primary"],
-                    font=("Segoe UI", 10, "bold" if selected else "normal"),
                     padding_x=14,
                     padding_y=9,
                 )
@@ -4819,14 +4481,12 @@ def build_app() -> None:
             make_label(
                 topbar,
                 variable=connection_var,
-                font=("Segoe UI", 8, "normal"),
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
             ).pack(side="right", padx=(6, 8))
 
             content_frame = tk.Frame(
                 shell_frame,
-                bg=palette["background"],
                 padx=20,
                 pady=10,
             )
@@ -4863,7 +4523,6 @@ def build_app() -> None:
             ).pack(side="right")
             content_frame = tk.Frame(
                 shell_frame,
-                bg=palette["background"],
                 padx=20,
                 pady=16,
             )
