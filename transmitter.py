@@ -1385,6 +1385,7 @@ class TxityTransmitter:
                             description=str(config.get("stationDescription") or ""),
                             listener_password=str(icecast_server_settings.get("listener_password") or ""),
                             max_listeners=int(icecast_server_settings.get("max_listeners", 25)),
+                            bitrate_kbps=icecast_bitrate_kbps,
                             events=self.events,
                         )
                     icecast_broadcaster = IcecastBroadcaster(
