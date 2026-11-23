@@ -21,6 +21,7 @@ import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+from app_paths import app_data_path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from queue import Queue
 from typing import Any
@@ -34,8 +35,7 @@ MAX_CALLBACK_BODY = 20_000
 
 def diagnostic_log_path(filename: str = "discord-auth.log") -> Path:
     """Return the per-user location for diagnostic logs."""
-    root = Path(os.environ.get("LOCALAPPDATA") or Path.home())
-    return root / "TXITPY" / "logs" / filename
+    return app_data_path("logs", filename)
 
 
 def safe_error_text(value: BaseException | str, max_chars: int = 16_000) -> str:
@@ -125,15 +125,8 @@ def is_auth_token(value: Any) -> bool:
 
 
 def auth_token_path() -> Path:
-    """Return the shared machine-wide TXITY session token path on Windows."""
-    if os.name == "nt":
-        base = Path(
-            os.environ.get("PROGRAMDATA")
-            or (Path(os.environ.get("SystemDrive", "C:")) / "ProgramData")
-        )
-    else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
-    return base / "TXITPY" / "token.txt"
+    """Return the application-local TXITY session token path."""
+    return app_data_path("token.txt")
 
 
 def save_auth_token(token: str) -> Path:
@@ -742,9 +735,7 @@ class DiscordAuthManager:
         """Remove the saved TXITY token and embedded browser sign-in profile."""
         self.close()
         token_cleared = clear_auth_token()
-        local_app_data = os.environ.get("LOCALAPPDATA")
-        profile_root = Path(local_app_data) if local_app_data else Path.home()
-        profile_path = profile_root / "TXITPY" / "BrowserProfile"
+        profile_path = app_data_path("browser-profile")
         try:
             shutil.rmtree(profile_path, ignore_errors=False)
         except FileNotFoundError:
