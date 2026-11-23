@@ -403,12 +403,21 @@ class IcecastBroadcaster:
             )
             grouped.setdefault(key, []).append(destination)
         if local_server is not None:
-            local_bitrate = default_bitrate
-            grouped.setdefault(("mp3", local_bitrate), [])
+            local_format = str(local_server.audio_format)
+            local_bitrate = int(local_server.bitrate_kbps)
+            grouped.setdefault((local_format, local_bitrate), [])
 
         self._groups = [
-            _EncoderGroup(audio_format, bitrate, items,
-                          local_server if audio_format == "mp3" and bitrate == default_bitrate else None)
+            _EncoderGroup(
+                audio_format,
+                bitrate,
+                items,
+                local_server
+                if local_server is not None
+                and audio_format == local_server.audio_format
+                and bitrate == int(local_server.bitrate_kbps)
+                else None,
+            )
             for (audio_format, bitrate), items in grouped.items()
         ]
 
