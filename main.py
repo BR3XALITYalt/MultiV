@@ -1468,27 +1468,47 @@ def build_app() -> None:
                 "DRM mode supports microphone and playlist inputs, not desktop audio loopback."
             )
 
+        txity_enabled = bool(txity_output_enabled_var.get())
+        icecast_enabled = bool(icecast_output_enabled_var.get())
+        if not txity_enabled and not icecast_enabled:
+            raise ValueError("Enable at least one output: TXITY or Icecast.")
+
         selected_icecast_destinations = []
-        for destination in icecast_destinations:
-            if not bool(destination.get("enabled", True)):
-                continue
-            if not str(destination.get("url") or "").strip() and not str(
-                destination.get("password") or ""
-            ):
-                continue
-            selected_icecast_destinations.append(
-                normalize_icecast_destination(destination)
-            )
-        try:
-            icecast_bitrate_kbps = int(tx_icecast_bitrate_var.get())
-        except (TypeError, ValueError) as exc:
-            raise ValueError("Icecast bitrate must be a whole number.") from exc
-        if icecast_bitrate_kbps not in ICECAST_BITRATES:
-            raise ValueError(
-                "Icecast bitrate must be one of: "
-                + ", ".join(str(value) for value in ICECAST_BITRATES)
-                + " kbps."
-            )
+        if icecast_enabled:
+            for destination in icecast_destinations:
+                if not bool(destination.get("enabled", True)):
+                    continue
+                if not str(destination.get("url") or "").strip() and not str(
+                    destination.get("password") or ""
+                ):
+                    continue
+                selected_icecast_destinations.append(
+                    normalize_icecast_destination(destination)
+                )
+
+        selected_server_format = tx_icecast_server_format_var.get().strip().casefold()
+        server_format_spec = ICECAST_FORMATS.get(selected_server_format)
+        if server_format_spec is None:
+            raise ValueError("Choose an available built-in Icecast audio format.")
+        if server_format_spec.get("lossless"):
+            icecast_bitrate_kbps = 128
+            built_in_server_bitrate = 0
+        else:
+            try:
+                built_in_server_bitrate = int(tx_icecast_bitrate_var.get())
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Built-in Icecast bitrate must be a whole number.") from exc
+            if built_in_server_bitrate not in ICECAST_BITRATES:
+                raise ValueError(
+                    "Built-in Icecast bitrate must be one of: "
+                    + ", ".join(str(value) for value in ICECAST_BITRATES)
+                    + " kbps."
+                )
+            if selected_server_format == "aac_plus" and built_in_server_bitrate > 128:
+                raise ValueError("AAC+ bitrate must be 128 kbps or lower.")
+            if selected_server_format == "ogg_opus" and built_in_server_bitrate < 48:
+                raise ValueError("Ogg Opus bitrate must be at least 48 kbps.")
+            icecast_bitrate_kbps = built_in_server_bitrate
 
         try:
             icecast_server_port = int(tx_icecast_server_port_var.get())
@@ -1504,14 +1524,21 @@ def build_app() -> None:
             char.isspace() or ord(char) < 32 for char in icecast_server_mount
         ):
             raise ValueError("Built-in Icecast mountpoint must start with / and contain no spaces.")
+        built_in_server_enabled = (
+            icecast_enabled and bool(tx_icecast_server_enabled_var.get())
+        )
         icecast_server_settings = {
-            "enabled": bool(tx_icecast_server_enabled_var.get()),
+            "enabled": built_in_server_enabled,
             "host": "0.0.0.0",
             "port": icecast_server_port,
             "mount": icecast_server_mount,
             "listener_password": tx_icecast_server_password_var.get(),
             "max_listeners": icecast_server_max_listeners,
+            "audio_format": selected_server_format,
+            "bitrate_kbps": built_in_server_bitrate,
         }
+        if not txity_enabled and not selected_icecast_destinations and not built_in_server_enabled:
+            raise ValueError("Enable the Icecast server or add an enabled remote Icecast destination.")
 
         playlist_files = list(tx_playlist_files) if audio_source == "playlist" else []
         selected_device = (
@@ -1547,6 +1574,7 @@ def build_app() -> None:
             "icecast_destinations": list(selected_icecast_destinations),
             "icecast_bitrate_kbps": icecast_bitrate_kbps,
             "icecast_server_settings": dict(icecast_server_settings),
+            "txity_enabled": txity_enabled,
         }
         return {
             "config": config,
@@ -1558,6 +1586,7 @@ def build_app() -> None:
             "icecast_destinations": list(selected_icecast_destinations),
             "icecast_bitrate_kbps": icecast_bitrate_kbps,
             "icecast_server_settings": dict(icecast_server_settings),
+            "txity_enabled": txity_enabled,
             "frequency_retry_context": retry_context,
         }
 
@@ -1574,6 +1603,7 @@ def build_app() -> None:
             icecast_destinations=request["icecast_destinations"],
             icecast_bitrate_kbps=request["icecast_bitrate_kbps"],
             icecast_server_settings=request["icecast_server_settings"],
+            txity_enabled=request["txity_enabled"],
         )
         live_reconfigure_state["active_request"] = request
         tx_status_var.set("Preparing transmission...")
@@ -1594,6 +1624,7 @@ def build_app() -> None:
             "icecast_destinations",
             "icecast_bitrate_kbps",
             "icecast_server_settings",
+            "txity_enabled",
         )
         return all(left.get(key) == right.get(key) for key in keys)
 
@@ -1714,7 +1745,7 @@ def build_app() -> None:
                 tx_playlist_status_var.set("Stopping playlist...")
             update_transmit_button()
             return
-        if not discord_authenticated:
+        if txity_output_enabled_var.get() and not discord_authenticated:
             navigate("discord")
             return
 
@@ -1931,6 +1962,7 @@ def build_app() -> None:
                 icecast_destinations=context.get("icecast_destinations", []),
                 icecast_bitrate_kbps=context.get("icecast_bitrate_kbps", 128),
                 icecast_server_settings=context.get("icecast_server_settings", {}),
+                txity_enabled=bool(context.get("txity_enabled", True)),
             )
         except Exception as exc:
             frequency_retry_context = None
