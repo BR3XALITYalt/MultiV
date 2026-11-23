@@ -135,6 +135,20 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIsInstance(call.args[0], ast.Name)
         self.assertEqual(call.args[0].id, "signal_card")
 
+    def test_icecast_destination_management_is_available_on_transmit_page(self):
+        self.assertIn('icecast_card = make_card(page, padding=16)', self.source)
+        self.assertIn('"Icecast outputs"', self.source)
+        self.assertIn('def edit_icecast_destination(', self.source)
+        self.assertIn('def add_icecast_destination(', self.source)
+        self.assertIn('def remove_selected_icecast_destination(', self.source)
+        self.assertIn('tx_icecast_bitrate_var', self.source)
+        self.assertIn('schedule_live_reconfigure()', self.source)
+
+    def test_icecast_connection_events_update_destination_status(self):
+        self.assertIn('elif kind == "tx_icecast_state":', self.source)
+        self.assertIn('tx_icecast_states[destination_name] = destination_state', self.source)
+        self.assertIn('tx_icecast_status_var.set(destination_text)', self.source)
+
     def test_advanced_signal_controls_use_collapsed_container(self):
         assignments = {}
         for node in ast.walk(self.tree):
