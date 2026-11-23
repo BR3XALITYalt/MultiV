@@ -26,6 +26,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -41,6 +42,7 @@ jobs:
                   versions.append(tuple(map(int, match.groups())))
           manual = os.environ["EVENT_NAME"] == "workflow_dispatch"
           run_number = int(os.environ["RUN_NUMBER"])
+          run_attempt = int(os.environ["RUN_ATTEMPT"])
           latest = max(
               versions,
               default=(0, 1, -1) if manual else (0, 1, 0),
@@ -51,7 +53,7 @@ jobs:
           else:
               # Every rolling build gets a distinct patch component. The
               # workflow run number is monotonic across pushes and reruns.
-              rolling_patch = latest[2] + run_number
+              rolling_patch = latest[2] + run_number * 1000 + run_attempt
               version = f"{latest[0]}.{latest[1]}.{rolling_patch}-dev"
               release_version = ""
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
