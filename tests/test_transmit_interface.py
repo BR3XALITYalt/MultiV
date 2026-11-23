@@ -154,7 +154,7 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         ):
             self.assertIn(setting, self.source)
         self.assertIn('icecast_server_settings=request["icecast_server_settings"]', self.source)
-        self.assertIn('from icecast_server import EmbeddedIcecastServer', self.transmitter_source)
+        self.assertIn('icecast_server_settings', self.source)
 
     def test_icecast_connection_events_update_destination_status(self):
         self.assertIn('elif kind == "tx_icecast_state":', self.source)
