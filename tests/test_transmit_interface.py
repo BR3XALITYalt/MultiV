@@ -144,6 +144,18 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIn('tx_icecast_bitrate_var', self.source)
         self.assertIn('schedule_live_reconfigure()', self.source)
 
+    def test_embedded_icecast_server_settings_are_saved_and_passed_to_transmitter(self):
+        for setting in (
+            "tx_icecast_server_enabled_var",
+            "tx_icecast_server_port_var",
+            "tx_icecast_server_mount_var",
+            "tx_icecast_server_password_var",
+            "tx_icecast_server_max_listeners_var",
+        ):
+            self.assertIn(setting, self.source)
+        self.assertIn('icecast_server_settings=request["icecast_server_settings"]', self.source)
+        self.assertIn('from icecast_server import EmbeddedIcecastServer', self.transmitter_source)
+
     def test_icecast_connection_events_update_destination_status(self):
         self.assertIn('elif kind == "tx_icecast_state":', self.source)
         self.assertIn('tx_icecast_states[destination_name] = destination_state', self.source)
