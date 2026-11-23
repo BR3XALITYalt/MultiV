@@ -1198,7 +1198,7 @@ def build_app() -> None:
             font=("Segoe UI", 10),
         )
         search.pack(fill="x", expand=True, ipady=5)
-        search.bind("<KeyRelease>", lambda _event: update_station_tree())        search.bind("<KeyRelease>", lambda _event: update_station_tree())
+        search.bind("<KeyRelease>", lambda _event: update_station_tree())
 
         make_button(
             controls,
