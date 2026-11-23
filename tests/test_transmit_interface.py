@@ -276,8 +276,10 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertNotIn('root.after_idle(flush_pending_scroll)', self.source)
         self.assertIn('yscrollincrement=SCROLL_UNIT_PIXELS', self.source)
 
-    def test_main_pages_are_prebuilt_and_reused(self):
+    def test_main_pages_are_prebuilt_and_geometry_is_computed_before_navigation(self):
         self.assertIn('for page_name in ("gate", "transmit", "discord", "settings", "station_detail")', self.source)
+        for page_name in ("gate", "transmit", "discord", "settings", "station_detail"):
+            self.assertIn(`page_frames["${page_name}"].update_idletasks()`, self.source)
         self.assertIn('show_transmit(page_frames["transmit"])', self.source)
         self.assertIn('frame.pack_forget()', self.source)
         self.assertIn('("Accounts", "discord")', self.source)
