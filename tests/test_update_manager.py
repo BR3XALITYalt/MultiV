@@ -150,6 +150,13 @@ class UpdateManagerTests(unittest.TestCase):
             "MultiV-linux-x86_64.AppImage",
         )
 
+    def test_windows_installer_forces_close_and_does_not_restart_locking_apps(self):
+        installer = Path(__file__).resolve().parents[1] / "MultiV.iss"
+        source = installer.read_text(encoding="utf-8")
+        self.assertIn("CloseApplications=force", source)
+        self.assertIn("CloseApplicationsFilter=*.*", source)
+        self.assertIn("RestartApplications=no", source)
+
     def test_windows_handoff_waits_for_app_exit_then_runs_installer(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -180,7 +187,8 @@ class UpdateManagerTests(unittest.TestCase):
             self.assertIn("Start-Process -FilePath $Installer", script)
             self.assertIn("-Verb RunAs -Wait -PassThru", script)
             self.assertIn("$InstallerArguments = ", script)
-            self.assertIn("/NORESTART /SP- /DIR=", script)
+            self.assertIn("/NORESTART /SP- /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS", script)
+            self.assertIn("/NORESTARTAPPLICATIONS /LOGCLOSEAPPLICATIONS", script)
             self.assertNotIn("/VERYSILENT", script)
             self.assertNotIn("/SUPPRESSMSGBOXES", script)
             self.assertIn("UPDATE FAILED:", script)
