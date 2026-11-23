@@ -221,6 +221,23 @@ class IcecastDestinationTests(unittest.TestCase):
             )
             self.assertEqual(broadcaster.bitrate, bitrate * 1000)
 
+    def test_local_server_uses_its_selected_encoder_group(self):
+        local_server = mock.Mock()
+        local_server.audio_format = "ogg_opus"
+        local_server.bitrate_kbps = 96
+
+        broadcaster = IcecastBroadcaster(
+            [],
+            events=queue.Queue(),
+            local_server=local_server,
+        )
+
+        self.assertEqual(len(broadcaster._groups), 1)
+        group = broadcaster._groups[0]
+        self.assertEqual(group.audio_format, "ogg_opus")
+        self.assertEqual(group.bitrate_kbps, 96)
+        self.assertIs(group.local_server, local_server)
+
     def test_available_encoders_produce_stream_packets(self):
         import numpy as np
         from icecast_output import available_icecast_formats
