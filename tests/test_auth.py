@@ -103,19 +103,11 @@ class DiscordAuthValidationTests(unittest.TestCase):
     def test_accepts_opaque_token(self):
         self.assertTrue(is_auth_token("signed.txity.token-value"))
 
-    def test_windows_auth_token_uses_programdata(self):
-        with patch("discord_auth.os.name", "nt"), patch(
-            "discord_auth.Path", PosixPath
-        ), patch.dict(
-            "discord_auth.os.environ",
-            {"PROGRAMDATA": r"C:\ProgramData"},
-        ):
+    def test_auth_token_uses_application_data_directory(self):
+        expected = Path("C:/Program Files/MultiV/data/token.txt")
+        with patch("discord_auth.app_data_path", return_value=expected):
             token_path = auth_token_path()
-
-        self.assertEqual(
-            str(token_path).replace("\\", "/"),
-            "C:/ProgramData/TXITPY/token.txt",
-        )
+        self.assertEqual(token_path, expected)
 
     def test_auth_token_is_saved_and_cleared_from_shared_path(self):
         with tempfile.TemporaryDirectory() as directory:
