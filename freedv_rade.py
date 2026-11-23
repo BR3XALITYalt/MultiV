@@ -16,6 +16,7 @@ import threading
 import zipfile
 from collections import deque
 from pathlib import Path
+from app_paths import app_data_path
 from typing import Callable
 from urllib.request import Request, urlopen
 
@@ -70,17 +71,7 @@ def _runtime_spec() -> tuple[str, str, tuple[str, ...]]:
 
 
 def _runtime_cache_root() -> Path:
-    if os.name == "nt":
-        base = Path(
-            os.environ.get("LOCALAPPDATA")
-            or (Path.home() / "AppData" / "Local")
-        )
-    else:
-        base = Path(
-            os.environ.get("XDG_CACHE_HOME")
-            or (Path.home() / ".cache")
-        )
-    return base / "TXITPY" / "rade-v1"
+    return app_data_path("cache", "TXITPY", "rade-v1")
 
 
 def _download_asset(url: str, limit: int) -> bytes:
