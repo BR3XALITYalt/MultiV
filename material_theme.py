@@ -164,6 +164,5 @@ def native_widget_classes(tk):
             if min_width > 0:
                 options["width"] = min_width
             super().__init__(parent, **options)
-            self.configure(font=font)
 
     return SurfaceFrame, FlatButton
