@@ -1821,9 +1821,9 @@ def build_app() -> None:
                 if action == "start":
                     if transmitter.is_busy:
                         web_gui_status_var.set("A transmission is already starting or active.")
-                    elif not discord_authenticated:
+                    elif txity_output_enabled_var.get() and not discord_authenticated:
                         web_gui_status_var.set(
-                            "Sign in to Discord in the MultiV desktop app before transmitting."
+                            "Sign in to Discord in the MultiV desktop app before sending to TXITY."
                         )
                     else:
                         toggle_transmission()
