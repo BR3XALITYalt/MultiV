@@ -114,22 +114,23 @@ def normalize_icecast_destination(value: Any) -> dict[str, str]:
     audio_format = str(value.get("format") or "mp3").strip().casefold()
     if audio_format not in ICECAST_FORMATS:
         raise ValueError("Choose a supported Icecast audio format.")
-    try:
-        bitrate = int(value.get("bitrate", 128))
-    except (TypeError, ValueError) as exc:
-        raise ValueError("The output bitrate must be a whole number.") from exc
-    if bitrate not in ICECAST_BITRATES:
-        raise ValueError(
-            "Output bitrate must be one of: "
-            + ", ".join(str(item) for item in ICECAST_BITRATES)
-            + " kbps."
-        )
-    if audio_format == "aac_plus" and bitrate > 128:
-        raise ValueError("AAC+ bitrate must be 128 kbps or lower.")
-    if audio_format == "ogg_opus" and bitrate < 48:
-        raise ValueError("Ogg Opus bitrate must be at least 48 kbps.")
     if audio_format == "ogg_flac":
         bitrate = 0
+    else:
+        try:
+            bitrate = int(value.get("bitrate", 128))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("The output bitrate must be a whole number.") from exc
+        if bitrate not in ICECAST_BITRATES:
+            raise ValueError(
+                "Output bitrate must be one of: "
+                + ", ".join(str(item) for item in ICECAST_BITRATES)
+                + " kbps."
+            )
+        if audio_format == "aac_plus" and bitrate > 128:
+            raise ValueError("AAC+ bitrate must be 128 kbps or lower.")
+        if audio_format == "ogg_opus" and bitrate < 48:
+            raise ValueError("Ogg Opus bitrate must be at least 48 kbps.")
 
     host = parsed.hostname
     default_port = 443 if parsed.scheme.casefold() == "https" else 8000
@@ -374,6 +375,12 @@ class IcecastBroadcaster:
     ) -> None:
         if sample_rate != ICECAST_SAMPLE_RATE:
             raise ValueError("Icecast audio input must use 48 kHz PCM.")
+        try:
+            default_bitrate = int(bitrate_kbps)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Built-in Icecast MP3 bitrate must be a whole number.") from exc
+        if default_bitrate not in ICECAST_BITRATES:
+            raise ValueError("Built-in Icecast MP3 bitrate is invalid.")
         normalized = [normalize_icecast_destination(item) for item in destinations]
         if not normalized and local_server is None:
             raise ValueError("Add at least one enabled Icecast destination or enable the built-in server.")
@@ -395,12 +402,12 @@ class IcecastBroadcaster:
             )
             grouped.setdefault(key, []).append(destination)
         if local_server is not None:
-            local_bitrate = int(bitrate_kbps)
+            local_bitrate = default_bitrate
             grouped.setdefault(("mp3", local_bitrate), [])
 
         self._groups = [
             _EncoderGroup(audio_format, bitrate, items,
-                          local_server if audio_format == "mp3" and bitrate == int(bitrate_kbps) else None)
+                          local_server if audio_format == "mp3" and bitrate == default_bitrate else None)
             for (audio_format, bitrate), items in grouped.items()
         ]
 
@@ -428,6 +435,15 @@ class IcecastBroadcaster:
             "state": "Starting",
             "text": f"Starting {len(self._destinations)} Icecast output(s) with independent formats.",
         })
+
+    def _fanout(self, payload: bytes) -> None:
+        """Send an already encoded payload to every configured listener."""
+        if not payload:
+            return
+        for destination in self._destinations:
+            destination.enqueue_packet(payload)
+        if self.local_server is not None:
+            self.local_server.publish(payload)
 
     def send_pcm(self, samples: Any, *, wait_for_space: bool = False) -> None:
         if self._closing.is_set() or self._stopped.is_set():
