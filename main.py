@@ -2658,7 +2658,7 @@ def build_app() -> None:
                 advanced_toggle.configure(text="Show advanced settings")
                 advanced_expanded = False
             else:
-                advanced_container.pack(fill="x", before=audio_card, pady=(0, 12))
+                advanced_container.pack(fill="x", before=cw_card, pady=(0, 12))
                 advanced_toggle.configure(text="Hide advanced settings")
                 advanced_expanded = True
 
@@ -3835,12 +3835,16 @@ def build_app() -> None:
 
         make_label(
             page,
-            "This transmission sends one selected audio source to one TXITY virtual station.",
+            "One selected audio input can feed TXITY and every enabled Icecast destination at the same time.",
             font=("Segoe UI", 9, "normal"),
             color=palette["onSurfaceVariant"],
             background=palette["background"],
             wraplength=850,
         ).pack(anchor="w", pady=(0, 8))
+
+        # Put input selection and output routing first in the transmit workflow.
+        audio_card.pack_configure(before=station_card)
+        icecast_card.pack_configure(before=station_card)
 
     def show_station_detail(parent: tk.Frame) -> None:
         row = next(
