@@ -4810,7 +4810,30 @@ def build_app() -> None:
             topbar.configure(height=64)
             topbar.pack(fill="x", padx=18, pady=(12, 10))
             topbar.pack_propagate(False)
-            make_label(topbar, "MultiV", font=("Segoe UI", 17, "bold"), color=palette["accent"]).pack(side="left", padx=(2, 12))
+            title_label = make_label(
+                topbar, "MultiV", font=("Segoe UI", 17, "bold"),
+                color=palette["accent"],
+            )
+            title_label.pack(side="left", padx=(2, 12))
+
+            # Keep TXITY actions available without restoring a dedicated
+            # TXITY button to the top navigation bar.
+            txity_menu_items = tk.Menu(
+                topbar, tearoff=False,
+                background=palette["background"],
+                foreground=palette["foreground"],
+                activebackground=palette["selectionBackground"],
+                activeforeground=palette["selectionForeground"],
+            )
+            txity_menu_items.add_command(
+                label="Station directory",
+                command=open_station_directory,
+            )
+
+            def show_txity_context_menu(event) -> None:
+                txity_menu_items.tk_popup(event.x_root, event.y_root)
+
+            title_label.bind("<Button-3>", show_txity_context_menu)
 
             nav_frame = ttk.Frame(topbar)
             nav_frame.pack(side="left", fill="y")
