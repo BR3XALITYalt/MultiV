@@ -651,12 +651,12 @@ class TransmitterProtocolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             nfm_transport_settings("6.950 MHz")
 
-    def test_drm_experimental_label_is_accepted_as_a_mode_alias(self):
+    def test_drm_mode_uses_standard_mode_name(self):
         config = build_transmit_config(
             station_name="Example DRM",
             description="",
             frequency="7 MHz",
-            mode="DRM [EXPERIMENTAL]",
+            mode="DRM",
             station_dbm=40,
             allow_overlap=False,
             auth_token="test-token",
