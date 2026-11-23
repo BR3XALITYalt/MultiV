@@ -289,7 +289,7 @@ class IcecastBroadcaster:
 
         normalized = [normalize_icecast_destination(item) for item in destinations]
         if not normalized and local_server is None:
-            raise ValueError("Add an enabled Icecast destination or enable the built-in server.")
+            raise ValueError("Add at least one enabled Icecast destination or enable the built-in server.")
 
         self.local_server = local_server
         self.bitrate = bitrate * 1_000
