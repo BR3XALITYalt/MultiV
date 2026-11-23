@@ -45,7 +45,7 @@ from transmitter import (
 class TransmitterProtocolTests(unittest.TestCase):
 
     def test_icecast_only_start_does_not_require_txity_credentials(self):
-        events = __import__("queue").Queue()
+        events = queue.Queue()
         transmitter = TxityTransmitter(object(), events)
         fake_thread = mock.Mock()
         with mock.patch("transmitter.threading.Thread", return_value=fake_thread) as thread_factory:
@@ -65,7 +65,7 @@ class TransmitterProtocolTests(unittest.TestCase):
         fake_thread.start.assert_called_once()
 
     def test_start_rejects_when_no_output_provider_is_enabled(self):
-        transmitter = TxityTransmitter(object(), __import__("queue").Queue())
+        transmitter = TxityTransmitter(object(), queue.Queue())
         with self.assertRaisesRegex(ValueError, "Enable TXITY"):
             transmitter.start(
                 {"mode": "AM", "_txitpyMode": "AM"},
