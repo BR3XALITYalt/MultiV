@@ -69,6 +69,12 @@ MultiV uses one audio source at a time. It does not mix the microphone, desktop 
 
 See the [audio and playlist guide](wiki/Audio-Sources.md) for supported formats and playlist behavior.
 
+## Icecast outputs
+
+Add up to eight Icecast destinations on the **Transmit** page. Each destination uses its server URL and mountpoint, source username, and source password. MultiV sends mono MP3 at 48 kHz to every enabled destination. Select 64, 96, 128, 160, 192, 256, or 320 kbps.
+
+Icecast output runs alongside the TXITY transmission and uses the selected microphone, desktop-audio, or playlist source. It is unavailable in DRM and CW modes. Each server reconnects independently if its connection drops. See the [Icecast output guide](wiki/Icecast-Outputs.md) for configuration and connection details.
+
 ## Signal modes
 
 MultiV includes AM, sideband, NFM, FreeDV RADE V1, DRM (experimental), and CW. RADE V1 is transmit-only. Signal behavior and compatibility depend on the selected mode and simulator.
