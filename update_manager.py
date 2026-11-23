@@ -266,7 +266,7 @@ try {{
                 $_.ExecutablePath.StartsWith($InstallRoot, [System.StringComparison]::OrdinalIgnoreCase)
             }})
         }} catch {{
-            Write-UpdateLog "Could not enumerate all installation processes: $($_.Exception.Message)"
+            throw "Could not verify that MultiV helper processes have exited: $($_.Exception.Message)"
         }}
         return $Processes
     }}
