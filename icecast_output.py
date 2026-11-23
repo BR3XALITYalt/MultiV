@@ -1,4 +1,4 @@
-"""Independent MP3 outputs for one or more Icecast servers."""
+"""Per-destination audio encoders and Icecast source connections."""
 
 from __future__ import annotations
 
@@ -15,15 +15,67 @@ from typing import Any
 from urllib.parse import urlsplit
 
 
-ICECAST_BITRATES = (64, 96, 128, 160, 192, 256, 320)
+ICECAST_BITRATES = (32, 48, 64, 96, 128, 160, 192, 256, 320)
 ICECAST_SAMPLE_RATE = 48_000
-MP3_FRAME_SAMPLES = 1_152
 INPUT_QUEUE_BLOCKS = 48
 OUTPUT_QUEUE_PACKETS = 256
 
+ICECAST_FORMATS = {
+    "mp3": {
+        "label": "MP3",
+        "codec": "libmp3lame",
+        "content_type": "audio/mpeg",
+        "container": None,
+        "frame_size": 1152,
+    },
+    "aac_plus": {
+        "label": "AAC+ (HE-AAC)",
+        "codec": "libfdk_aac",
+        "content_type": "audio/aacp",
+        "container": "adts",
+        "frame_size": 1024,
+    },
+    "ogg_vorbis": {
+        "label": "Ogg Vorbis",
+        "codec": "libvorbis",
+        "content_type": "application/ogg",
+        "container": "ogg",
+        "frame_size": 1024,
+    },
+    "ogg_opus": {
+        "label": "Ogg Opus",
+        "codec": "libopus",
+        "content_type": "application/ogg",
+        "container": "ogg",
+        "frame_size": 960,
+    },
+    "ogg_flac": {
+        "label": "Ogg FLAC",
+        "codec": "flac",
+        "content_type": "application/ogg",
+        "container": "ogg",
+        "frame_size": 4096,
+        "lossless": True,
+    },
+}
+
+
+def available_icecast_formats() -> dict[str, str]:
+    """Return codecs available in the installed PyAV/FFmpeg build."""
+    import av
+
+    available: dict[str, str] = {}
+    for key, spec in ICECAST_FORMATS.items():
+        try:
+            av.Codec(spec["codec"], "w")
+        except (av.error.FFmpegError, ValueError):
+            continue
+        available[key] = str(spec["label"])
+    return available
+
 
 def normalize_icecast_destination(value: Any) -> dict[str, str]:
-    """Validate one Icecast URL and its source credentials."""
+    """Validate one Icecast URL, source credentials, codec, and bitrate."""
     if not isinstance(value, dict):
         raise ValueError("Each Icecast destination must be a settings object.")
 
@@ -59,6 +111,26 @@ def normalize_icecast_destination(value: Any) -> dict[str, str]:
     if "\r" in password or "\n" in password:
         raise ValueError("The Icecast source password contains invalid characters.")
 
+    audio_format = str(value.get("format") or "mp3").strip().casefold()
+    if audio_format not in ICECAST_FORMATS:
+        raise ValueError("Choose a supported Icecast audio format.")
+    try:
+        bitrate = int(value.get("bitrate", 128))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("The output bitrate must be a whole number.") from exc
+    if bitrate not in ICECAST_BITRATES:
+        raise ValueError(
+            "Output bitrate must be one of: "
+            + ", ".join(str(item) for item in ICECAST_BITRATES)
+            + " kbps."
+        )
+    if audio_format == "aac_plus" and bitrate > 128:
+        raise ValueError("AAC+ bitrate must be 128 kbps or lower.")
+    if audio_format == "ogg_opus" and bitrate < 48:
+        raise ValueError("Ogg Opus bitrate must be at least 48 kbps.")
+    if audio_format == "ogg_flac":
+        bitrate = 0
+
     host = parsed.hostname
     default_port = 443 if parsed.scheme.casefold() == "https" else 8000
     selected_port = port or default_port
@@ -72,13 +144,14 @@ def normalize_icecast_destination(value: Any) -> dict[str, str]:
         "name": display_name,
         "scheme": parsed.scheme.casefold(),
         "host": host,
-        "port": str(port or (443 if parsed.scheme.casefold() == "https" else 8000)),
+        "port": str(port or default_port),
         "mount": parsed.path,
+        "format": audio_format,
+        "bitrate": str(bitrate),
     }
 
 
 def _safe_header(value: str, limit: int = 160) -> str:
-    """Remove header-breaking characters before placing text on the wire."""
     return " ".join(str(value or "").replace("\r", " ").replace("\n", " ").split())[:limit]
 
 
@@ -95,11 +168,14 @@ class _Destination:
     socket_lock: threading.Lock = field(default_factory=threading.Lock)
     active_socket: socket.socket | ssl.SSLSocket | None = None
     stop_event: threading.Event = field(default_factory=threading.Event)
-    retry_attempt: int = 0
 
     @property
     def name(self) -> str:
         return self.settings["name"]
+
+    @property
+    def audio_format(self) -> str:
+        return self.settings["format"]
 
     def emit(self, state: str, detail: str = "") -> None:
         message = f"{self.name}: {state}"
@@ -129,10 +205,7 @@ class _Destination:
     def connect(self) -> socket.socket | ssl.SSLSocket:
         settings = self.settings
         port = int(settings["port"])
-        raw_socket = socket.create_connection(
-            (settings["host"], port),
-            timeout=8.0,
-        )
+        raw_socket = socket.create_connection((settings["host"], port), timeout=8.0)
         connection: socket.socket | ssl.SSLSocket = raw_socket
         if settings["scheme"] == "https":
             try:
@@ -152,14 +225,14 @@ class _Destination:
         default_port = 443 if settings["scheme"] == "https" else 80
         if port != default_port:
             host_header = f"{host_header}:{port}"
-
+        spec = ICECAST_FORMATS[settings["format"]]
         headers = [
             f'SOURCE {settings["mount"]} HTTP/1.0',
             f"Host: {host_header}",
             f"Authorization: Basic {authorization}",
             "User-Agent: MultiV",
             "Accept: */*",
-            "Content-Type: audio/mpeg",
+            f'Content-Type: {spec["content_type"]}',
             "ice-public: 0",
             f"ice-name: {_safe_header(self.station_name)}",
             f"ice-description: {_safe_header(self.station_description)}",
@@ -175,11 +248,7 @@ class _Destination:
             if not chunk:
                 break
             response.extend(chunk)
-
-        first_line = bytes(response).split(b"\r\n", 1)[0].decode(
-            "latin-1",
-            errors="replace",
-        )
+        first_line = bytes(response).split(b"\r\n", 1)[0].decode("latin-1", errors="replace")
         match = re.search(r"(?:HTTP/\S+\s+|ICY\s+)(\d{3})(?:\s+(.*))?", first_line)
         if not match:
             connection.close()
@@ -194,9 +263,10 @@ class _Destination:
                 404: "mountpoint was not found",
                 409: "mountpoint is already in use",
             }
-            detail = reasons.get(status_code, _safe_header(reason, 120))
-            raise ConnectionError(f"Icecast returned HTTP {status_code}: {detail}")
-
+            raise ConnectionError(
+                f"Icecast returned HTTP {status_code}: "
+                f"{reasons.get(status_code, _safe_header(reason, 120))}"
+            )
         connection.settimeout(3.0)
         return connection
 
@@ -220,7 +290,7 @@ class _Destination:
         while not self.stop_event.is_set():
             connection = None
             try:
-                self.emit("Connecting")
+                self.emit("Connecting", ICECAST_FORMATS[self.audio_format]["label"])
                 connection = self.connect()
                 with self.socket_lock:
                     self.active_socket = connection
@@ -229,10 +299,8 @@ class _Destination:
                         self.packets.get_nowait()
                     except queue.Empty:
                         break
-                self.retry_attempt = 0
                 delay = 1.0
-                self.emit("Connected")
-
+                self.emit("Connected", ICECAST_FORMATS[self.audio_format]["label"])
                 while not self.stop_event.is_set():
                     try:
                         payload = self.packets.get(timeout=0.5)
@@ -242,12 +310,9 @@ class _Destination:
                         self.emit("Disconnected")
                         return
                     connection.sendall(payload)
-
             except (OSError, ssl.SSLError, ConnectionError, TimeoutError) as exc:
                 if not self.stop_event.is_set():
-                    self.retry_attempt += 1
-                    detail = str(exc)[:220]
-                    self.emit("Reconnecting", f"{detail}; retry in {delay:.0f}s")
+                    self.emit("Reconnecting", f"{str(exc)[:180]}; retry in {delay:.0f}s")
                     self.stop_event.wait(delay)
                     delay = min(15.0, delay * 2.0)
             except Exception as exc:
@@ -256,12 +321,45 @@ class _Destination:
                     self.stop_event.wait(5.0)
             finally:
                 self.close_socket()
-
         self.emit("Disconnected")
 
 
+class _FanoutWriter:
+    """File-like output consumed by PyAV's Ogg/ADTS muxers."""
+
+    def __init__(self, destinations: list[_Destination], local_server: Any = None) -> None:
+        self.destinations = destinations
+        self.local_server = local_server
+
+    def write(self, payload: bytes) -> int:
+        data = bytes(payload)
+        for destination in self.destinations:
+            destination.enqueue_packet(data)
+        if self.local_server is not None:
+            self.local_server.publish(data)
+        return len(data)
+
+    def flush(self) -> None:
+        return None
+
+    def writable(self) -> bool:
+        return True
+
+
+@dataclass
+class _EncoderGroup:
+    audio_format: str
+    bitrate_kbps: int
+    destinations: list[_Destination]
+    local_server: Any = None
+    input_queue: queue.Queue[Any] = field(
+        default_factory=lambda: queue.Queue(maxsize=INPUT_QUEUE_BLOCKS)
+    )
+    thread: threading.Thread | None = None
+
+
 class IcecastBroadcaster:
-    """Encode source PCM once and fan the MP3 stream out to Icecast servers."""
+    """Encode each distinct format/bitrate once, then fan out to matching outputs."""
 
     def __init__(
         self,
@@ -274,39 +372,36 @@ class IcecastBroadcaster:
         sample_rate: int = ICECAST_SAMPLE_RATE,
         local_server: Any = None,
     ) -> None:
-        try:
-            bitrate = int(bitrate_kbps)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("Icecast MP3 bitrate must be a whole number.") from exc
-        if bitrate not in ICECAST_BITRATES:
-            raise ValueError(
-                "Icecast MP3 bitrate must be one of: "
-                + ", ".join(str(value) for value in ICECAST_BITRATES)
-                + " kbps."
-            )
         if sample_rate != ICECAST_SAMPLE_RATE:
             raise ValueError("Icecast audio input must use 48 kHz PCM.")
-
         normalized = [normalize_icecast_destination(item) for item in destinations]
         if not normalized and local_server is None:
             raise ValueError("Add at least one enabled Icecast destination or enable the built-in server.")
-
         self.local_server = local_server
-        self.bitrate = bitrate * 1_000
         self.sample_rate = sample_rate
         self.events = events
-        self._input_queue: queue.Queue[Any] = queue.Queue(maxsize=INPUT_QUEUE_BLOCKS)
         self._closing = threading.Event()
         self._stopped = threading.Event()
-        self._encoder_thread: threading.Thread | None = None
         self._destinations = [
-            _Destination(
-                item,
-                events,
-                _safe_header(station_name),
-                _safe_header(station_description),
-            )
+            _Destination(item, events, _safe_header(station_name), _safe_header(station_description))
             for item in normalized
+        ]
+
+        grouped: dict[tuple[str, int], list[_Destination]] = {}
+        for destination in self._destinations:
+            key = (
+                destination.audio_format,
+                int(destination.settings["bitrate"]),
+            )
+            grouped.setdefault(key, []).append(destination)
+        if local_server is not None:
+            local_bitrate = int(bitrate_kbps)
+            grouped.setdefault(("mp3", local_bitrate), [])
+
+        self._groups = [
+            _EncoderGroup(audio_format, bitrate, items,
+                          local_server if audio_format == "mp3" and bitrate == int(bitrate_kbps) else None)
+            for (audio_format, bitrate), items in grouped.items()
         ]
 
     def start(self) -> None:
@@ -316,25 +411,25 @@ class IcecastBroadcaster:
             destination.thread = threading.Thread(
                 target=destination.run,
                 daemon=True,
-                name="multiv-icecast-" + str(len(destination.name)),
+                name="multiv-icecast-output",
             )
             destination.thread.start()
-
-        self._encoder_thread = threading.Thread(
-            target=self._encode_audio,
-            daemon=True,
-            name="multiv-icecast-encoder",
-        )
-        self._encoder_thread.start()
+        for group in self._groups:
+            group.thread = threading.Thread(
+                target=self._encode_group,
+                args=(group,),
+                daemon=True,
+                name=f"multiv-icecast-{group.audio_format}",
+            )
+            group.thread.start()
         self.events.put({
             "kind": "tx_icecast_state",
             "name": "Icecast",
             "state": "Starting",
-            "text": f"Starting {len(self._destinations)} Icecast output(s) at {self.bitrate // 1000} kbps MP3.",
+            "text": f"Starting {len(self._destinations)} Icecast output(s) with independent formats.",
         })
 
     def send_pcm(self, samples: Any, *, wait_for_space: bool = False) -> None:
-        """Queue a copy of source PCM without making network calls in audio callbacks."""
         if self._closing.is_set() or self._stopped.is_set():
             return
         import numpy as np
@@ -343,49 +438,46 @@ class IcecastBroadcaster:
         if block.size == 0:
             return
         block = np.nan_to_num(block, nan=0.0, posinf=0.0, neginf=0.0).copy()
-
-        if wait_for_space:
-            while not self._closing.is_set():
+        for group in self._groups:
+            if wait_for_space:
+                while not self._closing.is_set():
+                    try:
+                        group.input_queue.put(block, timeout=0.1)
+                        break
+                    except queue.Full:
+                        continue
+            else:
                 try:
-                    self._input_queue.put(block, timeout=0.1)
-                    return
+                    group.input_queue.put_nowait(block)
                 except queue.Full:
-                    continue
-            return
+                    try:
+                        group.input_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                    try:
+                        group.input_queue.put_nowait(block)
+                    except queue.Full:
+                        pass
 
-        try:
-            self._input_queue.put_nowait(block)
-        except queue.Full:
-            try:
-                self._input_queue.get_nowait()
-            except queue.Empty:
-                pass
-            try:
-                self._input_queue.put_nowait(block)
-            except queue.Full:
-                pass
-
-    def stop(self, wait: float = 2.0) -> None:
-        """Flush the MP3 encoder, then disconnect each Icecast source."""
+    def stop(self, wait: float = 3.0) -> None:
         if self._stopped.is_set():
             return
         self._closing.set()
-        try:
-            self._input_queue.put_nowait(None)
-        except queue.Full:
+        for group in self._groups:
             try:
-                self._input_queue.get_nowait()
-            except queue.Empty:
-                pass
-            try:
-                self._input_queue.put_nowait(None)
+                group.input_queue.put_nowait(None)
             except queue.Full:
-                pass
-
-        encoder = self._encoder_thread
-        if encoder is not None and encoder is not threading.current_thread():
-            encoder.join(timeout=wait)
-
+                try:
+                    group.input_queue.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    group.input_queue.put_nowait(None)
+                except queue.Full:
+                    pass
+        for group in self._groups:
+            if group.thread is not None and group.thread is not threading.current_thread():
+                group.thread.join(timeout=wait)
         self._stopped.set()
         if self.local_server is not None:
             try:
@@ -411,11 +503,9 @@ class IcecastBroadcaster:
                     destination.packets.put_nowait(None)
                 except queue.Full:
                     pass
-
         for destination in self._destinations:
-            worker = destination.thread
-            if worker is not None and worker is not threading.current_thread():
-                worker.join(timeout=wait)
+            if destination.thread is not None and destination.thread is not threading.current_thread():
+                destination.thread.join(timeout=wait)
         self.events.put({
             "kind": "tx_icecast_state",
             "name": "Icecast",
@@ -423,43 +513,48 @@ class IcecastBroadcaster:
             "text": "Icecast outputs stopped.",
         })
 
-    def _fanout(self, payload: bytes) -> None:
-        if not payload:
-            return
-        for destination in self._destinations:
-            destination.enqueue_packet(payload)
-        if self.local_server is not None:
-            self.local_server.publish(payload)
-
-    def _encode_audio(self) -> None:
+    def _encode_group(self, group: _EncoderGroup) -> None:
         import av
         import numpy as np
 
+        spec = ICECAST_FORMATS[group.audio_format]
+        writer = _FanoutWriter(group.destinations, group.local_server)
         codec = None
+        container = None
+        stream = None
         pending = np.empty(0, dtype=np.float32)
-        frame_size = MP3_FRAME_SAMPLES
         sample_position = 0
         next_deadline = time.perf_counter()
+        frame_size = int(spec["frame_size"])
 
         try:
-            codec = av.CodecContext.create("libmp3lame", "w")
-            codec.sample_rate = self.sample_rate
-            codec.layout = "mono"
-            codec.format = "fltp"
-            codec.bit_rate = self.bitrate
-            codec.open()
-            frame_size = int(codec.frame_size or MP3_FRAME_SAMPLES)
+            if spec["container"] is None:
+                codec = av.CodecContext.create(spec["codec"], "w")
+                codec.sample_rate = self.sample_rate
+                codec.layout = "mono"
+                codec.format = "fltp"
+                codec.bit_rate = group.bitrate_kbps * 1000
+                codec.open()
+                frame_size = int(codec.frame_size or frame_size)
+            else:
+                container = av.open(writer, mode="w", format=spec["container"])
+                stream = container.add_stream(spec["codec"], rate=self.sample_rate)
+                stream.layout = "mono"
+                if not spec.get("lossless"):
+                    stream.bit_rate = group.bitrate_kbps * 1000
+                if group.audio_format == "aac_plus":
+                    stream.codec_context.options = {"profile": "aac_he"}
+                frame_size = int(stream.codec_context.frame_size or frame_size)
 
             while True:
                 try:
-                    block = self._input_queue.get(timeout=0.2)
+                    block = group.input_queue.get(timeout=0.2)
                 except queue.Empty:
                     if self._closing.is_set():
                         break
                     continue
                 if block is None:
                     break
-
                 pending = np.concatenate((pending, block))
                 while pending.size >= frame_size:
                     remaining = next_deadline - time.perf_counter()
@@ -468,7 +563,6 @@ class IcecastBroadcaster:
                     now = time.perf_counter()
                     if now - next_deadline > 0.5:
                         next_deadline = now
-
                     samples = pending[:frame_size]
                     pending = pending[frame_size:]
                     frame = av.AudioFrame.from_ndarray(
@@ -480,44 +574,57 @@ class IcecastBroadcaster:
                     frame.pts = sample_position
                     frame.time_base = Fraction(1, self.sample_rate)
                     sample_position += frame_size
-                    for packet in codec.encode(frame):
-                        self._fanout(bytes(packet))
+                    if codec is not None:
+                        for packet in codec.encode(frame):
+                            writer.write(bytes(packet))
+                    else:
+                        for packet in stream.encode(frame):
+                            container.mux(packet)
                     next_deadline += frame_size / self.sample_rate
 
             if pending.size:
-                padded = np.zeros(frame_size, dtype=np.float32)
-                padded[:min(frame_size, pending.size)] = pending[:frame_size]
+                samples = np.zeros(frame_size, dtype=np.float32)
+                samples[:min(frame_size, pending.size)] = pending[:frame_size]
                 frame = av.AudioFrame.from_ndarray(
-                    padded.reshape(1, -1),
+                    samples.reshape(1, -1),
                     format="fltp",
                     layout="mono",
                 )
                 frame.sample_rate = self.sample_rate
                 frame.pts = sample_position
                 frame.time_base = Fraction(1, self.sample_rate)
-                for packet in codec.encode(frame):
-                    self._fanout(bytes(packet))
+                if codec is not None:
+                    for packet in codec.encode(frame):
+                        writer.write(bytes(packet))
+                else:
+                    for packet in stream.encode(frame):
+                        container.mux(packet)
 
-            for packet in codec.encode(None):
-                self._fanout(bytes(packet))
-
+            if codec is not None:
+                for packet in codec.encode(None):
+                    writer.write(bytes(packet))
+            elif stream is not None:
+                for packet in stream.encode(None):
+                    container.mux(packet)
+                container.close()
+                container = None
         except Exception as exc:
+            for destination in group.destinations:
+                destination.emit("Encoder error", str(exc)[:180])
             self.events.put({
                 "kind": "tx_icecast_state",
-                "name": "Icecast",
+                "name": "Built-in server" if group.local_server else "Icecast",
                 "state": "Encoder error",
-                "text": f"Icecast MP3 encoder error: {str(exc)[:240]}",
+                "text": f"{spec['label']} encoder error: {str(exc)[:220]}",
             })
         finally:
-            for destination in self._destinations:
+            if container is not None:
                 try:
-                    destination.packets.put_nowait(None)
-                except queue.Full:
-                    try:
-                        destination.packets.get_nowait()
-                    except queue.Empty:
-                        pass
-                    try:
-                        destination.packets.put_nowait(None)
-                    except queue.Full:
-                        pass
+                    container.close()
+                except Exception:
+                    pass
+            if codec is not None:
+                try:
+                    codec.close()
+                except Exception:
+                    pass
