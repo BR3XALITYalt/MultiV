@@ -1338,10 +1338,11 @@ class TxityTransmitter:
             })
         control_wait_reported = False
 
-        def wait_for_control_connection() -> bool:
+        def wait_for_control_connection(timeout: float = 30.0) -> bool:
             nonlocal control_wait_reported
             if not txity_enabled:
                 return not self._stop_event.is_set()
+            deadline = time.monotonic() + max(0.1, timeout)
             while not self._stop_event.is_set():
                 if self.client.control_connected():
                     if control_wait_reported:
@@ -1357,7 +1358,13 @@ class TxityTransmitter:
                         "text": "TXITY control connection unavailable; waiting before sending audio.",
                     })
                     control_wait_reported = True
-                self._stop_event.wait(0.5)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        "Timed out waiting for TXITY's authenticated control connection. "
+                        "Check the network connection and Discord sign-in, then retry."
+                    )
+                self._stop_event.wait(min(0.5, remaining))
             return False
 
         def open_audio_connection(target_client: Any, label: str) -> Any:
