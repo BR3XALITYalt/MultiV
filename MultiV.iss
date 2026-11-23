@@ -27,6 +27,9 @@ WizardStyle=modern
 SetupIconFile=assets\logo.ico
 UninstallDisplayIcon={app}\MultiV.exe
 UninstallDisplayName=MultiV
+CloseApplications=force
+CloseApplicationsFilter=*.*
+RestartApplications=no
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional options:"; Flags: checkedonce
