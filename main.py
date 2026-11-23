@@ -110,9 +110,7 @@ def _system_theme_mode() -> str:
 def build_app() -> None:
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
-    from sun_valley_theme import apply_tk_theme, native_widget_classes
-
-    SurfaceFrame, FlatButton = native_widget_classes(tk)
+    from sun_valley_theme import apply_tk_theme
     client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
     transmitter = TxityTransmitter(client, client.events)
@@ -524,15 +522,15 @@ def build_app() -> None:
     tx_terminal_server_message: str | None = None
     frequency_retry_context: dict[str, Any] | None = None
     station_search_var = tk.StringVar(root, "")
-    station_cards_frame: tk.Frame | None = None
+    station_cards_frame: ttk.Frame | None = None
     selected_station_id = ""
     image_cache: dict[tuple[str, int], Any] = {}
     image_loading: set[str] = set()
-    image_labels: dict[str, list[tuple[tk.Label, int, str]]] = {}
+    image_labels: dict[str, list[tuple[ttk.Label, int, str]]] = {}
     current_page = "transmit"
-    shell_frame: tk.Frame | None = None
-    content_frame: tk.Frame | None = None
-    nav_frame: tk.Frame | None = None
+    shell_frame: ttk.Frame | None = None
+    content_frame: ttk.Frame | None = None
+    nav_frame: ttk.Frame | None = None
     active_scroll_canvas: tk.Canvas | None = None
     SCROLL_PIXELS_PER_NOTCH = 102
 
@@ -586,23 +584,21 @@ def build_app() -> None:
         wraplength: int = 0,
         justify: str = "left",
         anchor: str = "w",
-    ) -> tk.Label:
+    ) -> tttk.Label:
         options: dict[str, Any] = {
             "font": font,
-            "fg": color or palette["onSurface"],
-            "bg": background or palette["surface"],
-            "anchor": anchor,
             "justify": justify,
-            "borderwidth": 0,
-            "highlightthickness": 0,
+            "anchor": anchor,
         }
+        if color is not None:
+            options["foreground"] = color
         if variable is not None:
             options["textvariable"] = variable
         else:
             options["text"] = text or ""
         if wraplength:
             options["wraplength"] = wraplength
-        return tk.Label(parent, **options)
+        return tttk.Label(parent, **options)
 
     def make_button(
         parent: tk.Misc,
@@ -641,15 +637,8 @@ def build_app() -> None:
         *,
         background: str | None = None,
         padding: int = 16,
-    ) -> tk.Frame:
-        surface_color = background or palette["surfaceContainerLow"]
-        return SurfaceFrame(
-            parent,
-            background=surface_color,
-            outside=parent.cget("bg"),
-            outline=palette["outlineVariant"],
-            padding=padding,
-        )
+    ) -> tttk.Frame:
+        return tttk.Frame(parent, padding=padding)
 
     def request_station_image(url: str) -> None:
         if not url:
@@ -689,19 +678,15 @@ def build_app() -> None:
         size: int,
         placeholder: str = "TX",
         role: str = "station image",
-    ) -> tk.Label:
-        surface = parent.cget("bg")
-        label = tk.Label(
+    ) -> tttk.Label:
+        label = tttk.Label(
             parent,
             text=placeholder,
             font=("Segoe UI", max(16, size // 5), "bold"),
-            fg=palette["onSurfaceVariant"],
-            bg=palette["surfaceContainerHigh"],
+            foreground=palette["onSurfaceVariant"],
             width=max(5, size // 9),
-            height=max(3, size // 18),
-            relief="flat",
-            borderwidth=0,
             anchor="center",
+            justify="center",
         )
         if not url:
             return label
@@ -709,7 +694,7 @@ def build_app() -> None:
         key = (url, size)
         photo = image_cache.get(key)
         if photo is not None:
-            label.configure(image=photo, text="", width=size, height=size, bg=surface)
+            label.configure(image=photo, text="", width=size, height=size)
             label.image = photo
             return label
 
@@ -749,7 +734,6 @@ def build_app() -> None:
                     text="",
                     width=size,
                     height=size,
-                    bg=label.cget("bg"),
                 )
                 label.image = photo
                 applied += 1
@@ -1020,14 +1004,14 @@ def build_app() -> None:
             )
             card.configure(cursor="hand2")
 
-            content = tk.Frame(card, bg=palette["surfaceContainerLow"])
+            content = ttk.Frame(card)
             content.pack(fill="both", expand=True)
 
             logo_url = row.get("logo_url") or ""
             image = make_image_label(content, logo_url, size=112, role=f"station card logo: {row.get('station', 'unknown')}")
             image.pack(side="left", padx=(0, 14), pady=4)
 
-            details = tk.Frame(content, bg=palette["surfaceContainerLow"])
+            details = ttk.Frame(content)
             details.pack(side="left", fill="both", expand=True)
 
             make_label(
@@ -1053,7 +1037,7 @@ def build_app() -> None:
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="w")
 
-            meta = tk.Frame(content, bg=palette["surfaceContainerLow"])
+            meta = ttk.Frame(content)
             meta.pack(side="right", fill="y", padx=(10, 2))
             make_label(
                 meta,
@@ -1088,8 +1072,8 @@ def build_app() -> None:
             update_station_tree()
         client.refresh_stations()
 
-    def show_gate(parent: tk.Frame) -> None:
-        outer = tk.Frame(parent, bg=palette["background"])
+    def show_gate(parent: ttk.Frame) -> None:
+        outer = ttk.Frame(parent)
         outer.pack(fill="both", expand=True)
 
         card = make_card(
@@ -1158,7 +1142,7 @@ def build_app() -> None:
             wraplength=440,
         ).pack(anchor="w", pady=(20, 0))
 
-    def create_scrollable_page(parent: tk.Frame) -> tuple[tk.Frame, tk.Canvas]:
+    def create_scrollable_page(parent: ttk.Frame) -> tuple[ttk.Frame, tk.Canvas]:
         nonlocal active_scroll_canvas
         canvas = tk.Canvas(
             parent,
@@ -1167,7 +1151,7 @@ def build_app() -> None:
             borderwidth=0,
             yscrollincrement=1,
         )
-        page = tk.Frame(canvas, background=palette["background"])
+        page = ttk.Frame(canvas)
         window_id = canvas.create_window((0, 0), window=page, anchor="nw")
 
         def update_region(_event=None) -> None:
@@ -1182,7 +1166,7 @@ def build_app() -> None:
         active_scroll_canvas = canvas
         return page, canvas
 
-    def show_stations(parent: tk.Frame) -> None:
+    def show_stations(parent: ttk.Frame) -> None:
         nonlocal station_cards_frame
 
         page, canvas = create_scrollable_page(parent)
@@ -1208,18 +1192,10 @@ def build_app() -> None:
             background=palette["background"],
         ).pack(anchor="w", pady=(0, 5))
 
-        controls = tk.Frame(page, bg=palette["background"])
+        controls = ttk.Frame(page)
         controls.pack(fill="x", pady=(0, 10))
 
-        search_shell = SurfaceFrame(
-            controls,
-            background=palette["surfaceContainerLowest"],
-            outside=palette["background"],
-            outline=palette["outlineVariant"],
-            padding=5,
-            padding_x=22,
-            padding_y=5,
-        )
+        search_shell = ttk.Frame(controls, padding=5)
         search_shell.pack(side="left", fill="x", expand=True)
         search = ttk.Entry(
             search_shell,
@@ -1227,7 +1203,7 @@ def build_app() -> None:
             font=("Segoe UI", 10),
         )
         search.pack(fill="x", expand=True, ipady=5)
-        search.bind("<KeyRelease>", lambda _event: update_station_tree())
+        search.bind("<KeyRelease>", lambda _event: update_station_tree())        search.bind("<KeyRelease>", lambda _event: update_station_tree())
 
         make_button(
             controls,
@@ -1236,7 +1212,7 @@ def build_app() -> None:
             kind="primary",
         ).pack(side="left", padx=(10, 0))
 
-        status_bar = tk.Frame(page, bg=palette["background"])
+        status_bar = ttk.Frame(page)
         status_bar.pack(fill="x", pady=(2, 10))
         make_label(
             status_bar,
@@ -1253,7 +1229,7 @@ def build_app() -> None:
             background=palette["background"],
         ).pack(side="right")
 
-        station_cards_frame = tk.Frame(page, bg=palette["background"])
+        station_cards_frame = ttk.Frame(page)
         station_cards_frame.pack(fill="x", expand=True)
         update_station_tree()
 
@@ -1880,12 +1856,12 @@ def build_app() -> None:
             )
         update_transmit_button()
 
-    def show_transmit(parent: tk.Frame) -> None:
+    def show_transmit(parent: ttk.Frame) -> None:
         nonlocal tx_transmit_button, playlist_ui_refresh_callback
 
         page, _canvas = create_scrollable_page(parent)
 
-        hero = tk.Frame(page, bg=palette["background"])
+        hero = ttk.Frame(page)
         hero.pack(fill="x", pady=(6, 16))
         make_label(
             hero,
@@ -1934,7 +1910,7 @@ def build_app() -> None:
             column: int,
             row: int,
         ) -> ttk.Entry:
-            wrapper = tk.Frame(parent_frame, bg=palette["surfaceContainerLow"])
+            wrapper = ttk.Frame(parent_frame)
             wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
             make_label(
                 wrapper,
@@ -1967,16 +1943,15 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 10))
 
-        station_fields = tk.Frame(station_card, bg=palette["surfaceContainerLow"])
+        station_fields = ttk.Frame(station_card)
         station_fields.pack(fill="x")
         station_fields.grid_columnconfigure(0, weight=1, uniform="station-fields")
         station_fields.grid_columnconfigure(1, weight=1, uniform="station-fields")
         add_tx_entry(station_fields, "Station name (required)", tx_station_name_var, column=0, row=0)
         add_tx_entry(station_fields, "Short description", tx_description_var, column=1, row=0)
 
-        frequency_fields_frame = tk.Frame(
+        frequency_fields_frame = ttk.Frame(
             station_fields,
-            bg=palette["surfaceContainerLow"],
         )
         frequency_fields_frame.grid(
             row=1,
@@ -2021,9 +1996,8 @@ def build_app() -> None:
                 ],
             ]
             for index, (label_text, variable, removable) in enumerate(frequency_rows):
-                wrapper = tk.Frame(
+                wrapper = ttk.Frame(
                     frequency_fields_frame,
-                    bg=palette["surfaceContainerLow"],
                 )
                 wrapper.pack(fill="x", pady=(0, 8 if index < len(frequency_rows) - 1 else 0))
                 make_label(
@@ -2034,7 +2008,7 @@ def build_app() -> None:
                     background=palette["surfaceContainerLow"],
                 ).pack(anchor="w", pady=(0, 4))
 
-                input_row = tk.Frame(wrapper, bg=palette["surfaceContainerLow"])
+                input_row = ttk.Frame(wrapper)
                 input_row.pack(fill="x")
                 entry = ttk.Entry(
                     input_row,
@@ -2076,7 +2050,7 @@ def build_app() -> None:
         signal_card = make_card(page, padding=16)
         signal_card.pack(fill="x", pady=(0, 12))
 
-        advanced_container = tk.Frame(page, bg=palette["background"])
+        advanced_container = ttk.Frame(page)
         advanced_expanded = False
         drm_metadata_card = make_card(advanced_container, padding=16)
         make_label(
@@ -2094,7 +2068,7 @@ def build_app() -> None:
             wraplength=860,
         ).pack(anchor="w", pady=(0, 10))
 
-        drm_metadata_fields = tk.Frame(drm_metadata_card, bg=palette["surfaceContainerLow"])
+        drm_metadata_fields = ttk.Frame(drm_metadata_card)
         drm_metadata_fields.pack(fill="x")
         drm_metadata_fields.grid_columnconfigure(0, weight=1, uniform="drm-metadata")
         drm_metadata_fields.grid_columnconfigure(1, weight=1, uniform="drm-metadata")
@@ -2113,7 +2087,7 @@ def build_app() -> None:
             row=0,
         )
 
-        language_frame = tk.Frame(drm_metadata_fields, bg=palette["surfaceContainerLow"])
+        language_frame = ttk.Frame(drm_metadata_fields)
         language_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
         make_label(
             language_frame,
@@ -2132,7 +2106,7 @@ def build_app() -> None:
         drm_language_picker.pack(fill="x", ipady=5)
         style_tx_combobox(drm_language_picker)
 
-        programme_type_frame = tk.Frame(drm_metadata_fields, bg=palette["surfaceContainerLow"])
+        programme_type_frame = ttk.Frame(drm_metadata_fields)
         programme_type_frame.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
         make_label(
             programme_type_frame,
@@ -2173,12 +2147,12 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(14, 8))
 
-        drm_audio_fields = tk.Frame(drm_metadata_card, bg=palette["surfaceContainerLow"])
+        drm_audio_fields = ttk.Frame(drm_metadata_card)
         drm_audio_fields.pack(fill="x")
         drm_audio_fields.grid_columnconfigure(0, weight=1, uniform="drm-audio")
         drm_audio_fields.grid_columnconfigure(1, weight=1, uniform="drm-audio")
 
-        codec_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        codec_frame = ttk.Frame(drm_audio_fields)
         codec_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
         make_label(
             codec_frame,
@@ -2205,7 +2179,7 @@ def build_app() -> None:
             wraplength=400,
         ).pack(anchor="w", pady=(4, 0))
 
-        interleaving_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        interleaving_frame = ttk.Frame(drm_audio_fields)
         interleaving_frame.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
         make_label(
             interleaving_frame,
@@ -2232,7 +2206,7 @@ def build_app() -> None:
             wraplength=400,
         ).pack(anchor="w", pady=(4, 0))
 
-        msc_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        msc_frame = ttk.Frame(drm_audio_fields)
         msc_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
         make_label(
             msc_frame,
@@ -2268,7 +2242,7 @@ def build_app() -> None:
             tx_drm_stereo_var.set(bool(profile["stereo"]))
             tx_drm_interleaving_var.set("Long (2 s)")
 
-        drm_profile_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        drm_profile_frame = ttk.Frame(drm_audio_fields)
         drm_profile_frame.grid(row=2, column=0, sticky="ew", padx=6, pady=6)
         make_label(
             drm_profile_frame,
@@ -2296,7 +2270,7 @@ def build_app() -> None:
             wraplength=400,
         ).pack(anchor="w", pady=(4, 0))
 
-        stereo_frame = tk.Frame(drm_audio_fields, bg=palette["surfaceContainerLow"])
+        stereo_frame = ttk.Frame(drm_audio_fields)
         stereo_frame.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
         drm_stereo_check = ttk.Checkbutton(
             stereo_frame,
@@ -2328,12 +2302,12 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 10))
 
-        signal_fields = tk.Frame(signal_card, bg=palette["surfaceContainerLow"])
+        signal_fields = ttk.Frame(signal_card)
         signal_fields.pack(fill="x")
         signal_fields.grid_columnconfigure(0, weight=3, uniform="signal-fields")
         signal_fields.grid_columnconfigure(1, weight=2, uniform="signal-fields")
 
-        mode_frame = tk.Frame(signal_fields, bg=palette["surfaceContainerLow"])
+        mode_frame = ttk.Frame(signal_fields)
         mode_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
         make_label(
             mode_frame,
@@ -2564,7 +2538,7 @@ def build_app() -> None:
         if tx_mode_var.get().strip().upper() == "DRM":
             root.after_idle(handle_mode_selection)
 
-        power_frame = tk.Frame(signal_fields, bg=palette["surfaceContainerLow"])
+        power_frame = ttk.Frame(signal_fields)
         power_frame.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
         make_label(
             power_frame,
@@ -2639,7 +2613,7 @@ def build_app() -> None:
             takefocus=True,
         )
         fade_enabled.pack(anchor="w", padx=6, pady=(0, 6))
-        fade_fields = tk.Frame(fade_card, bg=palette["surfaceContainerLow"])
+        fade_fields = ttk.Frame(fade_card)
         fade_fields.pack(fill="x")
         fade_fields.grid_columnconfigure(0, weight=1, uniform="fade-fields")
         fade_fields.grid_columnconfigure(1, weight=1, uniform="fade-fields")
@@ -2651,7 +2625,7 @@ def build_app() -> None:
             fade_fields, "Lowest power point (-140 to 50 dBm)",
             tx_fade_min_dbm_var, column=1, row=0,
         )
-        fade_shape_frame = tk.Frame(fade_fields, bg=palette["surfaceContainerLow"])
+        fade_shape_frame = ttk.Frame(fade_fields)
         fade_shape_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=6)
         make_label(
             fade_shape_frame,
@@ -2702,7 +2676,7 @@ def build_app() -> None:
             font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 8))
-        agc_row = tk.Frame(audio_filter_card, bg=palette["surfaceContainerLow"])
+        agc_row = ttk.Frame(audio_filter_card)
         agc_row.pack(fill="x", padx=6, pady=(0, 8))
         agc_toggle = ttk.Checkbutton(
             agc_row,
@@ -2712,7 +2686,7 @@ def build_app() -> None:
             takefocus=True,
         )
         agc_toggle.pack(side="left")
-        audio_filter_grid = tk.Frame(audio_filter_card, bg=palette["surfaceContainerLow"])
+        audio_filter_grid = ttk.Frame(audio_filter_card)
         audio_filter_grid.pack(fill="x")
         for column in range(2):
             audio_filter_grid.grid_columnconfigure(column, weight=1, uniform="audio-filter-fields")
@@ -2726,8 +2700,8 @@ def build_app() -> None:
             formatter,
             row: int,
             column: int,
-        ) -> tk.Frame:
-            wrapper = tk.Frame(audio_filter_grid, bg=palette["surfaceContainerLow"])
+        ) -> ttk.Frame:
+            wrapper = ttk.Frame(audio_filter_grid)
             wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
             make_label(
                 wrapper,
@@ -2802,7 +2776,7 @@ def build_app() -> None:
             5,
             0,
         )
-        nfm_profile_frame = tk.Frame(audio_filter_card, bg=palette["surfaceContainerLow"])
+        nfm_profile_frame = ttk.Frame(audio_filter_card)
         nfm_profile_frame.pack(fill="x", padx=6, pady=6)
         make_label(
             nfm_profile_frame,
@@ -2890,7 +2864,7 @@ def build_app() -> None:
             wraplength=850,
         ).pack(anchor="w", pady=(0, 10))
 
-        built_in_server_frame = ttk.LabelFrame(
+        built_in_server_frame = tttk.LabelFrame(
             icecast_card,
             padding=10,
             text="Built-in Icecast server",
@@ -2941,9 +2915,8 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 6))
 
-        icecast_list_frame = tk.Frame(
+        icecast_list_frame = ttk.Frame(
             icecast_card,
-            bg=palette["surfaceContainerLow"],
         )
         icecast_list_frame.pack(fill="x")
         icecast_listbox = tk.Listbox(
@@ -2953,7 +2926,7 @@ def build_app() -> None:
             activestyle="none",
             bg=palette["surfaceContainerLowest"],
             fg=palette["onSurface"],
-            selectbackground=palette["primary"],
+            selectbackground=palette["primaryContainer"],
             selectforeground=palette["onPrimary"],
             highlightthickness=1,
             highlightbackground=palette["outline"],
@@ -3012,12 +2985,9 @@ def build_app() -> None:
             dialog.configure(background=palette["surfaceContainerLow"])
             dialog.grab_set()
 
-            fields = tk.Frame(
+            fields = ttk.Frame(
                 dialog,
-                bg=palette["surfaceContainerLow"],
-                padx=18,
-                pady=16,
-            )
+            , padding=(18, 16))
             fields.pack(fill="both", expand=True)
             fields.grid_columnconfigure(0, weight=1)
             url_var = tk.StringVar(dialog, str(existing.get("url") or ""))
@@ -3173,7 +3143,7 @@ def build_app() -> None:
                 schedule_live_reconfigure()
                 dialog.destroy()
 
-            actions = tk.Frame(fields, bg=palette["surfaceContainerLow"])
+            actions = ttk.Frame(fields)
             actions.grid(row=12, column=0, sticky="e")
             make_button(
                 actions,
@@ -3229,9 +3199,8 @@ def build_app() -> None:
             refresh_icecast_list()
             schedule_live_reconfigure()
 
-        icecast_actions = tk.Frame(
+        icecast_actions = ttk.Frame(
             icecast_card,
-            bg=palette["surfaceContainerLow"],
         )
         icecast_actions.pack(fill="x", pady=(8, 0))
         make_button(
@@ -3259,9 +3228,8 @@ def build_app() -> None:
             pady=7,
         ).pack(side="left", padx=(4, 0))
 
-        bitrate_frame = tk.Frame(
+        bitrate_frame = ttk.Frame(
             icecast_actions,
-            bg=palette["surfaceContainerLow"],
         )
         bitrate_frame.pack(side="right")
         make_label(
@@ -3298,12 +3266,12 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 10))
 
-        audio_fields = tk.Frame(audio_card, bg=palette["surfaceContainerLow"])
+        audio_fields = ttk.Frame(audio_card)
         audio_fields.pack(fill="x")
         audio_fields.grid_columnconfigure(0, weight=1, uniform="audio-fields")
         audio_fields.grid_columnconfigure(1, weight=1, uniform="audio-fields")
 
-        source_frame = tk.Frame(audio_fields, bg=palette["surfaceContainerLow"])
+        source_frame = ttk.Frame(audio_fields)
         source_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
         make_label(
             source_frame,
@@ -3326,7 +3294,7 @@ def build_app() -> None:
         source_picker.pack(fill="x", ipady=5)
         style_tx_combobox(source_picker)
 
-        device_frame = tk.Frame(audio_fields, bg=palette["surfaceContainerLow"])
+        device_frame = ttk.Frame(audio_fields)
         device_frame.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
         make_label(
             device_frame,
@@ -3345,7 +3313,7 @@ def build_app() -> None:
         device_picker.pack(fill="x", ipady=5)
         style_tx_combobox(device_picker)
 
-        playlist_frame = tk.Frame(audio_fields, bg=palette["surfaceContainerLow"])
+        playlist_frame = ttk.Frame(audio_fields)
         playlist_frame.grid(
             row=1,
             column=0,
@@ -3369,7 +3337,7 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 4))
 
-        playlist_list_frame = tk.Frame(playlist_frame, bg=palette["surfaceContainerLow"])
+        playlist_list_frame = ttk.Frame(playlist_frame)
         playlist_list_frame.pack(fill="x", pady=(0, 7))
         playlist_listbox = tk.Listbox(
             playlist_list_frame,
@@ -3379,7 +3347,7 @@ def build_app() -> None:
             activestyle="none",
             bg=palette["surfaceContainerLowest"],
             fg=palette["onSurface"],
-            selectbackground=palette["primary"],
+            selectbackground=palette["primaryContainer"],
             selectforeground=palette["onPrimary"],
             highlightthickness=2,
             highlightbackground=palette["outlineVariant"],
@@ -3540,7 +3508,7 @@ def build_app() -> None:
                 f"Playlist refreshed: {added} added, {removed} removed."
             )
 
-        playlist_actions = tk.Frame(playlist_frame, bg=palette["surfaceContainerLow"])
+        playlist_actions = ttk.Frame(playlist_frame)
         playlist_actions.pack(fill="x", pady=(0, 6))
         make_button(
             playlist_actions,
@@ -3583,7 +3551,7 @@ def build_app() -> None:
             pady=7,
         ).pack(side="left")
 
-        playlist_options = tk.Frame(playlist_frame, bg=palette["surfaceContainerLow"])
+        playlist_options = ttk.Frame(playlist_frame)
         playlist_options.pack(fill="x", pady=(2, 4))
         for label, variable in (
             ("Shuffle playlist", tx_playlist_shuffle_var),
@@ -3718,7 +3686,7 @@ def build_app() -> None:
             font=("Segoe UI", 15, "bold"),
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 8))
-        cw_fields = tk.Frame(cw_card, bg=palette["surfaceContainerLow"])
+        cw_fields = ttk.Frame(cw_card)
         cw_fields.pack(fill="x")
         cw_fields.grid_columnconfigure(0, weight=3, uniform="cw-fields")
         cw_fields.grid_columnconfigure(1, weight=1, uniform="cw-fields")
@@ -3771,7 +3739,7 @@ def build_app() -> None:
         audio_card.pack_configure(before=station_card)
         icecast_card.pack_configure(before=station_card)
 
-    def show_station_detail(parent: tk.Frame) -> None:
+    def show_station_detail(parent: ttk.Frame) -> None:
         row = next(
             (item for item in station_rows if str(item.get("id", "")) == selected_station_id),
             None,
@@ -3826,13 +3794,13 @@ def build_app() -> None:
 
         profile = make_card(page, padding=16)
         profile.pack(fill="x", pady=(0, 12))
-        upper = tk.Frame(profile, bg=palette["surfaceContainerLow"])
+        upper = ttk.Frame(profile)
         upper.pack(fill="x")
 
         logo = make_image_label(upper, str(row.get("logo_url") or ""), size=176, placeholder="ST", role=f"station profile logo: {row.get('station', 'unknown')}")
         logo.pack(side="left", padx=(0, 16), pady=(0, 12))
 
-        heading = tk.Frame(upper, bg=palette["surfaceContainerLow"])
+        heading = ttk.Frame(upper)
         heading.pack(side="left", fill="both", expand=True)
         make_label(
             heading,
@@ -3864,10 +3832,10 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(7, 0))
 
-        divider = tk.Frame(profile, bg=palette["outlineVariant"], height=1)
+        divider = ttk.Separator(profile, orient="horizontal")
         divider.pack(fill="x", pady=(4, 14))
 
-        owner = tk.Frame(profile, bg=palette["surfaceContainerLow"])
+        owner = ttk.Frame(profile)
         owner.pack(fill="x")
         avatar_url = str(row.get("avatar_url") or "")
         avatar = make_image_label(
@@ -3908,9 +3876,8 @@ def build_app() -> None:
             ).pack(anchor="w", pady=(0, 10))
             layout_height = page_layout.get("height", 420)
             layout_height = max(320, min(1_200, int(layout_height)))
-            layout = tk.Frame(
+            layout = ttk.Frame(
                 layout_card,
-                bg=palette["surfaceContainerLowest"],
                 height=layout_height,
             )
             layout.pack(fill="x")
@@ -3922,7 +3889,7 @@ def build_app() -> None:
                 width = max(5.0, min(100.0, float(block.get("width", 84))))
                 height = max(8.0, min(900.0, float(block.get("height", 72))))
                 if block_type == "separator":
-                    tk.Frame(layout, bg=palette["outlineVariant"], height=2).place(
+                    ttk.Separator(layout, orient="horizontal").place(
                         relx=x / 100, rely=y / 100, relwidth=width / 100, height=2
                     )
                 elif block_type == "image" and block.get("image_url"):
@@ -3994,7 +3961,7 @@ def build_app() -> None:
                 font=("Segoe UI", 15, "bold"),
                 background=palette["surfaceContainerLow"],
             ).pack(anchor="w", pady=(0, 10))
-            gallery = tk.Frame(gallery_card, bg=palette["surfaceContainerLow"])
+            gallery = ttk.Frame(gallery_card)
             gallery.pack(anchor="w")
             for url in gallery_urls[:6]:
                 make_image_label(gallery, url, size=140, placeholder="Image", role=f"station gallery: {row.get('station', 'unknown')}").pack(
@@ -4020,7 +3987,7 @@ def build_app() -> None:
             ).pack(anchor="w")
         else:
             for comment in comments[:30]:
-                comment_row = tk.Frame(comments_card, bg=palette["surfaceContainerLow"])
+                comment_row = ttk.Frame(comments_card)
                 comment_row.pack(fill="x", pady=(0, 12))
                 comment_avatar = make_image_label(
                     comment_row,
@@ -4030,7 +3997,7 @@ def build_app() -> None:
                     role=f"comment avatar: {comment.get('author', 'unknown')}",
                 )
                 comment_avatar.pack(side="left", padx=(0, 10))
-                comment_body = tk.Frame(comment_row, bg=palette["surfaceContainerLow"])
+                comment_body = ttk.Frame(comment_row)
                 comment_body.pack(side="left", fill="x", expand=True)
                 comment_title = str(comment.get("author") or "TXITY user")
                 timestamp = str(comment.get("timestamp") or "")
@@ -4183,7 +4150,7 @@ def build_app() -> None:
             name="multiv-update-install",
         ).start()
 
-    def show_settings(parent: tk.Frame) -> None:
+    def show_settings(parent: ttk.Frame) -> None:
         nonlocal station_logo_upload_button, update_check_button, update_install_button
         page, _canvas = create_scrollable_page(parent)
         make_label(
@@ -4210,7 +4177,7 @@ def build_app() -> None:
             wraplength=820,
         ).pack(anchor="w", pady=(0, 14))
 
-        logo_frame = tk.Frame(profile_card, bg=palette["surfaceContainerLow"])
+        logo_frame = ttk.Frame(profile_card)
         logo_frame.pack(fill="x", pady=(0, 12))
         make_label(
             logo_frame,
@@ -4344,7 +4311,7 @@ def build_app() -> None:
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 5))
-        password_row = tk.Frame(web_card, bg=palette["surfaceContainerLow"])
+        password_row = ttk.Frame(web_card)
         password_row.pack(fill="x")
         password_entry = ttk.Entry(
             password_row,
@@ -4413,7 +4380,7 @@ def build_app() -> None:
             background=palette["surfaceContainerLow"],
             wraplength=820,
         ).pack(anchor="w", pady=(0, 10))
-        update_buttons = tk.Frame(update_card, bg=palette["surfaceContainerLow"])
+        update_buttons = ttk.Frame(update_card)
         update_buttons.pack(anchor="w")
         update_check_button = make_button(
             update_buttons,
@@ -4438,8 +4405,8 @@ def build_app() -> None:
         else:
             update_install_button.configure(state="disabled")
 
-    def show_discord(parent: tk.Frame) -> None:
-        page = tk.Frame(parent, bg=palette["background"])
+    def show_discord(parent: ttk.Frame) -> None:
+        page = ttk.Frame(parent)
         page.pack(fill="both", expand=True)
 
         make_label(
@@ -4468,7 +4435,7 @@ def build_app() -> None:
             wraplength=780,
         ).pack(anchor="w", pady=(10, 18))
 
-        buttons = tk.Frame(card, bg=palette["surfaceContainerLow"])
+        buttons = ttk.Frame(card)
         buttons.pack(anchor="w")
         make_button(
             buttons,
@@ -4517,18 +4484,10 @@ def build_app() -> None:
         station_cards_frame = None
         nav_frame = None
         tx_transmit_button = None
-        shell_frame = tk.Frame(root, bg=palette["background"])
+        shell_frame = ttk.Frame(root)
         shell_frame.pack(fill="both", expand=True)
 
-        topbar = SurfaceFrame(
-            shell_frame,
-            background=palette["surfaceContainerLow"],
-            outside=palette["background"],
-            outline=palette["outlineVariant"],
-            padding=10,
-            padding_x=28,
-            padding_y=8,
-        )
+        topbar = ttk.Frame(shell_frame, padding=(28, 8))
         topbar.configure(height=64)
         topbar.pack(fill="x", padx=18, pady=(12, 10))
         topbar.pack_propagate(False)
@@ -4542,7 +4501,7 @@ def build_app() -> None:
         ).pack(side="left", padx=(2, 12))
 
         if discord_authenticated:
-            navigation = tk.Frame(topbar, bg=palette["surfaceContainerLow"])
+            navigation = ttk.Frame(topbar)
             navigation.pack(side="left", fill="y")
 
             destinations = (
@@ -4556,36 +4515,13 @@ def build_app() -> None:
                     current_page == destination
                     or (destination == "stations" and current_page == "station_detail")
                 )
-                nav_button = FlatButton(
+                nav_button = make_button(
                     navigation,
                     label,
                     lambda target=destination: navigate(target),
-                    background=(
-                        palette["primaryContainer"]
-                        if selected else palette["surfaceContainerLow"]
-                    ),
-                    foreground=(
-                        palette["onPrimaryContainer"]
-                        if selected else palette["onSurfaceVariant"]
-                    ),
-                    hover_background=(
-                        palette["primaryContainer"]
-                        if selected else palette["surfaceContainerHigh"]
-                    ),
-                    hover_foreground=palette["onPrimaryContainer"],
-                    outside=palette["surfaceContainerLow"],
-                    outline=(
-                        palette["primaryContainer"]
-                        if selected else palette["surfaceContainerLow"]
-                    ),
-                    focus_color=palette["primary"],
-                    font=("Segoe UI", 10, "bold" if selected else "normal"),
-                    padding_x=12,
-                    padding_y=7,
-                )
-                nav_button.configure(
-                    style="Accent.TButton" if selected else "TButton",
-                    padding=(12, 7),
+                    kind="primary" if selected else "normal",
+                    padx=12,
+                    pady=7,
                 )
                 nav_button.pack(side="left", padx=2, pady=2)
 
@@ -4615,12 +4551,9 @@ def build_app() -> None:
                 background=palette["surfaceContainerLow"],
             ).pack(side="right", padx=(6, 8))
 
-            content_frame = tk.Frame(
+            content_frame = ttk.Frame(
                 shell_frame,
-                bg=palette["background"],
-                padx=20,
-                pady=10,
-            )
+            , padding=(20, 10))
             content_frame.pack(fill="both", expand=True)
 
             if current_page == "transmit":
@@ -4652,12 +4585,9 @@ def build_app() -> None:
                 padx=12,
                 pady=7,
             ).pack(side="right")
-            content_frame = tk.Frame(
+            content_frame = ttk.Frame(
                 shell_frame,
-                bg=palette["background"],
-                padx=20,
-                pady=16,
-            )
+            , padding=(20, 16))
             content_frame.pack(fill="both", expand=True)
             if current_page == "settings":
                 show_settings(content_frame)
