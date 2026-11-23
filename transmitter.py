@@ -1530,9 +1530,9 @@ class TxityTransmitter:
                     )
 
             if txity_enabled:
-                self.client.transmission_credentials()
-                if not wait_for_control_connection():
-                    return
+                # TXITY authentication and socket setup happen in the TXITY
+                # section of the output loop. Audio capture and Icecast must
+                # remain active while the TXITY provider is unavailable.
                 last_control_generation = getattr(
                     self.client, "control_generation", None
                 )
