@@ -7,7 +7,7 @@ MultiV is a multi-source, multi-stream client for virtual radio simulators. User
 ## Design dials
 
 - **Energy 2:** Use blue for the primary action and keyboard focus. Keep other surfaces quiet so users can scan controls and status values.
-- **Rhythm 2:** Organize each page around its task. The Transmit page groups station identity, signal settings, audio processing, input, CW, and connection state. Stations keeps each station image with its metadata.
+- **Rhythm 2:** Organize each page around its task. The Transmit page puts audio input and independently controlled TXITY and Icecast outputs first, followed by station identity and signal settings. The TXITY menu opens the searchable station directory in a separate window.
 - **Motion 1:** Use native hover, focus, and pressed states. Do not add decorative transitions or looping animation.
 
 ## Desktop and browser interface
@@ -18,8 +18,9 @@ MultiV is a multi-source, multi-stream client for virtual radio simulators. User
 - **Dark theme:** Keep the layout and information hierarchy the same in both themes. Change surface and text colors, not page structure.
 - **Typography:** Use Segoe UI. Use size and weight to establish hierarchy.
 - **Panels:** Use rectangular panels to group related controls or station records. Keep unrelated content on the page surface.
-- **Navigation:** Keep the four signed-in destinations in a horizontal top bar.
-- **Station records:** Display an image with its station metadata. If no approved image URL is available, show the station name.
+- **Navigation:** Keep Transmit, Discord, and Settings in the signed-in top bar. Put TXITY website and station-directory actions in a TXITY dropdown menu.
+- **Station records:** Display an image with its station metadata in the separate station-directory window. If no approved image URL is available, show the station name.
+- **Output controls:** Show TXITY and Icecast as separate collapsible rows. Each row has an independent enable toggle and a hamburger menu for moving it up or down. Preserve the selected order and enabled state.
 - **Transmit page:** Keep Start transmission, Stop transmission, and the current status together in the page header. Place playlist actions beside the track list and its shuffle and loop controls.
 - **Advanced settings:** Keep signal fading and audio-processing controls in the collapsed **Advanced settings** section. Keep station, signal, and audio-source controls visible.
 - **Assets:** Use station images only when TXITY or Discord provides an approved URL. Do not invent station logos or profile images. Settings accepts PNG, JPEG, WebP, and GIF uploads.
