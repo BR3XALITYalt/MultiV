@@ -583,7 +583,7 @@ def build_app() -> None:
         wraplength: int = 0,
         justify: str = "left",
         anchor: str = "w",
-    ) -> tttk.Label:
+    ) -> ttk.Label:
         options: dict[str, Any] = {
             "font": font,
             "justify": justify,
@@ -597,7 +597,7 @@ def build_app() -> None:
             options["text"] = text or ""
         if wraplength:
             options["wraplength"] = wraplength
-        return tttk.Label(parent, **options)
+        return ttk.Label(parent, **options)
 
     def make_button(
         parent: tk.Misc,
@@ -635,8 +635,8 @@ def build_app() -> None:
         parent: tk.Misc,
         *,
         padding: int = 16,
-    ) -> tttk.Frame:
-        return tttk.Frame(parent, padding=padding)
+    ) -> ttk.Frame:
+        return ttk.Frame(parent, padding=padding)
 
     def request_station_image(url: str) -> None:
         if not url:
@@ -676,8 +676,8 @@ def build_app() -> None:
         size: int,
         placeholder: str = "TX",
         role: str = "station image",
-    ) -> tttk.Label:
-        label = tttk.Label(
+    ) -> ttk.Label:
+        label = ttk.Label(
             parent,
             text=placeholder,
             font=("Segoe UI", max(16, size // 5), "bold"),
@@ -2853,7 +2853,7 @@ def build_app() -> None:
             wraplength=850,
         ).pack(anchor="w", pady=(0, 10))
 
-        built_in_server_frame = tttk.LabelFrame(
+        built_in_server_frame = ttk.LabelFrame(
             icecast_card,
             padding=10,
             text="Built-in Icecast server",
@@ -2974,9 +2974,7 @@ def build_app() -> None:
             dialog.configure(background=palette["background"])
             dialog.grab_set()
 
-            fields = ttk.Frame(
-                dialog,
-            , padding=(18, 16))
+            fields = ttk.Frame(dialog, padding=(18, 16))
             fields.pack(fill="both", expand=True)
             fields.grid_columnconfigure(0, weight=1)
             url_var = tk.StringVar(dialog, str(existing.get("url") or ""))
@@ -4532,9 +4530,7 @@ def build_app() -> None:
                 
             ).pack(side="right", padx=(6, 8))
 
-            content_frame = ttk.Frame(
-                shell_frame,
-            , padding=(20, 10))
+            content_frame = ttk.Frame(shell_frame, padding=(20, 10))
             content_frame.pack(fill="both", expand=True)
 
             if current_page == "transmit":
@@ -4566,9 +4562,7 @@ def build_app() -> None:
                 padx=12,
                 pady=7,
             ).pack(side="right")
-            content_frame = ttk.Frame(
-                shell_frame,
-            , padding=(20, 16))
+            content_frame = ttk.Frame(shell_frame, padding=(20, 16))
             content_frame.pack(fill="both", expand=True)
             if current_page == "settings":
                 show_settings(content_frame)
