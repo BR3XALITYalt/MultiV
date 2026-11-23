@@ -3256,6 +3256,8 @@ def build_app() -> None:
                     bitrate_picker.configure(state="readonly")
                 if format_key == "aac_plus" and int(bitrate_var.get() or 128) > 128:
                     bitrate_var.set("128")
+                elif format_key == "ogg_opus" and int(bitrate_var.get() or 128) < 48:
+                    bitrate_var.set("48")
 
             format_var.trace_add("write", update_format_controls)
             update_format_controls()
