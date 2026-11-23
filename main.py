@@ -69,49 +69,6 @@ from update_manager import check_for_update, install_update, is_packaged
 BASE_URL = "https://txity.radiodiscussion.org"
 
 
-def _application_palette(mode: str) -> dict[str, str]:
-    """Return the colors used by the native Tk interface."""
-    if mode == "dark":
-        return {
-            "primary": "#57C8FF",
-            "onPrimary": "#001E2B",
-            "primaryContainer": "#2F60D8",
-            "onPrimaryContainer": "#FFFFFF",
-            "secondaryContainer": "#333333",
-            "onSecondaryContainer": "#F5F5F5",
-            "background": "#1C1C1C",
-            "onSurface": "#FAFAFA",
-            "surface": "#1C1C1C",
-            "onSurfaceVariant": "#C6C6C6",
-            "outline": "#777777",
-            "outlineVariant": "#414141",
-            "surfaceContainerHigh": "#2D2D2D",
-            "surfaceContainerHighest": "#383838",
-            "surfaceContainerLow": "#242424",
-            "surfaceContainerLowest": "#202020",
-        }
-    if mode == "light":
-        return {
-            "primary": "#005FB8",
-            "onPrimary": "#FFFFFF",
-            "primaryContainer": "#DCEAFE",
-            "onPrimaryContainer": "#001D35",
-            "secondaryContainer": "#E8E8E8",
-            "onSecondaryContainer": "#202020",
-            "background": "#FAFAFA",
-            "onSurface": "#1C1C1C",
-            "surface": "#FAFAFA",
-            "onSurfaceVariant": "#505050",
-            "outline": "#8A8A8A",
-            "outlineVariant": "#D0D0D0",
-            "surfaceContainerHigh": "#E8E8E8",
-            "surfaceContainerHighest": "#DEDEDE",
-            "surfaceContainerLow": "#F4F4F4",
-            "surfaceContainerLowest": "#FFFFFF",
-        }
-    raise ValueError("Theme mode must be 'light' or 'dark'.")
-
-
 def tx_settings_file() -> Path:
     """Return the per-user settings file path without storing account credentials."""
     if os.name == "nt":
@@ -153,6 +110,9 @@ def _system_theme_mode() -> str:
 def build_app() -> None:
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
+    from sun_valley_theme import apply_tk_theme, native_widget_classes
+
+    SurfaceFrame, FlatButton = native_widget_classes(tk)
     client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
     transmitter = TxityTransmitter(client, client.events)
@@ -165,7 +125,7 @@ def build_app() -> None:
         root.iconphoto(True, root._multiv_icon)
     except (tk.TclError, OSError):
         pass
-    palette = _application_palette(theme_mode)
+    palette = apply_tk_theme(root, theme_mode)
     root.title("MultiV")
     root.geometry("1180x790")
     root.minsize(900, 650)
@@ -612,34 +572,8 @@ def build_app() -> None:
 
     def apply_current_theme() -> None:
         nonlocal palette
-        palette = _application_palette(theme_mode)
+        palette = apply_tk_theme(root, theme_mode)
         root.configure(background=palette["background"])
-
-    def make_surface_frame(
-        parent: tk.Misc,
-        *,
-        background: str,
-        outside: str | None = None,
-        outline: str | None = None,
-        padding: int = 18,
-        padding_x: int | None = None,
-        padding_y: int | None = None,
-        width: int | None = None,
-    ) -> tk.Frame:
-        frame = tk.Frame(
-            parent,
-            bg=background,
-            bd=0,
-            relief="flat",
-            highlightthickness=1 if outline else 0,
-            highlightbackground=outline or background,
-            highlightcolor=outline or background,
-            padx=padding if padding_x is None else padding_x,
-            pady=padding if padding_y is None else padding_y,
-            width=width if width is not None else 0,
-        )
-        frame._surface_background = background
-        return frame
 
     def make_label(
         parent: tk.Misc,
@@ -670,56 +604,6 @@ def build_app() -> None:
             options["wraplength"] = wraplength
         return tk.Label(parent, **options)
 
-    def make_colored_button(
-        parent: tk.Misc,
-        text: str,
-        command: Any,
-        *,
-        background: str,
-        foreground: str,
-        hover_background: str,
-        hover_foreground: str,
-        outside: str | None = None,
-        outline: str | None = None,
-        focus_color: str | None = None,
-        font: tuple[str, int, str] = ("Segoe UI", 10, "normal"),
-        padding_x: int = 16,
-        padding_y: int = 9,
-        anchor: str = "center",
-    ) -> tk.Button:
-        outside_color = outside or getattr(parent, "_surface_background", parent.cget("bg"))
-        button = tk.Button(
-            parent,
-            text=text,
-            command=command,
-            bg=background,
-            fg=foreground,
-            activebackground=hover_background,
-            activeforeground=hover_foreground,
-            font=font,
-            padx=padding_x,
-            pady=padding_y,
-            anchor=anchor,
-            bd=0,
-            relief="flat",
-            cursor="hand2",
-            takefocus=True,
-            highlightthickness=1,
-            highlightbackground=outline or outside_color,
-            highlightcolor=focus_color or palette["primary"],
-        )
-
-        def show_hover(_event=None) -> None:
-            if button.cget("state") != "disabled":
-                button.configure(bg=hover_background, fg=hover_foreground)
-
-        def hide_hover(_event=None) -> None:
-            button.configure(bg=background, fg=foreground)
-
-        button.bind("<Enter>", show_hover, add="+")
-        button.bind("<Leave>", hide_hover, add="+")
-        return button
-
     def make_button(
         parent: tk.Misc,
         text: str,
@@ -728,42 +612,14 @@ def build_app() -> None:
         kind: str = "primary",
         padx: int = 16,
         pady: int = 9,
-    ) -> tk.Button:
-        outside = getattr(parent, "_surface_background", parent.cget("bg"))
-        if kind == "primary":
-            background = palette["primary"]
-            foreground = palette["onPrimary"]
-            hover_background = palette["primaryContainer"]
-            hover_foreground = palette["onPrimaryContainer"]
-        elif kind == "tonal":
-            background = palette["secondaryContainer"]
-            foreground = palette["onSecondaryContainer"]
-            hover_background = palette["surfaceContainerHighest"]
-            hover_foreground = palette["onSurface"]
-        elif kind == "text":
-            background = outside
-            foreground = palette["primary"]
-            hover_background = palette["surfaceContainerHigh"]
-            hover_foreground = palette["primary"]
-        else:
-            background = palette["surfaceContainerLow"]
-            foreground = palette["onSurface"]
-            hover_background = palette["surfaceContainerHigh"]
-            hover_foreground = palette["onSurface"]
-        return make_colored_button(
+    ) -> ttk.Button:
+        return ttk.Button(
             parent,
-            text,
-            command,
-            background=background,
-            foreground=foreground,
-            hover_background=hover_background,
-            hover_foreground=hover_foreground,
-            outside=outside,
-            outline=background,
-            focus_color=palette["primary"],
-            font=("Segoe UI", 10, "bold" if kind == "primary" else "normal"),
-            padding_x=padx,
-            padding_y=pady,
+            text=text,
+            command=command,
+            style="Accent.TButton" if kind == "primary" else "TButton",
+            padding=(padx, pady),
+            cursor="hand2",
         )
 
     def set_station_logo_upload_button_enabled(enabled: bool) -> None:
@@ -787,7 +643,7 @@ def build_app() -> None:
         padding: int = 16,
     ) -> tk.Frame:
         surface_color = background or palette["surfaceContainerLow"]
-        return make_surface_frame(
+        return SurfaceFrame(
             parent,
             background=surface_color,
             outside=parent.cget("bg"),
@@ -1355,7 +1211,7 @@ def build_app() -> None:
         controls = tk.Frame(page, bg=palette["background"])
         controls.pack(fill="x", pady=(0, 10))
 
-        search_shell = make_surface_frame(
+        search_shell = SurfaceFrame(
             controls,
             background=palette["surfaceContainerLowest"],
             outside=palette["background"],
@@ -4664,7 +4520,7 @@ def build_app() -> None:
         shell_frame = tk.Frame(root, bg=palette["background"])
         shell_frame.pack(fill="both", expand=True)
 
-        topbar = make_surface_frame(
+        topbar = SurfaceFrame(
             shell_frame,
             background=palette["surfaceContainerLow"],
             outside=palette["background"],
@@ -4700,7 +4556,7 @@ def build_app() -> None:
                     current_page == destination
                     or (destination == "stations" and current_page == "station_detail")
                 )
-                nav_button = make_colored_button(
+                nav_button = FlatButton(
                     navigation,
                     label,
                     lambda target=destination: navigate(target),
@@ -4726,6 +4582,10 @@ def build_app() -> None:
                     font=("Segoe UI", 10, "bold" if selected else "normal"),
                     padding_x=12,
                     padding_y=7,
+                )
+                nav_button.configure(
+                    style="Accent.TButton" if selected else "TButton",
+                    padding=(12, 7),
                 )
                 nav_button.pack(side="left", padx=2, pady=2)
 
