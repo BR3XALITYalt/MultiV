@@ -97,3 +97,12 @@ MultiV also includes a browser control panel for station settings and transmissi
 - [Configuration and command line](wiki/Configuration-and-CLI.md)
 - [Provider support](ROADMAP.md)
 
+
+
+## Built-in Icecast-compatible server
+
+Enable **Host a stream from MultiV** in the Icecast section to publish the same MP3 stream from a server hosted by MultiV. Configure its TCP port, mountpoint, optional listener password, and maximum simultaneous listeners. The server starts with the TXITY transmission and shuts down when transmission stops.
+
+The built-in server provides an HTTP MP3 mount for common streaming players. It is an embedded Icecast-compatible listener endpoint, not the full upstream Icecast daemon: it does not provide the full Icecast administration API, source protocol, relay configuration, or statistics document.
+
+The default bind address is all network interfaces. The local URL is `http://127.0.0.1:8000/live.mp3` when using the default port and mountpoint. Other devices on the LAN can use the host computer's LAN IP. Internet listeners may require router port forwarding and firewall access. Use a listener password when the stream should not be openly accessible.
