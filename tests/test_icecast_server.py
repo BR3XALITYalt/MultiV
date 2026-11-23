@@ -53,6 +53,42 @@ class EmbeddedIcecastServerTests(unittest.TestCase):
             server.stop()
         self.assertFalse(server.is_running)
 
+    def test_server_uses_selected_ogg_codec_and_bitrate(self):
+        server = self.make_server(audio_format="ogg_opus", bitrate_kbps=96)
+        server.start()
+        try:
+            with socket.create_connection(("127.0.0.1", server.port), timeout=2) as connection:
+                connection.sendall(
+                    b"GET /station.mp3 HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n"
+                )
+                response = connection.recv(4096)
+            self.assertIn(b"200 OK", response)
+            self.assertIn(b"Content-Type: application/ogg", response)
+            self.assertIn(b"icy-br: 96", response)
+        finally:
+            server.stop()
+
+    def test_lossless_server_omits_bitrate_header(self):
+        server = self.make_server(audio_format="ogg_flac", bitrate_kbps=128)
+        self.assertEqual(server.bitrate_kbps, 0)
+        server.start()
+        try:
+            with socket.create_connection(("127.0.0.1", server.port), timeout=2) as connection:
+                connection.sendall(
+                    b"GET /station.mp3 HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n"
+                )
+                response = connection.recv(4096)
+            self.assertIn(b"Content-Type: application/ogg", response)
+            self.assertNotIn(b"icy-br:", response)
+        finally:
+            server.stop()
+
+    def test_validates_codec_specific_bitrate_limits(self):
+        with self.assertRaisesRegex(ValueError, "AAC"):
+            self.make_server(audio_format="aac_plus", bitrate_kbps=192)
+        with self.assertRaisesRegex(ValueError, "Opus"):
+            self.make_server(audio_format="ogg_opus", bitrate_kbps=32)
+
     def test_listener_queue_drops_oldest_packet_when_slow(self):
         listener = _Listener(max_queue=2)
         listener.publish(b"one")
