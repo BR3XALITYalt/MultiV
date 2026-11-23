@@ -191,7 +191,7 @@ def build_app() -> None:
     tx_mode_var = tk.StringVar(root, saved_mode)
     tx_mode_display_var = tk.StringVar(
         root,
-        "DRM [EXPERIMENTAL]" if saved_mode == "DRM" else saved_mode,
+        "DRM" if saved_mode == "DRM" else saved_mode,
     )
     tx_mode_help_var = tk.StringVar(root, "AM uses a carrier with upper and lower sidebands.")
     tx_drm_service_label_var = tk.StringVar(root, saved_text("drm_service_label", ""))
@@ -1874,7 +1874,7 @@ def build_app() -> None:
                 selected_mode = str(values.get("mode", "AM")).upper()
                 tx_mode_var.set(selected_mode)
                 tx_mode_display_var.set(
-                    "DRM [EXPERIMENTAL]" if selected_mode == "DRM" else selected_mode
+                    "DRM" if selected_mode == "DRM" else selected_mode
                 )
                 tx_power_var.set(str(values.get("station_dbm", "50"))[:16])
                 tx_allow_overlap_var.set(bool(values.get("allow_overlap", False)))
@@ -3080,7 +3080,7 @@ def build_app() -> None:
         mode_picker = ttk.Combobox(
             mode_frame,
             textvariable=tx_mode_display_var,
-            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "RADE", "DRM [EXPERIMENTAL]", "CW"),
+            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "RADE", "DRM", "CW"),
             state="readonly",
             height=8,
         )
@@ -3114,7 +3114,7 @@ def build_app() -> None:
                     "FreeDV RADE V1 - neural digital voice over TXITY's USB or LSB audio transport. "
                     "Uses a 1.5 kHz audio centre and channel. The first start downloads a verified native encoder package."
                 ),
-                "DRM": "DRM [EXPERIMENTAL] - one xHE-AAC or HE-AAC audio service. Choose 4.5 kHz robust, 9 kHz quality, or 9 kHz 64-QAM stereo maximum-quality profiles in DRM settings. Use a microphone or OGG, MP3, or FLAC playlists.",
+                "DRM": "DRM digital radio mode.",
                 "CW": "CW - carrier only. MultiV sends the configured CW message instead of microphone or desktop audio.",
             }
             tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
@@ -3125,7 +3125,7 @@ def build_app() -> None:
             previous = str(drm_setup_state.get("previous_mode") or "AM")
             tx_mode_var.set(previous)
             tx_mode_display_var.set(
-                "DRM [EXPERIMENTAL]" if previous == "DRM" else previous
+                "DRM" if previous == "DRM" else previous
             )
             update_mode_help()
 
@@ -3159,7 +3159,7 @@ def build_app() -> None:
             previous_mode = str(drm_setup_state.get("previous_mode") or "AM")
             tx_mode_var.set(previous_mode)
             tx_mode_display_var.set(
-                "DRM [EXPERIMENTAL]" if previous_mode == "DRM" else previous_mode
+                "DRM" if previous_mode == "DRM" else previous_mode
             )
             tx_mode_help_var.set("Setting up DRM30. Downloading and building its encoder...")
             tx_status_var.set("Preparing DRM dependencies...")
@@ -3201,7 +3201,7 @@ def build_app() -> None:
                     set_drm_progress_visible(False)
                     drm_setup_state["previous_mode"] = "DRM"
                     tx_mode_var.set("DRM")
-                    tx_mode_display_var.set("DRM [EXPERIMENTAL]")
+                    tx_mode_display_var.set("DRM")
                     tx_status_var.set("DRM encoder is ready.")
                     update_mode_help()
                     set_mode_picker_enabled(True)
@@ -3223,7 +3223,7 @@ def build_app() -> None:
 
         def handle_mode_selection(_event=None) -> None:
             selected_label = tx_mode_display_var.get().strip().upper()
-            selected = "DRM" if selected_label == "DRM [EXPERIMENTAL]" else selected_label
+            selected = selected_label
             tx_mode_var.set(selected)
             if selected != "DRM":
                 if not drm_setup_state["running"]:
@@ -4005,11 +4005,9 @@ def build_app() -> None:
 
         make_label(
             audio_card,
-            "Choose a microphone, desktop output, or playlist. DRM mode supports microphone and playlist input. "
-            "CW mode uses its configured message instead of an audio source.",
+            "Choose a microphone, desktop output, or playlist. CW mode uses its configured message instead of an audio source.",
             font=("Segoe UI", 9, "normal"),
             color=palette["mutedForeground"],
-            
             wraplength=850,
         ).pack(anchor="w", padx=6, pady=(7, 0))
 
