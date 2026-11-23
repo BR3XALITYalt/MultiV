@@ -2953,6 +2953,322 @@ def build_app() -> None:
 
         audio_card = make_card(page, padding=16)
         audio_card.pack(fill="x", pady=(0, 12))
+        icecast_card = make_card(page, padding=16)
+        icecast_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            icecast_card,
+            "Icecast outputs",
+            font=("Segoe UI", 15, "bold"),
+            background=palette["surfaceContainerLow"],
+        ).pack(anchor="w", pady=(0, 4))
+        make_label(
+            icecast_card,
+            "Send the selected audio source to one or more Icecast servers alongside the TXITY transmission. Outputs use mono MP3 at 48 kHz.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(0, 10))
+
+        icecast_list_frame = tk.Frame(
+            icecast_card,
+            bg=palette["surfaceContainerLow"],
+        )
+        icecast_list_frame.pack(fill="x")
+        icecast_listbox = tk.Listbox(
+            icecast_list_frame,
+            height=4,
+            exportselection=False,
+            activestyle="none",
+            bg=palette["surfaceContainerLowest"],
+            fg=palette["onSurface"],
+            selectbackground=palette["primary"],
+            selectforeground=palette["onPrimary"],
+            highlightthickness=1,
+            highlightbackground=palette["outline"],
+            highlightcolor=palette["primary"],
+            relief="flat",
+            borderwidth=1,
+            font=("Segoe UI", 9),
+            takefocus=True,
+        )
+        icecast_listbox.pack(fill="x", expand=True)
+
+        def refresh_icecast_list() -> None:
+            try:
+                icecast_listbox.delete(0, tk.END)
+                for destination in icecast_destinations:
+                    url = str(destination.get("url") or "").strip()
+                    try:
+                        name = normalize_icecast_destination(destination)["name"]
+                    except ValueError:
+                        name = url or "Incomplete destination"
+                    enabled = bool(destination.get("enabled", True))
+                    state = tx_icecast_states.get(name, "Not connected")
+                    icecast_listbox.insert(
+                        tk.END,
+                        f'{"Enabled" if enabled else "Disabled"}  |  {name}  |  {state}',
+                    )
+                if not icecast_destinations:
+                    icecast_listbox.insert(tk.END, "No destinations configured")
+            except tk.TclError:
+                return
+            enabled_count = sum(
+                1 for item in icecast_destinations
+                if bool(item.get("enabled", True))
+            )
+            if enabled_count:
+                tx_icecast_status_var.set(
+                    f"{enabled_count} Icecast destination(s) enabled. They connect when transmission starts."
+                )
+            else:
+                tx_icecast_status_var.set("No Icecast destinations enabled.")
+
+        def edit_icecast_destination(index: int | None = None) -> None:
+            existing = (
+                dict(icecast_destinations[index])
+                if index is not None and 0 <= index < len(icecast_destinations)
+                else {}
+            )
+            dialog = tk.Toplevel(root)
+            dialog.title("Edit Icecast destination" if existing else "Add Icecast destination")
+            dialog.transient(root)
+            dialog.resizable(False, False)
+            dialog.configure(background=palette["surfaceContainerLow"])
+            dialog.grab_set()
+
+            fields = tk.Frame(
+                dialog,
+                bg=palette["surfaceContainerLow"],
+                padx=18,
+                pady=16,
+            )
+            fields.pack(fill="both", expand=True)
+            fields.grid_columnconfigure(0, weight=1)
+            url_var = tk.StringVar(dialog, str(existing.get("url") or ""))
+            username_var = tk.StringVar(dialog, str(existing.get("username") or "source"))
+            password_var = tk.StringVar(dialog, str(existing.get("password") or ""))
+            enabled_var = tk.BooleanVar(dialog, bool(existing.get("enabled", True)))
+
+            def add_dialog_field(label_text: str, variable: tk.StringVar, row: int, *, secret: bool = False) -> None:
+                make_label(
+                    fields,
+                    label_text,
+                    font=("Segoe UI", 9, "bold"),
+                    color=palette["onSurfaceVariant"],
+                    background=palette["surfaceContainerLow"],
+                ).grid(row=row * 2, column=0, sticky="w", pady=(8 if row else 0, 4))
+                entry = tk.Entry(
+                    fields,
+                    textvariable=variable,
+                    show="*" if secret else "",
+                    font=("Segoe UI", 10),
+                    bg=palette["surfaceContainerLowest"],
+                    fg=palette["onSurface"],
+                    insertbackground=palette["onSurface"],
+                    relief="flat",
+                    borderwidth=1,
+                    highlightthickness=1,
+                    highlightbackground=palette["outline"],
+                    highlightcolor=palette["primary"],
+                    width=54,
+                )
+                entry.grid(row=row * 2 + 1, column=0, sticky="ew", ipady=6)
+                return entry
+
+            add_dialog_field("Server URL including mountpoint", url_var, 0)
+            add_dialog_field("Source username", username_var, 1)
+            password_entry = add_dialog_field("Source password", password_var, 2, secret=True)
+            tk.Checkbutton(
+                fields,
+                text="Enable this destination",
+                variable=enabled_var,
+                bg=palette["surfaceContainerLow"],
+                fg=palette["onSurface"],
+                activebackground=palette["surfaceContainerLow"],
+                activeforeground=palette["onSurface"],
+                selectcolor=palette["surfaceContainerLowest"],
+                font=("Segoe UI", 9),
+            ).grid(row=6, column=0, sticky="w", pady=(12, 4))
+
+            make_label(
+                fields,
+                "Use http:// or https:// and include a mountpoint, such as /live.mp3. Credentials are sent using HTTP Basic authentication.",
+                font=("Segoe UI", 9, "normal"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+                wraplength=430,
+            ).grid(row=7, column=0, sticky="w", pady=(4, 12))
+
+            def save_destination() -> None:
+                candidate = {
+                    "url": url_var.get().strip(),
+                    "username": username_var.get().strip() or "source",
+                    "password": password_var.get(),
+                    "enabled": bool(enabled_var.get()),
+                }
+                if candidate["enabled"]:
+                    try:
+                        normalized = normalize_icecast_destination(candidate)
+                    except ValueError as exc:
+                        messagebox.showerror("Invalid Icecast destination", str(exc), parent=dialog)
+                        return
+                    duplicate = next(
+                        (
+                            position
+                            for position, item in enumerate(icecast_destinations)
+                            if position != index
+                            and str(item.get("url") or "").strip().casefold()
+                            == candidate["url"].casefold()
+                        ),
+                        None,
+                    )
+                    if duplicate is not None:
+                        messagebox.showerror(
+                            "Duplicate Icecast destination",
+                            "That server URL is already configured.",
+                            parent=dialog,
+                        )
+                        return
+                elif candidate["url"]:
+                    try:
+                        normalize_icecast_destination(candidate)
+                    except ValueError:
+                        pass
+                if index is None:
+                    if len(icecast_destinations) >= 8:
+                        messagebox.showerror(
+                            "Destination limit",
+                            "MultiV supports up to eight Icecast destinations.",
+                            parent=dialog,
+                        )
+                        return
+                    icecast_destinations.append(candidate)
+                else:
+                    icecast_destinations[index] = candidate
+                schedule_tx_settings_save()
+                refresh_icecast_list()
+                schedule_live_reconfigure()
+                dialog.destroy()
+
+            actions = tk.Frame(fields, bg=palette["surfaceContainerLow"])
+            actions.grid(row=8, column=0, sticky="e")
+            make_button(
+                actions,
+                "Cancel",
+                dialog.destroy,
+                kind="text",
+                padx=12,
+                pady=7,
+            ).pack(side="right", padx=(8, 0))
+            make_button(
+                actions,
+                "Save destination",
+                save_destination,
+                kind="primary",
+                padx=14,
+                pady=7,
+            ).pack(side="right")
+            dialog.bind("<Return>", lambda _event: save_destination())
+            dialog.bind("<Escape>", lambda _event: dialog.destroy())
+            dialog.update_idletasks()
+            dialog.geometry(
+                f"+{root.winfo_rootx() + 80}+{root.winfo_rooty() + 80}"
+            )
+            password_entry.focus_set()
+
+        def selected_icecast_index() -> int | None:
+            selection = icecast_listbox.curselection()
+            if not selection or selection[0] >= len(icecast_destinations):
+                return None
+            return int(selection[0])
+
+        def add_icecast_destination() -> None:
+            if len(icecast_destinations) >= 8:
+                messagebox.showinfo(
+                    "Icecast destination limit",
+                    "MultiV supports up to eight Icecast destinations.",
+                    parent=root,
+                )
+                return
+            edit_icecast_destination()
+
+        def edit_selected_icecast_destination() -> None:
+            index = selected_icecast_index()
+            if index is not None:
+                edit_icecast_destination(index)
+
+        def remove_selected_icecast_destination() -> None:
+            index = selected_icecast_index()
+            if index is None:
+                return
+            del icecast_destinations[index]
+            schedule_tx_settings_save()
+            refresh_icecast_list()
+            schedule_live_reconfigure()
+
+        icecast_actions = tk.Frame(
+            icecast_card,
+            bg=palette["surfaceContainerLow"],
+        )
+        icecast_actions.pack(fill="x", pady=(8, 0))
+        make_button(
+            icecast_actions,
+            "Add server",
+            add_icecast_destination,
+            kind="tonal",
+            padx=12,
+            pady=7,
+        ).pack(side="left")
+        make_button(
+            icecast_actions,
+            "Edit",
+            edit_selected_icecast_destination,
+            kind="text",
+            padx=10,
+            pady=7,
+        ).pack(side="left", padx=(4, 0))
+        make_button(
+            icecast_actions,
+            "Remove",
+            remove_selected_icecast_destination,
+            kind="text",
+            padx=10,
+            pady=7,
+        ).pack(side="left", padx=(4, 0))
+
+        bitrate_frame = tk.Frame(
+            icecast_actions,
+            bg=palette["surfaceContainerLow"],
+        )
+        bitrate_frame.pack(side="right")
+        make_label(
+            bitrate_frame,
+            "MP3 bitrate",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+        ).pack(side="left", padx=(0, 8))
+        icecast_bitrate_picker = ttk.Combobox(
+            bitrate_frame,
+            textvariable=tx_icecast_bitrate_var,
+            values=tuple(str(value) for value in ICECAST_BITRATES),
+            state="readonly",
+            width=7,
+            height=7,
+        )
+        icecast_bitrate_picker.pack(side="left")
+        style_tx_combobox(icecast_bitrate_picker)
+        make_label(
+            icecast_card,
+            variable=tx_icecast_status_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["onSurfaceVariant"],
+            background=palette["surfaceContainerLow"],
+            wraplength=850,
+        ).pack(anchor="w", pady=(8, 0))
+        refresh_icecast_list()
+
         make_label(
             audio_card,
             "Audio source",
@@ -4643,6 +4959,18 @@ def build_app() -> None:
                         flush=True,
                     )
                 update_transmit_button()
+
+            elif kind == "tx_icecast_state":
+                destination_name = str(event.get("name") or "Icecast")
+                destination_state = str(event.get("state") or "Unknown")
+                destination_text = safe_error_text(
+                    str(event.get("text") or "Icecast output status changed."),
+                    400,
+                )
+                if destination_name != "Icecast":
+                    tx_icecast_states[destination_name] = destination_state
+                    refresh_icecast_list()
+                tx_icecast_status_var.set(destination_text)
 
             elif kind == "tx_audio_warning":
                 details = safe_error_text(str(event.get("text") or ""), 300)
