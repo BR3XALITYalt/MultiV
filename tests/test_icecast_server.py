@@ -59,7 +59,7 @@ class EmbeddedIcecastServerTests(unittest.TestCase):
         try:
             with socket.create_connection(("127.0.0.1", server.port), timeout=2) as connection:
                 connection.sendall(
-                    b"GET /station.mp3 HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n"
+                    b"GET /station.mp3 HTTP/1.0\r\nHost: localhost\r\n\r\n"
                 )
                 response = connection.recv(4096)
             self.assertIn(b"200 OK", response)
@@ -75,7 +75,7 @@ class EmbeddedIcecastServerTests(unittest.TestCase):
         try:
             with socket.create_connection(("127.0.0.1", server.port), timeout=2) as connection:
                 connection.sendall(
-                    b"GET /station.mp3 HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n"
+                    b"GET /station.mp3 HTTP/1.0\r\nHost: localhost\r\n\r\n"
                 )
                 response = connection.recv(4096)
             self.assertIn(b"Content-Type: application/ogg", response)
