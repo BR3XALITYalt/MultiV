@@ -884,7 +884,7 @@ class TxityTransmitter:
         drm_mode = str(config.get("_txitpyMode") or "").upper() == "DRM"
         rade_mode = str(config.get("_txitpyMode") or "").upper() == "RADE"
         if drm_mode and selected_source == "loopback":
-            raise ValueError("DRM mode supports microphone and playlist inputs. It does not support desktop audio loopback.")
+            raise ValueError("Desktop audio loopback is unavailable with DRM. Select a microphone or playlist.")
         selected_playlist = collect_audio_files(playlist_files or [])
         if selected_source == "playlist" and not selected_playlist:
             raise ValueError("Add at least one supported audio file to the playlist.")
@@ -1535,7 +1535,7 @@ class TxityTransmitter:
                 })
                 if audio_source == "loopback":
                     raise RuntimeError(
-                        "DRM mode supports microphone and playlist inputs. It does not support desktop audio loopback."
+                        "Desktop audio loopback is unavailable with DRM. Select a microphone or playlist."
                     )
                 encoder_path = ensure_drm_encoder()
                 drm_temp_dir = tempfile.TemporaryDirectory(prefix="txitpy-drm-")
