@@ -510,7 +510,7 @@ class IcecastBroadcaster:
                     except queue.Full:
                         pass
 
-    def stop(self, wait: float = 3.0) -> None:
+    def stop(self, wait: float = 1.0) -> None:
         if self._stopped.is_set():
             return
         self._closing.set()
