@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from app_assets import asset_path
+from app_paths import app_data_path
 from audio_playlist import (
     build_playlist_snapshot,
     normalize_audio_sources,
@@ -558,31 +559,16 @@ def build_app() -> None:
     shell_frame: ttk.Frame | None = None
     content_frame: ttk.Frame | None = None
     nav_frame: ttk.Frame | None = None
+    theme_button: Any = None
+    page_frames: dict[str, ttk.Frame] = {}
+    page_canvases: dict[str, tk.Canvas | None] = {}
+    shell_built = False
     active_scroll_canvas: tk.Canvas | None = None
     SCROLL_PIXELS_PER_NOTCH = 96
     SCROLL_UNIT_PIXELS = 16
-    pending_scroll_pixels = 0.0
-    scroll_flush_scheduled = False
-
-    def flush_pending_scroll() -> None:
-        nonlocal pending_scroll_pixels, scroll_flush_scheduled
-        scroll_flush_scheduled = False
-        canvas = active_scroll_canvas
-        if canvas is None or abs(pending_scroll_pixels) < SCROLL_UNIT_PIXELS / 2:
-            return
-        try:
-            if not canvas.winfo_exists() or not canvas.bbox("all"):
-                pending_scroll_pixels = 0.0
-                return
-            units = int(round(pending_scroll_pixels / SCROLL_UNIT_PIXELS))
-            if units:
-                pending_scroll_pixels -= units * SCROLL_UNIT_PIXELS
-                canvas.yview_scroll(units, "units")
-        except tk.TclError:
-            pending_scroll_pixels = 0.0
+    scroll_canvases: list[tk.Canvas] = []
 
     def scroll_active_canvas(event, direction: int | None = None):
-        nonlocal pending_scroll_pixels, scroll_flush_scheduled
         canvas = active_scroll_canvas
         if canvas is None:
             return
@@ -609,10 +595,12 @@ def build_app() -> None:
                 return
             scroll_delta = -(float(delta) / 120.0) * SCROLL_PIXELS_PER_NOTCH
 
-        pending_scroll_pixels += scroll_delta
-        if not scroll_flush_scheduled:
-            scroll_flush_scheduled = True
-            root.after_idle(flush_pending_scroll)
+        units = int(round(scroll_delta / SCROLL_UNIT_PIXELS))
+        if units:
+            try:
+                canvas.yview_scroll(units, "units")
+            except tk.TclError:
+                return
         return "break"
 
     root.bind_all("<MouseWheel>", scroll_active_canvas, add="+")
@@ -966,7 +954,14 @@ def build_app() -> None:
         nonlocal theme_mode
         theme_mode = "dark" if theme_mode == "light" else "light"
         apply_current_theme()
-        build_shell()
+        for canvas in scroll_canvases:
+            try:
+                if canvas.winfo_exists():
+                    canvas.configure(background=palette["background"])
+            except tk.TclError:
+                pass
+        if theme_button is not None:
+            theme_button.configure(text="Light mode" if theme_mode == "dark" else "Dark mode")
 
     def navigate(page: str) -> None:
         nonlocal current_page
@@ -1218,6 +1213,7 @@ def build_app() -> None:
         page.bind("<Configure>", update_region)
         canvas.bind("<Configure>", update_region)
         canvas.pack(fill="both", expand=True)
+        scroll_canvases.append(canvas)
         active_scroll_canvas = canvas
         return page, canvas
 
@@ -4782,126 +4778,77 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(18, 0))
 
     def build_shell() -> None:
-        nonlocal shell_frame, content_frame, nav_frame, station_cards_frame, tx_transmit_button
+        nonlocal shell_frame, content_frame, nav_frame, station_cards_frame
+        nonlocal tx_transmit_button, active_scroll_canvas, theme_button, shell_built
 
-        nonlocal active_scroll_canvas
-        active_scroll_canvas = None
-        for child in root.winfo_children():
-            child.destroy()
+        if not shell_built:
+            shell_frame = ttk.Frame(root)
+            shell_frame.pack(fill="both", expand=True)
+            topbar = ttk.Frame(shell_frame, padding=(28, 8))
+            topbar.configure(height=64)
+            topbar.pack(fill="x", padx=18, pady=(12, 10))
+            topbar.pack_propagate(False)
+            make_label(topbar, "MultiV", font=("Segoe UI", 17, "bold"), color=palette["accent"]).pack(side="left", padx=(2, 12))
 
-        station_cards_frame = None
-        nav_frame = None
-        tx_transmit_button = None
-        shell_frame = ttk.Frame(root)
-        shell_frame.pack(fill="both", expand=True)
-
-        topbar = ttk.Frame(shell_frame, padding=(28, 8))
-        topbar.configure(height=64)
-        topbar.pack(fill="x", padx=18, pady=(12, 10))
-        topbar.pack_propagate(False)
-
-        make_label(
-            topbar,
-            "MultiV",
-            font=("Segoe UI", 17, "bold"),
-            color=palette["accent"],
-            
-        ).pack(side="left", padx=(2, 12))
-
-        if discord_authenticated:
-            navigation = ttk.Frame(topbar)
-            navigation.pack(side="left", fill="y")
-
-            destinations = (
-                ("Transmit", "transmit"),
-                ("Discord", "discord"),
-                ("Settings", "settings"),
-            )
-            for label, destination in destinations:
-                selected = current_page == destination
-                nav_button = make_button(
-                    navigation,
-                    label,
-                    lambda target=destination: navigate(target),
-                    kind="primary" if selected else "normal",
-                    padx=12,
-                    pady=7,
-                )
-                nav_button.pack(side="left", padx=2, pady=2)
+            nav_frame = ttk.Frame(topbar)
+            nav_frame.pack(side="left", fill="y")
+            nav_buttons: dict[str, Any] = {}
+            for label, destination in (("Transmit", "transmit"), ("Accounts", "discord"), ("Settings", "settings")):
+                button = make_button(nav_frame, label, lambda target=destination: navigate(target), kind="normal", padx=12, pady=7)
+                button.pack(side="left", padx=2, pady=2)
+                nav_buttons[destination] = button
 
             txity_menu = ttk.Menubutton(topbar, text="TXITY ▾")
             txity_menu.pack(side="left", padx=(8, 0))
             txity_menu_items = tk.Menu(
-                txity_menu,
-                tearoff=False,
-                background=palette["background"],
-                foreground=palette["foreground"],
+                txity_menu, tearoff=False,
+                background=palette["background"], foreground=palette["foreground"],
                 activebackground=palette["selectionBackground"],
                 activeforeground=palette["selectionForeground"],
             )
-            txity_menu_items.add_command(
-                label="Open TXITY website",
-                command=lambda: webbrowser.open(BASE_URL),
-            )
-            txity_menu_items.add_command(
-                label="Station directory",
-                command=open_station_directory,
-            )
+            txity_menu_items.add_command(label="Open TXITY website", command=lambda: webbrowser.open(BASE_URL))
+            txity_menu_items.add_command(label="Station directory", command=open_station_directory)
             txity_menu.configure(menu=txity_menu_items)
 
-            make_button(
-                topbar,
-                "Light mode" if theme_mode == "dark" else "Dark mode",
-                toggle_theme,
-                kind="tonal",
-                padx=12,
-                pady=7,
-            ).pack(side="right", padx=(8, 2))
-
-            make_label(
-                topbar,
-                variable=connection_var,
-                font=("Segoe UI", 8, "normal"),
-                color=palette["mutedForeground"],
-                
-            ).pack(side="right", padx=(6, 8))
+            theme_button = make_button(
+                topbar, "Light mode" if theme_mode == "dark" else "Dark mode",
+                toggle_theme, kind="tonal", padx=12, pady=7,
+            )
+            theme_button.pack(side="right", padx=(8, 2))
+            make_label(topbar, variable=connection_var, font=("Segoe UI", 8, "normal"), color=palette["mutedForeground"]).pack(side="right", padx=(6, 8))
 
             content_frame = ttk.Frame(shell_frame, padding=(20, 10))
             content_frame.pack(fill="both", expand=True)
+            for page_name in ("gate", "transmit", "discord", "settings", "station_detail"):
+                frame = ttk.Frame(content_frame)
+                page_frames[page_name] = frame
 
-            if current_page == "transmit":
-                show_transmit(content_frame)
-            elif current_page == "settings":
-                show_settings(content_frame)
-            elif current_page == "station_detail":
-                show_station_detail(content_frame)
-            elif current_page == "discord":
-                show_discord(content_frame)
-            else:
-                show_transmit(content_frame)
-        else:
-            make_button(
-                topbar,
-                "Settings",
-                lambda: navigate("settings"),
-                kind="text",
-                padx=10,
-                pady=8,
-            ).pack(side="left", padx=(8, 0))
-            make_button(
-                topbar,
-                "Light mode" if theme_mode == "dark" else "Dark mode",
-                toggle_theme,
-                kind="tonal",
-                padx=12,
-                pady=7,
-            ).pack(side="right")
-            content_frame = ttk.Frame(shell_frame, padding=(20, 16))
-            content_frame.pack(fill="both", expand=True)
-            if current_page == "settings":
-                show_settings(content_frame)
-            else:
-                show_gate(content_frame)
+            # Construct every main page once. Navigation only changes which
+            # already-built frame is visible, avoiding widget churn while scrolling.
+            show_gate(page_frames["gate"])
+            page_canvases["gate"] = active_scroll_canvas
+            show_transmit(page_frames["transmit"])
+            page_canvases["transmit"] = active_scroll_canvas
+            show_discord(page_frames["discord"])
+            page_canvases["discord"] = active_scroll_canvas
+            show_settings(page_frames["settings"])
+            page_canvases["settings"] = active_scroll_canvas
+            show_station_detail(page_frames["station_detail"])
+            page_canvases["station_detail"] = active_scroll_canvas
+            shell_built = True
+
+        requested = current_page
+        if not discord_authenticated and requested not in {"settings", "gate"}:
+            requested = "gate"
+        if requested not in page_frames:
+            requested = "transmit" if discord_authenticated else "gate"
+        for name, frame in page_frames.items():
+            frame.pack_forget()
+            if name == requested:
+                frame.pack(fill="both", expand=True)
+        active_scroll_canvas = page_canvases.get(requested)
+        if theme_button is not None:
+            theme_button.configure(text="Light mode" if theme_mode == "dark" else "Dark mode")
 
     def apply_status(data: dict[str, Any]) -> None:
         nonlocal server_band_min_hz, server_band_max_hz
