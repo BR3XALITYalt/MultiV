@@ -2058,905 +2058,6 @@ def build_app() -> None:
             widget.bind("<Button-4>", lambda event: scroll_active_canvas(event, -1))
             widget.bind("<Button-5>", lambda event: scroll_active_canvas(event, 1))
 
-        station_card = make_card(page, padding=16)
-        station_card.pack(fill="x", pady=(0, 12))
-        make_label(
-            station_card,
-            "Station",
-            font=("Segoe UI", 15, "bold"),
-            
-        ).pack(anchor="w", pady=(0, 10))
-
-        station_fields = ttk.Frame(station_card)
-        station_fields.pack(fill="x")
-        station_fields.grid_columnconfigure(0, weight=1, uniform="station-fields")
-        station_fields.grid_columnconfigure(1, weight=1, uniform="station-fields")
-        add_tx_entry(station_fields, "Station name (required)", tx_station_name_var, column=0, row=0)
-        add_tx_entry(station_fields, "Short description", tx_description_var, column=1, row=0)
-
-        frequency_fields_frame = ttk.Frame(
-            station_fields,
-        )
-        frequency_fields_frame.grid(
-            row=1,
-            column=0,
-            columnspan=2,
-            sticky="ew",
-            padx=6,
-            pady=6,
-        )
-        frequency_fields_frame.grid_columnconfigure(0, weight=1)
-
-        def remove_frequency_fallback(variable: tk.StringVar) -> None:
-            if variable in tx_frequency_fallback_vars:
-                tx_frequency_fallback_vars.remove(variable)
-                render_frequency_fields()
-                schedule_tx_settings_save()
-                update_frequency_check()
-                schedule_live_reconfigure()
-
-        def add_frequency_fallback() -> None:
-            if len(tx_frequency_fallback_vars) >= 7:
-                tx_status_var.set("You can add up to seven alternate frequencies.")
-                return
-            variable = tk.StringVar(root, "")
-            variable.trace_add("write", schedule_tx_settings_save)
-            variable.trace_add("write", lambda *_args: update_frequency_check())
-            variable.trace_add("write", schedule_live_reconfigure)
-            tx_frequency_fallback_vars.append(variable)
-            render_frequency_fields()
-            schedule_tx_settings_save()
-            update_frequency_check()
-
-        def render_frequency_fields() -> None:
-            for child in frequency_fields_frame.winfo_children():
-                child.destroy()
-
-            frequency_rows = [
-                ("Transmit frequency", tx_frequency_var, None),
-                *[
-                    (f"Fallback frequency {index}", variable, variable)
-                    for index, variable in enumerate(tx_frequency_fallback_vars, start=1)
-                ],
-            ]
-            for index, (label_text, variable, removable) in enumerate(frequency_rows):
-                wrapper = ttk.Frame(
-                    frequency_fields_frame,
-                )
-                wrapper.pack(fill="x", pady=(0, 8 if index < len(frequency_rows) - 1 else 0))
-                make_label(
-                    wrapper,
-                    label_text,
-                    font=("Segoe UI", 9, "bold"),
-                    color=palette["mutedForeground"],
-                    
-                ).pack(anchor="w", pady=(0, 4))
-
-                input_row = ttk.Frame(wrapper)
-                input_row.pack(fill="x")
-                entry = ttk.Entry(
-                    input_row,
-                    textvariable=variable,
-                    font=("Segoe UI", 10),
-                )
-                entry.pack(side="left", fill="x", expand=True, ipady=7)
-
-                if removable is None:
-                    make_button(
-                        input_row,
-                        "+",
-                        add_frequency_fallback,
-                        kind="tonal",
-                        padx=13,
-                        pady=6,
-                    ).pack(side="left", padx=(8, 0))
-                else:
-                    make_button(
-                        input_row,
-                        "−",
-                        lambda target=removable: remove_frequency_fallback(target),
-                        kind="text",
-                        padx=12,
-                        pady=6,
-                    ).pack(side="left", padx=(8, 0))
-
-        render_frequency_fields()
-        make_label(
-            station_card,
-            variable=tx_frequency_check_var,
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
-            wraplength=860,
-        ).pack(anchor="w", padx=6, pady=(8, 0))
-        update_frequency_check()
-
-        signal_card = make_card(page, padding=16)
-        signal_card.pack(fill="x", pady=(0, 12))
-
-        advanced_container = ttk.Frame(page)
-        advanced_expanded = False
-        drm_metadata_card = make_card(advanced_container, padding=16)
-        make_label(
-            drm_metadata_card,
-            "DRM service metadata",
-            font=("Segoe UI", 15, "bold"),
-            
-        ).pack(anchor="w", pady=(0, 4))
-        make_label(
-            drm_metadata_card,
-            "These values are broadcast in the DRM service information. A blank service label uses the station name.",
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
-            wraplength=860,
-        ).pack(anchor="w", pady=(0, 10))
-
-        drm_metadata_fields = ttk.Frame(drm_metadata_card)
-        drm_metadata_fields.pack(fill="x")
-        drm_metadata_fields.grid_columnconfigure(0, weight=1, uniform="drm-metadata")
-        drm_metadata_fields.grid_columnconfigure(1, weight=1, uniform="drm-metadata")
-        add_tx_entry(
-            drm_metadata_fields,
-            "Service label (optional, max 16 characters)",
-            tx_drm_service_label_var,
-            column=0,
-            row=0,
-        )
-        add_tx_entry(
-            drm_metadata_fields,
-            "Service ID (hexadecimal, 24-bit)",
-            tx_drm_service_id_var,
-            column=1,
-            row=0,
-        )
-
-        language_frame = ttk.Frame(drm_metadata_fields)
-        language_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
-        make_label(
-            language_frame,
-            "Language",
-            font=("Segoe UI", 9, "bold"),
-            color=palette["mutedForeground"],
-            
-        ).pack(anchor="w", pady=(0, 4))
-        drm_language_picker = ttk.Combobox(
-            language_frame,
-            textvariable=tx_drm_language_var,
-            values=DRM_LANGUAGES,
-            state="readonly",
-            height=10,
-        )
-        drm_language_picker.pack(fill="x", ipady=5)
-        style_tx_combobox(drm_language_picker)
-
-        programme_type_frame = ttk.Frame(drm_metadata_fields)
-        programme_type_frame.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
-        make_label(
-            programme_type_frame,
-            "Programme type",
-            font=("Segoe UI", 9, "bold"),
-            color=palette["mutedForeground"],
-            
-        ).pack(anchor="w", pady=(0, 4))
-        drm_programme_type_picker = ttk.Combobox(
-            programme_type_frame,
-            textvariable=tx_drm_programme_type_var,
-            values=DRM_PROGRAMME_TYPES,
-            state="readonly",
-            height=12,
-        )
-        drm_programme_type_picker.pack(fill="x", ipady=5)
-        style_tx_combobox(drm_programme_type_picker)
-
-        add_tx_entry(
-            drm_metadata_fields,
-            "ISO language code (optional, e.g. eng)",
-            tx_drm_iso_language_var,
-            column=0,
-            row=2,
-        )
-        add_tx_entry(
-            drm_metadata_fields,
-            "Country code (optional, e.g. US)",
-            tx_drm_iso_country_var,
-            column=1,
-            row=2,
-        )
-
-        make_label(
-            drm_metadata_card,
-            "Audio settings",
-            font=("Segoe UI", 12, "bold"),
-            
-        ).pack(anchor="w", pady=(14, 8))
-
-        drm_audio_fields = ttk.Frame(drm_metadata_card)
-        drm_audio_fields.pack(fill="x")
-        drm_audio_fields.grid_columnconfigure(0, weight=1, uniform="drm-audio")
-        drm_audio_fields.grid_columnconfigure(1, weight=1, uniform="drm-audio")
-
-        codec_frame = ttk.Frame(drm_audio_fields)
-        codec_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
-        make_label(
-            codec_frame,
-            "Audio codec",
-            font=("Segoe UI", 9, "bold"),
-            color=palette["mutedForeground"],
-            
-        ).pack(anchor="w", pady=(0, 4))
-        drm_codec_picker = ttk.Combobox(
-            codec_frame,
-            textvariable=tx_drm_audio_codec_var,
-            values=DRM_AUDIO_CODECS,
-            state="readonly",
-            height=4,
-        )
-        drm_codec_picker.pack(fill="x", ipady=5)
-        style_tx_combobox(drm_codec_picker)
-        make_label(
-            codec_frame,
-            "xHE-AAC is designed for better quality at low bitrates. Use HE-AAC for older decoders.",
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
-            wraplength=400,
-        ).pack(anchor="w", pady=(4, 0))
-
-        interleaving_frame = ttk.Frame(drm_audio_fields)
-        interleaving_frame.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
-        make_label(
-            interleaving_frame,
-            "Interleaving",
-            font=("Segoe UI", 9, "bold"),
-            color=palette["mutedForeground"],
-            
-        ).pack(anchor="w", pady=(0, 4))
-        drm_interleaving_picker = ttk.Combobox(
-            interleaving_frame,
-            textvariable=tx_drm_interleaving_var,
-            values=("Long (2 s)", "Short (400 ms)"),
-            state="readonly",
-            height=4,
-        )
-        drm_interleaving_picker.pack(fill="x", ipady=5)
-        style_tx_combobox(drm_interleaving_picker)
-        make_label(
-            interleaving_frame,
-            "Long interleaving improves resistance to fading, with a little more decoding delay.",
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
-            wraplength=400,
-        ).pack(anchor="w", pady=(4, 0))
-
-        msc_frame = ttk.Frame(drm_audio_fields)
-        msc_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
-        make_label(
-            msc_frame,
-            "MSC modulation",
-            font=("Segoe UI", 9, "bold"),
-            color=palette["mutedForeground"],
-            
-        ).pack(anchor="w", pady=(0, 4))
-        drm_msc_picker = ttk.Combobox(
-            msc_frame,
-            textvariable=tx_drm_msc_mode_var,
-            values=DRM_MSC_MODES,
-            state="readonly",
-            height=4,
-        )
-        drm_msc_picker.pack(fill="x", ipady=5)
-        style_tx_combobox(drm_msc_picker)
-        make_label(
-            msc_frame,
-            "16-QAM is more robust but carries less audio data. 64-QAM has more capacity when reception is strong.",
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
-            wraplength=400,
-        ).pack(anchor="w", pady=(4, 0))
-
-        def apply_drm_quality_profile(_event=None) -> None:
-            try:
-                profile = drm_quality_profile_settings(tx_drm_quality_profile_var.get())
-            except ValueError:
-                return
-            tx_drm_msc_mode_var.set(str(profile["msc_mode"]))
-            tx_drm_stereo_var.set(bool(profile["stereo"]))
-            tx_drm_interleaving_var.set("Long (2 s)")
-
-        drm_profile_frame = ttk.Frame(drm_audio_fields)
-        drm_profile_frame.grid(row=2, column=0, sticky="ew", padx=6, pady=6)
-        make_label(
-            drm_profile_frame,
-            "Quality profile",
-            font=("Segoe UI", 9, "bold"),
-            color=palette["mutedForeground"],
-            
-        ).pack(anchor="w", pady=(0, 4))
-        drm_profile_picker = ttk.Combobox(
-            drm_profile_frame,
-            textvariable=tx_drm_quality_profile_var,
-            values=DRM_QUALITY_PROFILES,
-            state="readonly",
-            height=5,
-        )
-        drm_profile_picker.pack(fill="x", ipady=5)
-        style_tx_combobox(drm_profile_picker)
-        drm_profile_picker.bind("<<ComboboxSelected>>", apply_drm_quality_profile)
-        make_label(
-            drm_profile_frame,
-            "The preset sets channel width, MSC modulation, stereo, and long interleaving. You can change MSC modulation and stereo below.",
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
-            wraplength=400,
-        ).pack(anchor="w", pady=(4, 0))
-
-        stereo_frame = ttk.Frame(drm_audio_fields)
-        stereo_frame.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
-        drm_stereo_check = ttk.Checkbutton(
-            stereo_frame,
-            text="Stereo audio",
-            variable=tx_drm_stereo_var,
-            cursor="hand2",
-            takefocus=True,
-        )
-        drm_stereo_check.pack(anchor="w", padx=6, pady=(8, 4))
-        make_label(
-            stereo_frame,
-            "Stereo consumes more of the available audio capacity. Mono is usually clearer at the same low bitrate.",
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
-            wraplength=400,
-        ).pack(anchor="w", padx=6, pady=(4, 0))
-
-        def update_drm_metadata_visibility() -> None:
-            if tx_mode_var.get().strip().upper() == "DRM":
-                if not drm_metadata_card.winfo_manager():
-                    drm_metadata_card.pack(fill="x", pady=(0, 12))
-            else:
-                drm_metadata_card.pack_forget()
-        make_label(
-            signal_card,
-            "Signal settings",
-            font=("Segoe UI", 15, "bold"),
-            
-        ).pack(anchor="w", pady=(0, 10))
-
-        signal_fields = ttk.Frame(signal_card)
-        signal_fields.pack(fill="x")
-        signal_fields.grid_columnconfigure(0, weight=3, uniform="signal-fields")
-        signal_fields.grid_columnconfigure(1, weight=2, uniform="signal-fields")
-
-        mode_frame = ttk.Frame(signal_fields)
-        mode_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
-        make_label(
-            mode_frame,
-            "Signal type",
-            font=("Segoe UI", 10, "bold"),
-            color=palette["mutedForeground"],
-            
-        ).pack(anchor="w", pady=(0, 5))
-        mode_picker = ttk.Combobox(
-            mode_frame,
-            textvariable=tx_mode_display_var,
-            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "RADE", "DRM [EXPERIMENTAL]", "CW"),
-            state="readonly",
-            height=8,
-        )
-        mode_picker.pack(fill="x", ipady=5)
-        style_tx_combobox(mode_picker)
-
-        mode_help = make_label(
-            mode_frame,
-            variable=tx_mode_help_var,
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
-            wraplength=570,
-        )
-        mode_help.pack(anchor="w", pady=(6, 0))
-
-        def update_mode_help(_event=None) -> None:
-            descriptions = {
-                "AM": "AM - normal AM with carrier.",
-                "USB": "USB - upper sideband.",
-                "LSB": "LSB - lower sideband.",
-                "USB+C": "USB+C - upper sideband with carrier.",
-                "LSB+C": "LSB+C - lower sideband with carrier.",
-                "DSB": "DSB - double-sideband suppressed carrier.",
-                "NFM": (
-                    "NFM - software-generated narrow FM with Standard (9 kHz) and Wide (11 kHz) profiles. "
-                    "Wide uses a 6 kHz IF, 2.5 kHz peak deviation, and a 100-3,000 Hz voice band. "
-                    "Both profiles use second-order Butterworth input filters and a 12 kHz TXITY transport."
-                ),
-                "RADE": (
-                    "FreeDV RADE V1 - neural digital voice over TXITY's USB or LSB audio transport. "
-                    "Uses a 1.5 kHz audio centre and channel. The first start downloads a verified native encoder package."
-                ),
-                "DRM": "DRM [EXPERIMENTAL] - one xHE-AAC or HE-AAC audio service. Choose 4.5 kHz robust, 9 kHz quality, or 9 kHz 64-QAM stereo maximum-quality profiles in DRM settings. Use a microphone or OGG, MP3, or FLAC playlists.",
-                "CW": "CW - carrier only. MultiV sends the configured CW message instead of microphone or desktop audio.",
-            }
-            tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
-            update_drm_metadata_visibility()
-            update_frequency_check()
-
-        def restore_previous_mode() -> None:
-            previous = str(drm_setup_state.get("previous_mode") or "AM")
-            tx_mode_var.set(previous)
-            tx_mode_display_var.set(
-                "DRM [EXPERIMENTAL]" if previous == "DRM" else previous
-            )
-            update_mode_help()
-
-        def set_mode_picker_enabled(enabled: bool) -> None:
-            try:
-                if mode_picker.winfo_exists():
-                    mode_picker.configure(state="readonly" if enabled else "disabled")
-            except tk.TclError:
-                pass
-
-        drm_progressbar: ttk.Progressbar | None = None
-
-        def set_drm_progress_visible(visible: bool) -> None:
-            progress = drm_progressbar
-            if progress is None:
-                return
-            try:
-                if not progress.winfo_exists():
-                    return
-                if visible:
-                    progress.pack(fill="x", pady=(12, 0))
-                    progress.start(25)
-                else:
-                    progress.stop()
-                    progress.pack_forget()
-            except tk.TclError:
-                pass
-
-        def start_drm_setup() -> None:
-            drm_setup_state["running"] = True
-            previous_mode = str(drm_setup_state.get("previous_mode") or "AM")
-            tx_mode_var.set(previous_mode)
-            tx_mode_display_var.set(
-                "DRM [EXPERIMENTAL]" if previous_mode == "DRM" else previous_mode
-            )
-            tx_mode_help_var.set("Setting up DRM30. Downloading and building its encoder...")
-            tx_status_var.set("Preparing DRM dependencies...")
-            set_drm_progress_visible(True)
-            set_mode_picker_enabled(False)
-
-            def setup_worker() -> None:
-                def report(line: str) -> None:
-                    drm_setup_events.put(("log", line))
-
-                try:
-                    encoder = prepare_drm_encoder(on_log=report)
-                except Exception as exc:
-                    drm_setup_events.put(("error", str(exc)))
-                else:
-                    drm_setup_events.put(("success", str(encoder)))
-
-            threading.Thread(
-                target=setup_worker,
-                daemon=True,
-                name="txitpy-drm-setup",
-            ).start()
-            root.after(150, poll_drm_setup)
-
-
-        def poll_drm_setup() -> None:
-            completed = False
-            while True:
-                try:
-                    kind, value = drm_setup_events.get_nowait()
-                except queue.Empty:
-                    break
-
-                if kind == "log":
-                    tx_status_var.set(value[:240])
-                elif kind == "success":
-                    completed = True
-                    drm_setup_state["running"] = False
-                    set_drm_progress_visible(False)
-                    drm_setup_state["previous_mode"] = "DRM"
-                    tx_mode_var.set("DRM")
-                    tx_mode_display_var.set("DRM [EXPERIMENTAL]")
-                    tx_status_var.set("DRM encoder is ready.")
-                    update_mode_help()
-                    set_mode_picker_enabled(True)
-                elif kind == "error":
-                    completed = True
-                    drm_setup_state["running"] = False
-                    set_drm_progress_visible(False)
-                    restore_previous_mode()
-                    tx_status_var.set("DRM setup failed.")
-                    set_mode_picker_enabled(True)
-                    messagebox.showerror(
-                        "DRM setup failed",
-                        value,
-                        parent=root,
-                    )
-
-            if not completed and drm_setup_state["running"]:
-                root.after(150, poll_drm_setup)
-
-        def handle_mode_selection(_event=None) -> None:
-            selected_label = tx_mode_display_var.get().strip().upper()
-            selected = "DRM" if selected_label == "DRM [EXPERIMENTAL]" else selected_label
-            tx_mode_var.set(selected)
-            if selected != "DRM":
-                if not drm_setup_state["running"]:
-                    drm_setup_state["previous_mode"] = selected
-                update_mode_help()
-                return
-
-            if drm_setup_state["running"]:
-                return
-
-            status = drm_setup_status()
-            if status.get("ready"):
-                drm_setup_state["previous_mode"] = "DRM"
-                update_mode_help()
-                return
-
-            missing_build_tools = [
-                str(item) for item in (status.get("missing_build_tools") or [])
-            ]
-            if missing_build_tools:
-                from drm_support import VISUAL_STUDIO_BUILD_TOOLS_LABEL
-
-                if (
-                    os.name == "nt"
-                    and missing_build_tools == [VISUAL_STUDIO_BUILD_TOOLS_LABEL]
-                ):
-                    install_prompt = (
-                        "DRM needs Microsoft's Visual Studio C++ Build Tools.\n\n"
-                        "MultiV can download the official installer and add the "
-                        "'Desktop development with C++' workload, including the MSVC compiler "
-                        "and Windows SDK. The installer may request administrator approval. "
-                        "MultiV will then continue installing any missing DRM dependencies.\n\n"
-                        "Install the C++ build tools and continue setting up DRM?"
-                    )
-                    if messagebox.askyesno(
-                        "Install DRM build tools",
-                        install_prompt,
-                        parent=root,
-                    ):
-                        start_drm_setup()
-                    else:
-                        restore_previous_mode()
-                    return
-
-                restore_previous_mode()
-                messagebox.showerror(
-                    "DRM build tools missing",
-                    "DRM needs these build tools, which MultiV could not detect:\n\n"
-                    + "\n".join(missing_build_tools)
-                    + "\n\nInstall the missing tools, then select DRM again.",
-                    parent=root,
-                )
-                return
-
-            missing = [str(item) for item in (status.get("missing") or [])]
-            if not missing:
-                missing = ["the DRM encoder has not been built on this computer"]
-
-            prompt = (
-                "DRM mode is not ready. MultiV could not detect:\n\n"
-                + "\n".join(f"• {item}" for item in missing)
-                + "\n\nDownload and install the missing components and build the DRM encoder now? "
-                "MultiV will select DRM when setup finishes."
-            )
-            if not messagebox.askyesno("Set up DRM30", prompt, parent=root):
-                restore_previous_mode()
-                return
-
-            start_drm_setup()
-
-        mode_picker.bind("<<ComboboxSelected>>", handle_mode_selection)
-        update_mode_help()
-        if tx_mode_var.get().strip().upper() == "DRM":
-            root.after_idle(handle_mode_selection)
-
-        power_frame = ttk.Frame(signal_fields)
-        power_frame.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
-        make_label(
-            power_frame,
-            "Station power",
-            font=("Segoe UI", 10, "bold"),
-            color=palette["mutedForeground"],
-            
-        ).pack(anchor="w", pady=(0, 6))
-        power_scale = ttk.Scale(
-            power_frame,
-            variable=tx_power_var,
-            from_=-140,
-            to=53,
-            orient="horizontal",
-            command=lambda value: tx_power_var.set(str(round(float(value)))),
-            cursor="hand2",
-            takefocus=True,
-        )
-        power_scale.pack(fill="x", expand=True, pady=(1, 0))
-        make_label(
-            power_frame,
-            variable=tx_power_readout_var,
-            font=("Segoe UI", 10, "bold"),
-            color=palette["accent"],
-            
-        ).pack(anchor="e", pady=(3, 0))
-
-        sharing = ttk.Checkbutton(
-            signal_card,
-            text="Allow shared frequency overlap with stations that also enable sharing",
-            variable=tx_allow_overlap_var,
-            command=update_frequency_check,
-            cursor="hand2",
-            takefocus=True,
-        )
-        sharing.pack(anchor="w", padx=6, pady=(8, 0))
-
-        def toggle_advanced_settings() -> None:
-            nonlocal advanced_expanded
-            if advanced_expanded:
-                advanced_container.pack_forget()
-                advanced_toggle.configure(text="Show advanced settings")
-                advanced_expanded = False
-            else:
-                advanced_container.pack(fill="x", before=cw_card, pady=(0, 12))
-                advanced_toggle.configure(text="Hide advanced settings")
-                advanced_expanded = True
-
-        advanced_toggle = make_button(
-            page,
-            "Show advanced settings",
-            toggle_advanced_settings,
-            kind="tonal",
-            padx=14,
-            pady=8,
-        )
-        advanced_toggle.pack(anchor="w", pady=(0, 10))
-
-        fade_card = make_card(advanced_container, padding=16)
-        fade_card.pack(fill="x", pady=(0, 12))
-        make_label(
-            fade_card,
-            "Signal fading",
-            font=("Segoe UI", 15, "bold"),
-            
-        ).pack(anchor="w", pady=(0, 8))
-        fade_enabled = ttk.Checkbutton(
-            fade_card,
-            text="Enable signal fading",
-            variable=tx_fade_enabled_var,
-            cursor="hand2",
-            takefocus=True,
-        )
-        fade_enabled.pack(anchor="w", padx=6, pady=(0, 6))
-        fade_fields = ttk.Frame(fade_card)
-        fade_fields.pack(fill="x")
-        fade_fields.grid_columnconfigure(0, weight=1, uniform="fade-fields")
-        fade_fields.grid_columnconfigure(1, weight=1, uniform="fade-fields")
-        fade_seconds_entry = add_tx_entry(
-            fade_fields, "Fade cycle length (10-60 seconds)",
-            tx_fade_seconds_var, column=0, row=0,
-        )
-        fade_min_entry = add_tx_entry(
-            fade_fields, "Lowest power point (-140 to 50 dBm)",
-            tx_fade_min_dbm_var, column=1, row=0,
-        )
-        fade_shape_frame = ttk.Frame(fade_fields)
-        fade_shape_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=6)
-        make_label(
-            fade_shape_frame,
-            "Fade style",
-            font=("Segoe UI", 9, "bold"),
-            color=palette["mutedForeground"],
-            
-        ).pack(anchor="w", pady=(0, 5))
-        fade_shape_values = tuple(
-            f"{shape_id} - {shape_name}" for shape_id, shape_name in fade_shape_names.items()
-        )
-        fade_shape_picker = ttk.Combobox(
-            fade_shape_frame,
-            textvariable=tx_fade_shape_var,
-            values=fade_shape_values,
-            state="readonly",
-            height=6,
-        )
-        fade_shape_picker.pack(fill="x", ipady=5)
-        style_tx_combobox(fade_shape_picker)
-        fade_shape_help_var = tk.StringVar(root)
-        def update_fade_shape_help(_event=None) -> None:
-            selected_shape_id = tx_fade_shape_var.get().split("-", 1)[0].strip()
-            fade_shape_help_var.set(fade_shape_names.get(selected_shape_id, "Choose a fade curve."))
-        fade_shape_picker.bind("<<ComboboxSelected>>", update_fade_shape_help)
-        update_fade_shape_help()
-        make_label(
-            fade_shape_frame,
-            variable=fade_shape_help_var,
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
-        ).pack(anchor="w", pady=(5, 0))
-
-        def update_fade_controls(*_args) -> None:
-            state = "normal" if tx_fade_enabled_var.get() else "disabled"
-            fade_seconds_entry.configure(state=state)
-            fade_min_entry.configure(state=state)
-            fade_shape_picker.configure(state="readonly" if state == "normal" else "disabled")
-        tx_fade_enabled_var.trace_add("write", update_fade_controls)
-        update_fade_controls()
-
-        audio_filter_card = make_card(advanced_container, padding=16)
-        audio_filter_card.pack(fill="x", pady=(0, 12))
-        make_label(
-            audio_filter_card,
-            "Audio processing and filters",
-            font=("Segoe UI", 15, "bold"),
-            
-        ).pack(anchor="w", pady=(0, 8))
-        agc_row = ttk.Frame(audio_filter_card)
-        agc_row.pack(fill="x", padx=6, pady=(0, 8))
-        agc_toggle = ttk.Checkbutton(
-            agc_row,
-            text="Server AGC enabled",
-            variable=tx_agc_enabled_var,
-            cursor="hand2",
-            takefocus=True,
-        )
-        agc_toggle.pack(side="left")
-        audio_filter_grid = ttk.Frame(audio_filter_card)
-        audio_filter_grid.pack(fill="x")
-        for column in range(2):
-            audio_filter_grid.grid_columnconfigure(column, weight=1, uniform="audio-filter-fields")
-
-        def add_audio_scale(
-            label: str,
-            variable: tk.StringVar,
-            minimum: float,
-            maximum: float,
-            step: float,
-            formatter,
-            row: int,
-            column: int,
-        ) -> ttk.Frame:
-            wrapper = ttk.Frame(audio_filter_grid)
-            wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
-            make_label(
-                wrapper,
-                label,
-                font=("Segoe UI", 9, "bold"),
-                color=palette["mutedForeground"],
-                
-            ).pack(anchor="w")
-            value_var = tk.StringVar(root, "")
-            def update_readout(*_args) -> None:
-                try:
-                    value_var.set(formatter(float(variable.get())))
-                except (TypeError, ValueError):
-                    value_var.set("Invalid value")
-            variable.trace_add("write", update_readout)
-            update_readout()
-
-            def snap_scale(value: str) -> None:
-                try:
-                    snapped = minimum + round((float(value) - minimum) / step) * step
-                    variable.set(f"{snapped:.12g}")
-                except (TypeError, ValueError, ZeroDivisionError):
-                    return
-
-            scale = ttk.Scale(
-                wrapper,
-                variable=variable,
-                from_=minimum,
-                to=maximum,
-                orient="horizontal",
-                command=snap_scale,
-                cursor="hand2",
-                takefocus=True,
-            )
-            scale.pack(fill="x", pady=(1, 0))
-            make_label(
-                wrapper,
-                variable=value_var,
-                font=("Segoe UI", 9, "bold"),
-                color=palette["accent"],
-                
-            ).pack(anchor="e")
-            return wrapper
-
-        add_audio_scale("AGC target level", tx_agc_target_var, 0.16, 0.24, 0.01,
-                        lambda value: f"{value:.2f} RMS", 0, 0)
-        add_audio_scale("Microphone gain", tx_mic_gain_var, -6, 6, 1,
-                        lambda value: f"{value:+.0f} dB", 0, 1)
-        add_audio_scale("Bass", tx_bass_var, -4, 4, 1,
-                        lambda value: f"{value:+.0f} dB", 1, 0)
-        add_audio_scale("Treble", tx_treble_var, -4, 4, 1,
-                        lambda value: f"{value:+.0f} dB", 1, 1)
-        add_audio_scale("Presence / clarity", tx_presence_var, -1, 1, 1,
-                        lambda value: f"{value:+.0f} dB", 2, 0)
-        add_audio_scale("Compression / drive", tx_drive_var, 0, 0.025, 0.005,
-                        lambda value: f"{value * 100:.1f}%", 2, 1)
-        add_audio_scale("SSB voice width", tx_ssb_bandwidth_var, 2400, 10000, 100,
-                        lambda value: f"{value / 1000:.1f} kHz", 3, 0)
-        add_audio_scale("SSB low cut", tx_ssb_low_cut_var, 0, 2000, 25,
-                        lambda value: f"{value:.0f} Hz", 3, 1)
-        add_audio_scale("SSB high edge cut", tx_ssb_high_cut_var, 0, 3000, 25,
-                        lambda value: f"{value:.0f} Hz", 4, 0)
-        add_audio_scale("AM / DSB bandwidth", tx_am_bandwidth_var, 3000, 12000, 500,
-                        lambda value: f"{value / 1000:.1f} kHz", 4, 1)
-        nfm_bandwidth_control = add_audio_scale(
-            "NFM transport bandwidth",
-            tx_nfm_transport_bandwidth_var,
-            1_000,
-            20_000,
-            1_000,
-            lambda value: f"{value / 1000:.0f} kHz",
-            5,
-            0,
-        )
-        nfm_profile_frame = ttk.Frame(audio_filter_card)
-        nfm_profile_frame.pack(fill="x", padx=6, pady=6)
-        make_label(
-            nfm_profile_frame,
-            "NFM audio profile",
-            font=("Segoe UI", 9, "bold"),
-            color=palette["mutedForeground"],
-            
-        ).pack(anchor="w", pady=(0, 4))
-        nfm_profile_picker = ttk.Combobox(
-            nfm_profile_frame,
-            textvariable=tx_nfm_profile_var,
-            values=NFM_PROFILES,
-            state="readonly",
-            height=4,
-        )
-        nfm_profile_picker.pack(fill="x", ipady=5)
-        style_tx_combobox(nfm_profile_picker)
-        make_label(
-            nfm_profile_frame,
-            "Wide opens the voice band to 3 kHz and increases the estimated occupied bandwidth to 11 kHz.",
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
-            wraplength=400,
-        ).pack(anchor="w", pady=(4, 0))
-
-        def update_nfm_bandwidth_visibility(*_args) -> None:
-            if tx_mode_var.get().strip().upper() == "NFM":
-                nfm_bandwidth_control.grid()
-                nfm_profile_frame.pack(fill="x", padx=6, pady=6)
-            else:
-                nfm_bandwidth_control.grid_remove()
-                nfm_profile_frame.pack_forget()
-
-        tx_mode_var.trace_add("write", update_nfm_bandwidth_visibility)
-        update_nfm_bandwidth_visibility()
-
-        am_pre_emphasis = ttk.Checkbutton(
-            audio_filter_card,
-            text="AM pre-emphasis (brighter audio)",
-            variable=tx_am_pre_emphasis_var,
-            cursor="hand2",
-            takefocus=True,
-        )
-        am_pre_emphasis.pack(anchor="w", padx=6, pady=(7, 0))
-        make_label(
-            audio_filter_card,
-            "Changes apply automatically during transmission. The signal briefly stops while MultiV rebuilds the active audio path and starts again.",
-            font=("Segoe UI", 9, "normal"),
-            color=palette["mutedForeground"],
-            
-            wraplength=850,
-        ).pack(anchor="w", padx=6, pady=(7, 0))
-
-        audio_card = make_card(page, padding=16)
-        audio_card.pack(fill="x", pady=(0, 12))
         icecast_card = make_card(page, padding=16)
         icecast_card.pack(fill="x", pady=(0, 12))
         make_label(
@@ -3539,6 +2640,906 @@ def build_app() -> None:
         ).pack(anchor="w", pady=(8, 0))
         refresh_icecast_list()
 
+
+        station_card = make_card(txity_output_body, padding=16)
+        station_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            station_card,
+            "Station",
+            font=("Segoe UI", 15, "bold"),
+            
+        ).pack(anchor="w", pady=(0, 10))
+
+        station_fields = ttk.Frame(station_card)
+        station_fields.pack(fill="x")
+        station_fields.grid_columnconfigure(0, weight=1, uniform="station-fields")
+        station_fields.grid_columnconfigure(1, weight=1, uniform="station-fields")
+        add_tx_entry(station_fields, "Station name (required)", tx_station_name_var, column=0, row=0)
+        add_tx_entry(station_fields, "Short description", tx_description_var, column=1, row=0)
+
+        frequency_fields_frame = ttk.Frame(
+            station_fields,
+        )
+        frequency_fields_frame.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=6,
+            pady=6,
+        )
+        frequency_fields_frame.grid_columnconfigure(0, weight=1)
+
+        def remove_frequency_fallback(variable: tk.StringVar) -> None:
+            if variable in tx_frequency_fallback_vars:
+                tx_frequency_fallback_vars.remove(variable)
+                render_frequency_fields()
+                schedule_tx_settings_save()
+                update_frequency_check()
+                schedule_live_reconfigure()
+
+        def add_frequency_fallback() -> None:
+            if len(tx_frequency_fallback_vars) >= 7:
+                tx_status_var.set("You can add up to seven alternate frequencies.")
+                return
+            variable = tk.StringVar(root, "")
+            variable.trace_add("write", schedule_tx_settings_save)
+            variable.trace_add("write", lambda *_args: update_frequency_check())
+            variable.trace_add("write", schedule_live_reconfigure)
+            tx_frequency_fallback_vars.append(variable)
+            render_frequency_fields()
+            schedule_tx_settings_save()
+            update_frequency_check()
+
+        def render_frequency_fields() -> None:
+            for child in frequency_fields_frame.winfo_children():
+                child.destroy()
+
+            frequency_rows = [
+                ("Transmit frequency", tx_frequency_var, None),
+                *[
+                    (f"Fallback frequency {index}", variable, variable)
+                    for index, variable in enumerate(tx_frequency_fallback_vars, start=1)
+                ],
+            ]
+            for index, (label_text, variable, removable) in enumerate(frequency_rows):
+                wrapper = ttk.Frame(
+                    frequency_fields_frame,
+                )
+                wrapper.pack(fill="x", pady=(0, 8 if index < len(frequency_rows) - 1 else 0))
+                make_label(
+                    wrapper,
+                    label_text,
+                    font=("Segoe UI", 9, "bold"),
+                    color=palette["mutedForeground"],
+                    
+                ).pack(anchor="w", pady=(0, 4))
+
+                input_row = ttk.Frame(wrapper)
+                input_row.pack(fill="x")
+                entry = ttk.Entry(
+                    input_row,
+                    textvariable=variable,
+                    font=("Segoe UI", 10),
+                )
+                entry.pack(side="left", fill="x", expand=True, ipady=7)
+
+                if removable is None:
+                    make_button(
+                        input_row,
+                        "+",
+                        add_frequency_fallback,
+                        kind="tonal",
+                        padx=13,
+                        pady=6,
+                    ).pack(side="left", padx=(8, 0))
+                else:
+                    make_button(
+                        input_row,
+                        "−",
+                        lambda target=removable: remove_frequency_fallback(target),
+                        kind="text",
+                        padx=12,
+                        pady=6,
+                    ).pack(side="left", padx=(8, 0))
+
+        render_frequency_fields()
+        make_label(
+            station_card,
+            variable=tx_frequency_check_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            
+            wraplength=860,
+        ).pack(anchor="w", padx=6, pady=(8, 0))
+        update_frequency_check()
+
+        signal_card = make_card(txity_output_body, padding=16)
+        signal_card.pack(fill="x", pady=(0, 12))
+
+        advanced_container = ttk.Frame(txity_output_body)
+        advanced_expanded = False
+        drm_metadata_card = make_card(advanced_container, padding=16)
+        make_label(
+            drm_metadata_card,
+            "DRM service metadata",
+            font=("Segoe UI", 15, "bold"),
+            
+        ).pack(anchor="w", pady=(0, 4))
+        make_label(
+            drm_metadata_card,
+            "These values are broadcast in the DRM service information. A blank service label uses the station name.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            
+            wraplength=860,
+        ).pack(anchor="w", pady=(0, 10))
+
+        drm_metadata_fields = ttk.Frame(drm_metadata_card)
+        drm_metadata_fields.pack(fill="x")
+        drm_metadata_fields.grid_columnconfigure(0, weight=1, uniform="drm-metadata")
+        drm_metadata_fields.grid_columnconfigure(1, weight=1, uniform="drm-metadata")
+        add_tx_entry(
+            drm_metadata_fields,
+            "Service label (optional, max 16 characters)",
+            tx_drm_service_label_var,
+            column=0,
+            row=0,
+        )
+        add_tx_entry(
+            drm_metadata_fields,
+            "Service ID (hexadecimal, 24-bit)",
+            tx_drm_service_id_var,
+            column=1,
+            row=0,
+        )
+
+        language_frame = ttk.Frame(drm_metadata_fields)
+        language_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            language_frame,
+            "Language",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["mutedForeground"],
+            
+        ).pack(anchor="w", pady=(0, 4))
+        drm_language_picker = ttk.Combobox(
+            language_frame,
+            textvariable=tx_drm_language_var,
+            values=DRM_LANGUAGES,
+            state="readonly",
+            height=10,
+        )
+        drm_language_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_language_picker)
+
+        programme_type_frame = ttk.Frame(drm_metadata_fields)
+        programme_type_frame.grid(row=1, column=1, sticky="ew", padx=6, pady=6)
+        make_label(
+            programme_type_frame,
+            "Programme type",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["mutedForeground"],
+            
+        ).pack(anchor="w", pady=(0, 4))
+        drm_programme_type_picker = ttk.Combobox(
+            programme_type_frame,
+            textvariable=tx_drm_programme_type_var,
+            values=DRM_PROGRAMME_TYPES,
+            state="readonly",
+            height=12,
+        )
+        drm_programme_type_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_programme_type_picker)
+
+        add_tx_entry(
+            drm_metadata_fields,
+            "ISO language code (optional, e.g. eng)",
+            tx_drm_iso_language_var,
+            column=0,
+            row=2,
+        )
+        add_tx_entry(
+            drm_metadata_fields,
+            "Country code (optional, e.g. US)",
+            tx_drm_iso_country_var,
+            column=1,
+            row=2,
+        )
+
+        make_label(
+            drm_metadata_card,
+            "Audio settings",
+            font=("Segoe UI", 12, "bold"),
+            
+        ).pack(anchor="w", pady=(14, 8))
+
+        drm_audio_fields = ttk.Frame(drm_metadata_card)
+        drm_audio_fields.pack(fill="x")
+        drm_audio_fields.grid_columnconfigure(0, weight=1, uniform="drm-audio")
+        drm_audio_fields.grid_columnconfigure(1, weight=1, uniform="drm-audio")
+
+        codec_frame = ttk.Frame(drm_audio_fields)
+        codec_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            codec_frame,
+            "Audio codec",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["mutedForeground"],
+            
+        ).pack(anchor="w", pady=(0, 4))
+        drm_codec_picker = ttk.Combobox(
+            codec_frame,
+            textvariable=tx_drm_audio_codec_var,
+            values=DRM_AUDIO_CODECS,
+            state="readonly",
+            height=4,
+        )
+        drm_codec_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_codec_picker)
+        make_label(
+            codec_frame,
+            "xHE-AAC is designed for better quality at low bitrates. Use HE-AAC for older decoders.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
+        interleaving_frame = ttk.Frame(drm_audio_fields)
+        interleaving_frame.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
+        make_label(
+            interleaving_frame,
+            "Interleaving",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["mutedForeground"],
+            
+        ).pack(anchor="w", pady=(0, 4))
+        drm_interleaving_picker = ttk.Combobox(
+            interleaving_frame,
+            textvariable=tx_drm_interleaving_var,
+            values=("Long (2 s)", "Short (400 ms)"),
+            state="readonly",
+            height=4,
+        )
+        drm_interleaving_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_interleaving_picker)
+        make_label(
+            interleaving_frame,
+            "Long interleaving improves resistance to fading, with a little more decoding delay.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
+        msc_frame = ttk.Frame(drm_audio_fields)
+        msc_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            msc_frame,
+            "MSC modulation",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["mutedForeground"],
+            
+        ).pack(anchor="w", pady=(0, 4))
+        drm_msc_picker = ttk.Combobox(
+            msc_frame,
+            textvariable=tx_drm_msc_mode_var,
+            values=DRM_MSC_MODES,
+            state="readonly",
+            height=4,
+        )
+        drm_msc_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_msc_picker)
+        make_label(
+            msc_frame,
+            "16-QAM is more robust but carries less audio data. 64-QAM has more capacity when reception is strong.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
+        def apply_drm_quality_profile(_event=None) -> None:
+            try:
+                profile = drm_quality_profile_settings(tx_drm_quality_profile_var.get())
+            except ValueError:
+                return
+            tx_drm_msc_mode_var.set(str(profile["msc_mode"]))
+            tx_drm_stereo_var.set(bool(profile["stereo"]))
+            tx_drm_interleaving_var.set("Long (2 s)")
+
+        drm_profile_frame = ttk.Frame(drm_audio_fields)
+        drm_profile_frame.grid(row=2, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            drm_profile_frame,
+            "Quality profile",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["mutedForeground"],
+            
+        ).pack(anchor="w", pady=(0, 4))
+        drm_profile_picker = ttk.Combobox(
+            drm_profile_frame,
+            textvariable=tx_drm_quality_profile_var,
+            values=DRM_QUALITY_PROFILES,
+            state="readonly",
+            height=5,
+        )
+        drm_profile_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(drm_profile_picker)
+        drm_profile_picker.bind("<<ComboboxSelected>>", apply_drm_quality_profile)
+        make_label(
+            drm_profile_frame,
+            "The preset sets channel width, MSC modulation, stereo, and long interleaving. You can change MSC modulation and stereo below.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
+        stereo_frame = ttk.Frame(drm_audio_fields)
+        stereo_frame.grid(row=2, column=1, sticky="ew", padx=6, pady=6)
+        drm_stereo_check = ttk.Checkbutton(
+            stereo_frame,
+            text="Stereo audio",
+            variable=tx_drm_stereo_var,
+            cursor="hand2",
+            takefocus=True,
+        )
+        drm_stereo_check.pack(anchor="w", padx=6, pady=(8, 4))
+        make_label(
+            stereo_frame,
+            "Stereo consumes more of the available audio capacity. Mono is usually clearer at the same low bitrate.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            
+            wraplength=400,
+        ).pack(anchor="w", padx=6, pady=(4, 0))
+
+        def update_drm_metadata_visibility() -> None:
+            if tx_mode_var.get().strip().upper() == "DRM":
+                if not drm_metadata_card.winfo_manager():
+                    drm_metadata_card.pack(fill="x", pady=(0, 12))
+            else:
+                drm_metadata_card.pack_forget()
+        make_label(
+            signal_card,
+            "Signal settings",
+            font=("Segoe UI", 15, "bold"),
+            
+        ).pack(anchor="w", pady=(0, 10))
+
+        signal_fields = ttk.Frame(signal_card)
+        signal_fields.pack(fill="x")
+        signal_fields.grid_columnconfigure(0, weight=3, uniform="signal-fields")
+        signal_fields.grid_columnconfigure(1, weight=2, uniform="signal-fields")
+
+        mode_frame = ttk.Frame(signal_fields)
+        mode_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
+        make_label(
+            mode_frame,
+            "Signal type",
+            font=("Segoe UI", 10, "bold"),
+            color=palette["mutedForeground"],
+            
+        ).pack(anchor="w", pady=(0, 5))
+        mode_picker = ttk.Combobox(
+            mode_frame,
+            textvariable=tx_mode_display_var,
+            values=("AM", "USB", "LSB", "USB+C", "LSB+C", "DSB", "NFM", "RADE", "DRM [EXPERIMENTAL]", "CW"),
+            state="readonly",
+            height=8,
+        )
+        mode_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(mode_picker)
+
+        mode_help = make_label(
+            mode_frame,
+            variable=tx_mode_help_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            
+            wraplength=570,
+        )
+        mode_help.pack(anchor="w", pady=(6, 0))
+
+        def update_mode_help(_event=None) -> None:
+            descriptions = {
+                "AM": "AM - normal AM with carrier.",
+                "USB": "USB - upper sideband.",
+                "LSB": "LSB - lower sideband.",
+                "USB+C": "USB+C - upper sideband with carrier.",
+                "LSB+C": "LSB+C - lower sideband with carrier.",
+                "DSB": "DSB - double-sideband suppressed carrier.",
+                "NFM": (
+                    "NFM - software-generated narrow FM with Standard (9 kHz) and Wide (11 kHz) profiles. "
+                    "Wide uses a 6 kHz IF, 2.5 kHz peak deviation, and a 100-3,000 Hz voice band. "
+                    "Both profiles use second-order Butterworth input filters and a 12 kHz TXITY transport."
+                ),
+                "RADE": (
+                    "FreeDV RADE V1 - neural digital voice over TXITY's USB or LSB audio transport. "
+                    "Uses a 1.5 kHz audio centre and channel. The first start downloads a verified native encoder package."
+                ),
+                "DRM": "DRM [EXPERIMENTAL] - one xHE-AAC or HE-AAC audio service. Choose 4.5 kHz robust, 9 kHz quality, or 9 kHz 64-QAM stereo maximum-quality profiles in DRM settings. Use a microphone or OGG, MP3, or FLAC playlists.",
+                "CW": "CW - carrier only. MultiV sends the configured CW message instead of microphone or desktop audio.",
+            }
+            tx_mode_help_var.set(descriptions.get(tx_mode_var.get(), "Choose a signal mode."))
+            update_drm_metadata_visibility()
+            update_frequency_check()
+
+        def restore_previous_mode() -> None:
+            previous = str(drm_setup_state.get("previous_mode") or "AM")
+            tx_mode_var.set(previous)
+            tx_mode_display_var.set(
+                "DRM [EXPERIMENTAL]" if previous == "DRM" else previous
+            )
+            update_mode_help()
+
+        def set_mode_picker_enabled(enabled: bool) -> None:
+            try:
+                if mode_picker.winfo_exists():
+                    mode_picker.configure(state="readonly" if enabled else "disabled")
+            except tk.TclError:
+                pass
+
+        drm_progressbar: ttk.Progressbar | None = None
+
+        def set_drm_progress_visible(visible: bool) -> None:
+            progress = drm_progressbar
+            if progress is None:
+                return
+            try:
+                if not progress.winfo_exists():
+                    return
+                if visible:
+                    progress.pack(fill="x", pady=(12, 0))
+                    progress.start(25)
+                else:
+                    progress.stop()
+                    progress.pack_forget()
+            except tk.TclError:
+                pass
+
+        def start_drm_setup() -> None:
+            drm_setup_state["running"] = True
+            previous_mode = str(drm_setup_state.get("previous_mode") or "AM")
+            tx_mode_var.set(previous_mode)
+            tx_mode_display_var.set(
+                "DRM [EXPERIMENTAL]" if previous_mode == "DRM" else previous_mode
+            )
+            tx_mode_help_var.set("Setting up DRM30. Downloading and building its encoder...")
+            tx_status_var.set("Preparing DRM dependencies...")
+            set_drm_progress_visible(True)
+            set_mode_picker_enabled(False)
+
+            def setup_worker() -> None:
+                def report(line: str) -> None:
+                    drm_setup_events.put(("log", line))
+
+                try:
+                    encoder = prepare_drm_encoder(on_log=report)
+                except Exception as exc:
+                    drm_setup_events.put(("error", str(exc)))
+                else:
+                    drm_setup_events.put(("success", str(encoder)))
+
+            threading.Thread(
+                target=setup_worker,
+                daemon=True,
+                name="txitpy-drm-setup",
+            ).start()
+            root.after(150, poll_drm_setup)
+
+
+        def poll_drm_setup() -> None:
+            completed = False
+            while True:
+                try:
+                    kind, value = drm_setup_events.get_nowait()
+                except queue.Empty:
+                    break
+
+                if kind == "log":
+                    tx_status_var.set(value[:240])
+                elif kind == "success":
+                    completed = True
+                    drm_setup_state["running"] = False
+                    set_drm_progress_visible(False)
+                    drm_setup_state["previous_mode"] = "DRM"
+                    tx_mode_var.set("DRM")
+                    tx_mode_display_var.set("DRM [EXPERIMENTAL]")
+                    tx_status_var.set("DRM encoder is ready.")
+                    update_mode_help()
+                    set_mode_picker_enabled(True)
+                elif kind == "error":
+                    completed = True
+                    drm_setup_state["running"] = False
+                    set_drm_progress_visible(False)
+                    restore_previous_mode()
+                    tx_status_var.set("DRM setup failed.")
+                    set_mode_picker_enabled(True)
+                    messagebox.showerror(
+                        "DRM setup failed",
+                        value,
+                        parent=root,
+                    )
+
+            if not completed and drm_setup_state["running"]:
+                root.after(150, poll_drm_setup)
+
+        def handle_mode_selection(_event=None) -> None:
+            selected_label = tx_mode_display_var.get().strip().upper()
+            selected = "DRM" if selected_label == "DRM [EXPERIMENTAL]" else selected_label
+            tx_mode_var.set(selected)
+            if selected != "DRM":
+                if not drm_setup_state["running"]:
+                    drm_setup_state["previous_mode"] = selected
+                update_mode_help()
+                return
+
+            if drm_setup_state["running"]:
+                return
+
+            status = drm_setup_status()
+            if status.get("ready"):
+                drm_setup_state["previous_mode"] = "DRM"
+                update_mode_help()
+                return
+
+            missing_build_tools = [
+                str(item) for item in (status.get("missing_build_tools") or [])
+            ]
+            if missing_build_tools:
+                from drm_support import VISUAL_STUDIO_BUILD_TOOLS_LABEL
+
+                if (
+                    os.name == "nt"
+                    and missing_build_tools == [VISUAL_STUDIO_BUILD_TOOLS_LABEL]
+                ):
+                    install_prompt = (
+                        "DRM needs Microsoft's Visual Studio C++ Build Tools.\n\n"
+                        "MultiV can download the official installer and add the "
+                        "'Desktop development with C++' workload, including the MSVC compiler "
+                        "and Windows SDK. The installer may request administrator approval. "
+                        "MultiV will then continue installing any missing DRM dependencies.\n\n"
+                        "Install the C++ build tools and continue setting up DRM?"
+                    )
+                    if messagebox.askyesno(
+                        "Install DRM build tools",
+                        install_prompt,
+                        parent=root,
+                    ):
+                        start_drm_setup()
+                    else:
+                        restore_previous_mode()
+                    return
+
+                restore_previous_mode()
+                messagebox.showerror(
+                    "DRM build tools missing",
+                    "DRM needs these build tools, which MultiV could not detect:\n\n"
+                    + "\n".join(missing_build_tools)
+                    + "\n\nInstall the missing tools, then select DRM again.",
+                    parent=root,
+                )
+                return
+
+            missing = [str(item) for item in (status.get("missing") or [])]
+            if not missing:
+                missing = ["the DRM encoder has not been built on this computer"]
+
+            prompt = (
+                "DRM mode is not ready. MultiV could not detect:\n\n"
+                + "\n".join(f"• {item}" for item in missing)
+                + "\n\nDownload and install the missing components and build the DRM encoder now? "
+                "MultiV will select DRM when setup finishes."
+            )
+            if not messagebox.askyesno("Set up DRM30", prompt, parent=root):
+                restore_previous_mode()
+                return
+
+            start_drm_setup()
+
+        mode_picker.bind("<<ComboboxSelected>>", handle_mode_selection)
+        update_mode_help()
+        if tx_mode_var.get().strip().upper() == "DRM":
+            root.after_idle(handle_mode_selection)
+
+        power_frame = ttk.Frame(signal_fields)
+        power_frame.grid(row=0, column=1, sticky="nsew", padx=6, pady=6)
+        make_label(
+            power_frame,
+            "Station power",
+            font=("Segoe UI", 10, "bold"),
+            color=palette["mutedForeground"],
+            
+        ).pack(anchor="w", pady=(0, 6))
+        power_scale = ttk.Scale(
+            power_frame,
+            variable=tx_power_var,
+            from_=-140,
+            to=53,
+            orient="horizontal",
+            command=lambda value: tx_power_var.set(str(round(float(value)))),
+            cursor="hand2",
+            takefocus=True,
+        )
+        power_scale.pack(fill="x", expand=True, pady=(1, 0))
+        make_label(
+            power_frame,
+            variable=tx_power_readout_var,
+            font=("Segoe UI", 10, "bold"),
+            color=palette["accent"],
+            
+        ).pack(anchor="e", pady=(3, 0))
+
+        sharing = ttk.Checkbutton(
+            signal_card,
+            text="Allow shared frequency overlap with stations that also enable sharing",
+            variable=tx_allow_overlap_var,
+            command=update_frequency_check,
+            cursor="hand2",
+            takefocus=True,
+        )
+        sharing.pack(anchor="w", padx=6, pady=(8, 0))
+
+        def toggle_advanced_settings() -> None:
+            nonlocal advanced_expanded
+            if advanced_expanded:
+                advanced_container.pack_forget()
+                advanced_toggle.configure(text="Show advanced settings")
+                advanced_expanded = False
+            else:
+                advanced_container.pack(fill="x", before=cw_card, pady=(0, 12))
+                advanced_toggle.configure(text="Hide advanced settings")
+                advanced_expanded = True
+
+        advanced_toggle = make_button(
+            txity_output_body,
+            "Show advanced settings",
+            toggle_advanced_settings,
+            kind="tonal",
+            padx=14,
+            pady=8,
+        )
+        advanced_toggle.pack(anchor="w", pady=(0, 10))
+
+        fade_card = make_card(advanced_container, padding=16)
+        fade_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            fade_card,
+            "Signal fading",
+            font=("Segoe UI", 15, "bold"),
+            
+        ).pack(anchor="w", pady=(0, 8))
+        fade_enabled = ttk.Checkbutton(
+            fade_card,
+            text="Enable signal fading",
+            variable=tx_fade_enabled_var,
+            cursor="hand2",
+            takefocus=True,
+        )
+        fade_enabled.pack(anchor="w", padx=6, pady=(0, 6))
+        fade_fields = ttk.Frame(fade_card)
+        fade_fields.pack(fill="x")
+        fade_fields.grid_columnconfigure(0, weight=1, uniform="fade-fields")
+        fade_fields.grid_columnconfigure(1, weight=1, uniform="fade-fields")
+        fade_seconds_entry = add_tx_entry(
+            fade_fields, "Fade cycle length (10-60 seconds)",
+            tx_fade_seconds_var, column=0, row=0,
+        )
+        fade_min_entry = add_tx_entry(
+            fade_fields, "Lowest power point (-140 to 50 dBm)",
+            tx_fade_min_dbm_var, column=1, row=0,
+        )
+        fade_shape_frame = ttk.Frame(fade_fields)
+        fade_shape_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=6)
+        make_label(
+            fade_shape_frame,
+            "Fade style",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["mutedForeground"],
+            
+        ).pack(anchor="w", pady=(0, 5))
+        fade_shape_values = tuple(
+            f"{shape_id} - {shape_name}" for shape_id, shape_name in fade_shape_names.items()
+        )
+        fade_shape_picker = ttk.Combobox(
+            fade_shape_frame,
+            textvariable=tx_fade_shape_var,
+            values=fade_shape_values,
+            state="readonly",
+            height=6,
+        )
+        fade_shape_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(fade_shape_picker)
+        fade_shape_help_var = tk.StringVar(root)
+        def update_fade_shape_help(_event=None) -> None:
+            selected_shape_id = tx_fade_shape_var.get().split("-", 1)[0].strip()
+            fade_shape_help_var.set(fade_shape_names.get(selected_shape_id, "Choose a fade curve."))
+        fade_shape_picker.bind("<<ComboboxSelected>>", update_fade_shape_help)
+        update_fade_shape_help()
+        make_label(
+            fade_shape_frame,
+            variable=fade_shape_help_var,
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            
+        ).pack(anchor="w", pady=(5, 0))
+
+        def update_fade_controls(*_args) -> None:
+            state = "normal" if tx_fade_enabled_var.get() else "disabled"
+            fade_seconds_entry.configure(state=state)
+            fade_min_entry.configure(state=state)
+            fade_shape_picker.configure(state="readonly" if state == "normal" else "disabled")
+        tx_fade_enabled_var.trace_add("write", update_fade_controls)
+        update_fade_controls()
+
+        audio_filter_card = make_card(advanced_container, padding=16)
+        audio_filter_card.pack(fill="x", pady=(0, 12))
+        make_label(
+            audio_filter_card,
+            "Audio processing and filters",
+            font=("Segoe UI", 15, "bold"),
+            
+        ).pack(anchor="w", pady=(0, 8))
+        agc_row = ttk.Frame(audio_filter_card)
+        agc_row.pack(fill="x", padx=6, pady=(0, 8))
+        agc_toggle = ttk.Checkbutton(
+            agc_row,
+            text="Server AGC enabled",
+            variable=tx_agc_enabled_var,
+            cursor="hand2",
+            takefocus=True,
+        )
+        agc_toggle.pack(side="left")
+        audio_filter_grid = ttk.Frame(audio_filter_card)
+        audio_filter_grid.pack(fill="x")
+        for column in range(2):
+            audio_filter_grid.grid_columnconfigure(column, weight=1, uniform="audio-filter-fields")
+
+        def add_audio_scale(
+            label: str,
+            variable: tk.StringVar,
+            minimum: float,
+            maximum: float,
+            step: float,
+            formatter,
+            row: int,
+            column: int,
+        ) -> ttk.Frame:
+            wrapper = ttk.Frame(audio_filter_grid)
+            wrapper.grid(row=row, column=column, sticky="ew", padx=6, pady=6)
+            make_label(
+                wrapper,
+                label,
+                font=("Segoe UI", 9, "bold"),
+                color=palette["mutedForeground"],
+                
+            ).pack(anchor="w")
+            value_var = tk.StringVar(root, "")
+            def update_readout(*_args) -> None:
+                try:
+                    value_var.set(formatter(float(variable.get())))
+                except (TypeError, ValueError):
+                    value_var.set("Invalid value")
+            variable.trace_add("write", update_readout)
+            update_readout()
+
+            def snap_scale(value: str) -> None:
+                try:
+                    snapped = minimum + round((float(value) - minimum) / step) * step
+                    variable.set(f"{snapped:.12g}")
+                except (TypeError, ValueError, ZeroDivisionError):
+                    return
+
+            scale = ttk.Scale(
+                wrapper,
+                variable=variable,
+                from_=minimum,
+                to=maximum,
+                orient="horizontal",
+                command=snap_scale,
+                cursor="hand2",
+                takefocus=True,
+            )
+            scale.pack(fill="x", pady=(1, 0))
+            make_label(
+                wrapper,
+                variable=value_var,
+                font=("Segoe UI", 9, "bold"),
+                color=palette["accent"],
+                
+            ).pack(anchor="e")
+            return wrapper
+
+        add_audio_scale("AGC target level", tx_agc_target_var, 0.16, 0.24, 0.01,
+                        lambda value: f"{value:.2f} RMS", 0, 0)
+        add_audio_scale("Microphone gain", tx_mic_gain_var, -6, 6, 1,
+                        lambda value: f"{value:+.0f} dB", 0, 1)
+        add_audio_scale("Bass", tx_bass_var, -4, 4, 1,
+                        lambda value: f"{value:+.0f} dB", 1, 0)
+        add_audio_scale("Treble", tx_treble_var, -4, 4, 1,
+                        lambda value: f"{value:+.0f} dB", 1, 1)
+        add_audio_scale("Presence / clarity", tx_presence_var, -1, 1, 1,
+                        lambda value: f"{value:+.0f} dB", 2, 0)
+        add_audio_scale("Compression / drive", tx_drive_var, 0, 0.025, 0.005,
+                        lambda value: f"{value * 100:.1f}%", 2, 1)
+        add_audio_scale("SSB voice width", tx_ssb_bandwidth_var, 2400, 10000, 100,
+                        lambda value: f"{value / 1000:.1f} kHz", 3, 0)
+        add_audio_scale("SSB low cut", tx_ssb_low_cut_var, 0, 2000, 25,
+                        lambda value: f"{value:.0f} Hz", 3, 1)
+        add_audio_scale("SSB high edge cut", tx_ssb_high_cut_var, 0, 3000, 25,
+                        lambda value: f"{value:.0f} Hz", 4, 0)
+        add_audio_scale("AM / DSB bandwidth", tx_am_bandwidth_var, 3000, 12000, 500,
+                        lambda value: f"{value / 1000:.1f} kHz", 4, 1)
+        nfm_bandwidth_control = add_audio_scale(
+            "NFM transport bandwidth",
+            tx_nfm_transport_bandwidth_var,
+            1_000,
+            20_000,
+            1_000,
+            lambda value: f"{value / 1000:.0f} kHz",
+            5,
+            0,
+        )
+        nfm_profile_frame = ttk.Frame(audio_filter_card)
+        nfm_profile_frame.pack(fill="x", padx=6, pady=6)
+        make_label(
+            nfm_profile_frame,
+            "NFM audio profile",
+            font=("Segoe UI", 9, "bold"),
+            color=palette["mutedForeground"],
+            
+        ).pack(anchor="w", pady=(0, 4))
+        nfm_profile_picker = ttk.Combobox(
+            nfm_profile_frame,
+            textvariable=tx_nfm_profile_var,
+            values=NFM_PROFILES,
+            state="readonly",
+            height=4,
+        )
+        nfm_profile_picker.pack(fill="x", ipady=5)
+        style_tx_combobox(nfm_profile_picker)
+        make_label(
+            nfm_profile_frame,
+            "Wide opens the voice band to 3 kHz and increases the estimated occupied bandwidth to 11 kHz.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            
+            wraplength=400,
+        ).pack(anchor="w", pady=(4, 0))
+
+        def update_nfm_bandwidth_visibility(*_args) -> None:
+            if tx_mode_var.get().strip().upper() == "NFM":
+                nfm_bandwidth_control.grid()
+                nfm_profile_frame.pack(fill="x", padx=6, pady=6)
+            else:
+                nfm_bandwidth_control.grid_remove()
+                nfm_profile_frame.pack_forget()
+
+        tx_mode_var.trace_add("write", update_nfm_bandwidth_visibility)
+        update_nfm_bandwidth_visibility()
+
+        am_pre_emphasis = ttk.Checkbutton(
+            audio_filter_card,
+            text="AM pre-emphasis (brighter audio)",
+            variable=tx_am_pre_emphasis_var,
+            cursor="hand2",
+            takefocus=True,
+        )
+        am_pre_emphasis.pack(anchor="w", padx=6, pady=(7, 0))
+        make_label(
+            audio_filter_card,
+            "Changes apply automatically during transmission. The signal briefly stops while MultiV rebuilds the active audio path and starts again.",
+            font=("Segoe UI", 9, "normal"),
+            color=palette["mutedForeground"],
+            
+            wraplength=850,
+        ).pack(anchor="w", padx=6, pady=(7, 0))
+
+        audio_card = make_card(page, padding=16)
+        audio_card.pack(fill="x", pady=(0, 12))
         make_label(
             audio_card,
             "Audio input",
@@ -3958,7 +3959,7 @@ def build_app() -> None:
             wraplength=850,
         ).pack(anchor="w", padx=6, pady=(7, 0))
 
-        cw_card = make_card(page, padding=16)
+        cw_card = make_card(txity_output_body, padding=16)
         cw_card.pack(fill="x", pady=(0, 12))
         make_label(
             cw_card,
@@ -3981,7 +3982,7 @@ def build_app() -> None:
         )
         cw_loop.pack(anchor="w", padx=6, pady=(8, 0))
 
-        connect_card = make_card(page, padding=16)
+        connect_card = make_card(txity_output_body, padding=16)
         connect_card.pack(fill="x", pady=(0, 12))
         make_label(
             connect_card,
