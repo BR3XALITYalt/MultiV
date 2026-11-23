@@ -12,6 +12,16 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         cls.source = MAIN_FILE.read_text(encoding="utf-8")
         cls.tree = ast.parse(cls.source)
 
+    def test_connection_status_uses_plain_connected_label(self):
+        client_source = (MAIN_FILE.parent / "txity_client.py").read_text(encoding="utf-8")
+        self.assertNotIn("receiving live TXITY status", client_source)
+        self.assertIn('"text": "Connected"', client_source)
+
+    def test_drm_mode_has_no_experimental_or_support_copy(self):
+        self.assertNotIn("DRM [EXPERIMENTAL]", self.source)
+        self.assertNotIn("DRM mode supports", self.source)
+        self.assertIn('"DRM": "DRM digital radio mode."', self.source)
+
     def test_drain_events_declares_frequency_retry_context_nonlocal(self):
         drain_events = next(
             node
