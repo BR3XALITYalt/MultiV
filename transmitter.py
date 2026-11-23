@@ -951,7 +951,7 @@ class TxityTransmitter:
             self._ptt_sent = False
             self._ptt_requested_at = None
             self._thread = threading.Thread(
-                target=self._run,
+                target=self._run_guarded,
                 args=(
                     dict(config),
                     input_device,
@@ -991,6 +991,29 @@ class TxityTransmitter:
             })
         if wait > 0 and thread and thread is not threading.current_thread():
             thread.join(timeout=wait)
+
+    def _run_guarded(self, *args: Any) -> None:
+        """Ensure failures before _run's main cleanup block cannot wedge the UI."""
+        try:
+            self._run(*args)
+        except Exception as exc:
+            details = traceback.format_exc()
+            with self._lock:
+                self._starting = False
+                self._active = False
+                self._ptt_sent = False
+                self._ptt_requested_at = None
+                self._thread = None
+            self.events.put({
+                "kind": "tx_error",
+                "text": _safe_error(exc),
+                "traceback": details[-16_000:],
+            })
+            self.events.put({
+                "kind": "tx_state",
+                "state": "stopped",
+                "text": "Transmission stopped after a startup or worker error.",
+            })
 
     def _run(
         self,
@@ -2286,9 +2309,14 @@ class TxityTransmitter:
 
             if input_stream is not None:
                 try:
-                    input_stream.stop()
+                    # abort() does not wait for an in-flight audio callback,
+                    # so shutdown cannot stall behind a blocked capture callback.
+                    input_stream.abort()
                 except Exception:
-                    pass
+                    try:
+                        input_stream.stop()
+                    except Exception:
+                        pass
                 try:
                     input_stream.close()
                 except Exception:
@@ -2296,7 +2324,10 @@ class TxityTransmitter:
 
             if loopback_stream is not None:
                 try:
-                    if loopback_stream.is_active():
+                    abort = getattr(loopback_stream, "abort", None)
+                    if callable(abort):
+                        abort()
+                    elif loopback_stream.is_active():
                         loopback_stream.stop_stream()
                 except Exception:
                     pass
