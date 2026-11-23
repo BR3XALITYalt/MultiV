@@ -1482,7 +1482,7 @@ def build_app() -> None:
 
         if config.get("_txitpyMode") == "DRM" and audio_source == "loopback":
             raise ValueError(
-                "DRM mode supports microphone and playlist inputs, not desktop audio loopback."
+                "Desktop audio loopback is unavailable with DRM. Select a microphone or playlist."
             )
 
         txity_enabled = bool(txity_output_enabled_var.get())
