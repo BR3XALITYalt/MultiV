@@ -165,7 +165,7 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIn('"audio_format": selected_server_format', self.source)
         self.assertIn('"bitrate_kbps": built_in_server_bitrate', self.source)
         self.assertIn('("ogg_opus", "ogg_vorbis", "aac_plus", "ogg_flac", "mp3")', self.source)
-        self.assertIn('text="Bitrate (kbps)"', self.source)
+        self.assertIn('"Bitrate (kbps)"', self.source)
 
     def test_embedded_icecast_server_settings_are_saved_and_passed_to_transmitter(self):
         for setting in (
