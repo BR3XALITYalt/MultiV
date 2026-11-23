@@ -23,7 +23,7 @@ class EmbeddedIcecastServerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             EmbeddedIcecastServer(port=0)
         with self.assertRaises(ValueError):
-            EmbeddedIcecastServer(mount="live.mp3")
+            EmbeddedIcecastServer(mount="/bad mount")
         with self.assertRaises(ValueError):
             EmbeddedIcecastServer(max_listeners=0)
 
