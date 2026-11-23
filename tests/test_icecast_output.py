@@ -140,6 +140,20 @@ class IcecastDestinationTests(unittest.TestCase):
         self.assertEqual(destination.packets.get_nowait(), b"second")
         self.assertEqual(destination.packets.get_nowait(), b"third")
 
+    def test_encoded_packet_is_fanned_out_to_every_destination(self):
+        broadcaster = IcecastBroadcaster(
+            [
+                {"url": "http://radio-one.example/live", "password": "one"},
+                {"url": "http://radio-two.example/live", "password": "two"},
+            ],
+            events=queue.Queue(),
+        )
+        broadcaster._fanout(b"mp3-frame")
+        self.assertEqual(
+            [destination.packets.get_nowait() for destination in broadcaster._destinations],
+            [b"mp3-frame", b"mp3-frame"],
+        )
+
     def test_broadcaster_validates_bitrate_and_destinations(self):
         with self.assertRaisesRegex(ValueError, "at least one"):
             IcecastBroadcaster([], events=queue.Queue())
