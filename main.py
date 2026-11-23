@@ -4053,9 +4053,9 @@ def build_app() -> None:
             wraplength=850,
         ).pack(anchor="w", pady=(0, 8))
 
-        # Put input selection and output routing first in the transmit workflow.
-        audio_card.pack_configure(before=station_card)
-        icecast_card.pack_configure(before=station_card)
+        # Both cards are siblings inside the scrollable page. Put audio input
+        # before the output-destinations card without crossing widget parents.
+        audio_card.pack_configure(before=icecast_card)
 
     def show_station_detail(parent: ttk.Frame) -> None:
         row = next(
