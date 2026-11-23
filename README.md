@@ -71,7 +71,7 @@ See the [audio and playlist guide](wiki/Audio-Sources.md) for supported formats 
 
 ## Icecast outputs
 
-Add up to eight Icecast destinations on the **Transmit** page. Each destination uses its server URL and mountpoint, source username, and source password. MultiV sends mono MP3 at 48 kHz to every enabled destination. Select 64, 96, 128, 160, 192, 256, or 320 kbps.
+Add up to eight Icecast destinations on the **Transmit** page. Each destination uses its server URL and mountpoint, source username, and source password. Choose a format and bitrate separately for every destination. Available formats depend on the encoders in the installed FFmpeg/PyAV build: MP3, AAC+ (HE-AAC), Ogg Vorbis, Ogg Opus, and Ogg FLAC. Ogg FLAC is lossless and has no bitrate setting.
 
 Icecast output runs alongside the TXITY transmission and uses the selected microphone, desktop-audio, or playlist source. It is unavailable in DRM and CW modes. Each server reconnects independently if its connection drops. See the [Icecast output guide](wiki/Icecast-Outputs.md) for configuration and connection details.
 
