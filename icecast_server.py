@@ -1,7 +1,7 @@
-"""Embedded Icecast-compatible MP3 listener server.
+"""Embedded Icecast-compatible listener server for encoded audio streams.
 
-The server exposes an HTTP audio mount for standard streaming players. Audio is
-published directly from MultiV's shared MP3 encoder, without a second encode.
+The server exposes one HTTP mount and receives packets from MultiV's shared
+format-specific Icecast encoder.
 """
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlsplit
+
+from icecast_output import ICECAST_BITRATES, ICECAST_FORMATS
 
 
 class _Listener:
@@ -50,7 +52,7 @@ class _Listener:
 
 
 class EmbeddedIcecastServer:
-    """Small embedded HTTP streaming server for one MP3 mountpoint."""
+    """Small embedded HTTP streaming server for one encoded audio mountpoint."""
 
     def __init__(
         self,
@@ -62,6 +64,7 @@ class EmbeddedIcecastServer:
         description: str = "",
         listener_password: str = "",
         max_listeners: int = 25,
+        audio_format: str = "mp3",
         bitrate_kbps: int = 128,
         events: Any = None,
     ) -> None:
@@ -72,9 +75,22 @@ class EmbeddedIcecastServer:
         self.description = self._header(description)
         self.listener_password = str(listener_password or "")
         self.max_listeners = int(max_listeners)
-        self.bitrate_kbps = int(bitrate_kbps)
-        if self.bitrate_kbps not in {64, 96, 128, 160, 192, 256, 320}:
-            raise ValueError("Built-in Icecast MP3 bitrate is invalid.")
+        self.audio_format = str(audio_format or "mp3").strip().casefold()
+        if self.audio_format not in ICECAST_FORMATS:
+            raise ValueError("Built-in Icecast audio format is not supported.")
+        if ICECAST_FORMATS[self.audio_format].get("lossless"):
+            self.bitrate_kbps = 0
+        else:
+            try:
+                self.bitrate_kbps = int(bitrate_kbps)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Built-in Icecast bitrate must be a whole number.") from exc
+            if self.bitrate_kbps not in ICECAST_BITRATES:
+                raise ValueError("Built-in Icecast bitrate is invalid.")
+            if self.audio_format == "aac_plus" and self.bitrate_kbps > 128:
+                raise ValueError("AAC+ bitrate must be 128 kbps or lower.")
+            if self.audio_format == "ogg_opus" and self.bitrate_kbps < 48:
+                raise ValueError("Ogg Opus bitrate must be at least 48 kbps.")
         self.events = events
         if not 1 <= self.port <= 65535:
             raise ValueError("Embedded Icecast port must be between 1 and 65535.")
@@ -147,12 +163,16 @@ class EmbeddedIcecastServer:
                     owner._emit("Listener connected", f"{len(owner._listeners)} listener(s)")
                 try:
                     self.send_response(200)
-                    self.send_header("Content-Type", "audio/mpeg")
+                    self.send_header(
+                        "Content-Type",
+                        ICECAST_FORMATS[owner.audio_format]["content_type"],
+                    )
                     self.send_header("Cache-Control", "no-cache, no-store")
                     self.send_header("Connection", "close")
                     self.send_header("icy-name", owner.name)
                     self.send_header("icy-description", owner.description)
-                    self.send_header("icy-br", str(owner.bitrate_kbps))
+                    if owner.bitrate_kbps:
+                        self.send_header("icy-br", str(owner.bitrate_kbps))
                     self.send_header("icy-pub", "0")
                     self.end_headers()
                     while not owner._stopping.is_set() and not listener.closed.is_set():
