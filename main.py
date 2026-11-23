@@ -3050,7 +3050,7 @@ def build_app() -> None:
             password_var = tk.StringVar(dialog, str(existing.get("password") or ""))
             enabled_var = tk.BooleanVar(dialog, bool(existing.get("enabled", True)))
 
-            def add_dialog_field(label_text: str, variable: tk.StringVar, row: int, *, secret: bool = False) -> None:
+            def add_dialog_field(label_text: str, variable: tk.StringVar, row: int, *, secret: bool = False) -> tk.Entry:
                 make_label(
                     fields,
                     label_text,
