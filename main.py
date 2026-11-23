@@ -49,7 +49,12 @@ from transmitter import (
     list_loopback_devices,
     parse_rf_frequency,
 )
-from icecast_output import ICECAST_BITRATES, normalize_icecast_destination
+from icecast_output import (
+    ICECAST_BITRATES,
+    ICECAST_FORMATS,
+    available_icecast_formats,
+    normalize_icecast_destination,
+)
 from web_gui import TxityWebGUI, create_password_record
 from station_directory import (
     Station,
@@ -3120,9 +3125,13 @@ def build_app() -> None:
                         name = url or "Incomplete destination"
                     enabled = bool(destination.get("enabled", True))
                     state = tx_icecast_states.get(name, "Not connected")
+                    audio_format = str(destination.get("format") or "mp3")
+                    format_label = ICECAST_FORMATS.get(audio_format, {}).get("label", "MP3")
+                    bitrate = str(destination.get("bitrate") or "128")
+                    detail = "lossless" if audio_format == "ogg_flac" else f"{bitrate} kbps"
                     icecast_listbox.insert(
                         tk.END,
-                        f'{"Enabled" if enabled else "Disabled"}  |  {name}  |  {state}',
+                        f'{"Enabled" if enabled else "Disabled"}  |  {name}  |  {format_label} {detail}  |  {state}',
                     )
                 if not icecast_destinations:
                     icecast_listbox.insert(tk.END, "No destinations configured")
@@ -3164,6 +3173,13 @@ def build_app() -> None:
             username_var = tk.StringVar(dialog, str(existing.get("username") or "source"))
             password_var = tk.StringVar(dialog, str(existing.get("password") or ""))
             enabled_var = tk.BooleanVar(dialog, bool(existing.get("enabled", True)))
+            available_formats = available_icecast_formats()
+            format_labels = {label: key for key, label in available_formats.items()}
+            selected_format = str(existing.get("format") or "mp3")
+            if selected_format not in available_formats:
+                selected_format = "mp3"
+            format_var = tk.StringVar(dialog, available_formats.get(selected_format, "MP3"))
+            bitrate_var = tk.StringVar(dialog, str(existing.get("bitrate") or "128"))
 
             def add_dialog_field(label_text: str, variable: tk.StringVar, row: int, *, secret: bool = False) -> tk.Entry:
                 make_label(
@@ -3194,6 +3210,56 @@ def build_app() -> None:
             add_dialog_field("Server URL including mountpoint", url_var, 0)
             add_dialog_field("Source username", username_var, 1)
             password_entry = add_dialog_field("Source password", password_var, 2, secret=True)
+
+            make_label(
+                fields,
+                "Audio format",
+                font=("Segoe UI", 9, "bold"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).grid(row=6, column=0, sticky="w", pady=(8, 4))
+            format_picker = ttk.Combobox(
+                fields,
+                textvariable=format_var,
+                values=tuple(available_formats.values()),
+                state="readonly",
+                width=50,
+            )
+            format_picker.grid(row=7, column=0, sticky="ew")
+            style_tx_combobox(format_picker)
+
+            make_label(
+                fields,
+                "Bitrate (kbps)",
+                font=("Segoe UI", 9, "bold"),
+                color=palette["onSurfaceVariant"],
+                background=palette["surfaceContainerLow"],
+            ).grid(row=8, column=0, sticky="w", pady=(8, 4))
+            bitrate_picker = ttk.Combobox(
+                fields,
+                textvariable=bitrate_var,
+                values=tuple(str(value) for value in ICECAST_BITRATES),
+                state="readonly",
+                width=50,
+            )
+            bitrate_picker.grid(row=9, column=0, sticky="ew")
+            style_tx_combobox(bitrate_picker)
+
+            def update_format_controls(*_args) -> None:
+                format_key = format_labels.get(format_var.get(), "mp3")
+                if format_key == "ogg_flac":
+                    bitrate_var.set("0")
+                    bitrate_picker.configure(state="disabled")
+                else:
+                    if bitrate_var.get() not in {str(value) for value in ICECAST_BITRATES}:
+                        bitrate_var.set("128")
+                    bitrate_picker.configure(state="readonly")
+                if format_key == "aac_plus" and int(bitrate_var.get() or 128) > 128:
+                    bitrate_var.set("128")
+
+            format_var.trace_add("write", update_format_controls)
+            update_format_controls()
+
             tk.Checkbutton(
                 fields,
                 text="Enable this destination",
@@ -3204,7 +3270,7 @@ def build_app() -> None:
                 activeforeground=palette["onSurface"],
                 selectcolor=palette["surfaceContainerLowest"],
                 font=("Segoe UI", 9),
-            ).grid(row=6, column=0, sticky="w", pady=(12, 4))
+            ).grid(row=10, column=0, sticky="w", pady=(12, 4))
 
             make_label(
                 fields,
@@ -3213,7 +3279,7 @@ def build_app() -> None:
                 color=palette["onSurfaceVariant"],
                 background=palette["surfaceContainerLow"],
                 wraplength=430,
-            ).grid(row=7, column=0, sticky="w", pady=(4, 12))
+            ).grid(row=11, column=0, sticky="w", pady=(4, 12))
 
             def save_destination() -> None:
                 candidate = {
@@ -3221,6 +3287,8 @@ def build_app() -> None:
                     "username": username_var.get().strip() or "source",
                     "password": password_var.get(),
                     "enabled": bool(enabled_var.get()),
+                    "format": format_labels.get(format_var.get(), "mp3"),
+                    "bitrate": bitrate_var.get(),
                 }
                 if candidate["enabled"]:
                     try:
@@ -3267,7 +3335,7 @@ def build_app() -> None:
                 dialog.destroy()
 
             actions = tk.Frame(fields, bg=palette["surfaceContainerLow"])
-            actions.grid(row=8, column=0, sticky="e")
+            actions.grid(row=12, column=0, sticky="e")
             make_button(
                 actions,
                 "Cancel",
@@ -3359,7 +3427,7 @@ def build_app() -> None:
         bitrate_frame.pack(side="right")
         make_label(
             bitrate_frame,
-            "MP3 bitrate",
+            "Built-in MP3 bitrate",
             font=("Segoe UI", 9, "bold"),
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
