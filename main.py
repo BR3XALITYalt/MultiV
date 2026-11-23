@@ -973,7 +973,7 @@ def build_app() -> None:
         build_shell()
 
     def open_station(station_id: str) -> None:
-        nonlocal selected_station_id, current_page
+        nonlocal selected_station_id, current_page, active_scroll_canvas
         selected_station_id = station_id
         if shell_built and "station_detail" in page_frames:
             detail_frame = page_frames["station_detail"]
