@@ -880,6 +880,7 @@ class TxityTransmitter:
         icecast_destinations: list[dict[str, Any]] | None = None,
         icecast_bitrate_kbps: int = 128,
         icecast_server_settings: dict[str, Any] | None = None,
+        txity_enabled: bool = True,
     ) -> None:
         selected_source = str(audio_source or "mic").casefold()
         if selected_source not in SUPPORTED_AUDIO_SOURCES:
@@ -891,10 +892,24 @@ class TxityTransmitter:
         selected_playlist = collect_audio_files(playlist_files or [])
         if selected_source == "playlist" and not selected_playlist:
             raise ValueError("Add at least one supported audio file to the playlist.")
+        selected_txity_enabled = bool(txity_enabled)
         selected_icecast_destinations = [
             normalize_icecast_destination(item)
             for item in (icecast_destinations or [])
         ]
+        selected_icecast_server_settings = dict(icecast_server_settings or {})
+        icecast_output_enabled = bool(
+            selected_icecast_destinations
+            or selected_icecast_server_settings.get("enabled")
+        )
+        selected_mode = str(config.get("_txitpyMode") or config.get("mode") or "").upper()
+        if not selected_txity_enabled and not icecast_output_enabled:
+            raise ValueError("Enable TXITY or at least one Icecast output before starting.")
+        if not selected_txity_enabled and (
+            selected_mode in {"CW", "DRM", "RADE"}
+            or str(config.get("mode") or "").upper() == "CW"
+        ):
+            raise ValueError("Icecast-only output requires a standard audio mode, not CW, DRM, or RADE.")
         try:
             selected_icecast_bitrate = int(icecast_bitrate_kbps)
         except (TypeError, ValueError) as exc:
@@ -932,7 +947,8 @@ class TxityTransmitter:
                     bool(playlist_loop),
                     selected_icecast_destinations,
                     selected_icecast_bitrate,
-                    dict(icecast_server_settings or {}),
+                    selected_icecast_server_settings,
+                    selected_txity_enabled,
                 ),
                 daemon=True,
                 name="txity-transmitter",
@@ -940,7 +956,11 @@ class TxityTransmitter:
             self.events.put({
                 "kind": "tx_state",
                 "state": "starting",
-                "text": "Preparing the TXITY transmission connection...",
+                "text": (
+                    "Preparing the TXITY transmission connection..."
+                    if selected_txity_enabled
+                    else "Preparing Icecast output..."
+                ),
             })
             self._thread.start()
 
@@ -969,6 +989,7 @@ class TxityTransmitter:
         icecast_destinations: list[dict[str, Any]],
         icecast_bitrate_kbps: int,
         icecast_server_settings: dict[str, Any],
+        txity_enabled: bool,
     ) -> None:
         import numpy as np
         import websocket
@@ -1267,20 +1288,23 @@ class TxityTransmitter:
             key: value for key, value in config.items()
             if not key.startswith("_txitpy")
         }
-        control_endpoints = [("TXITY", self.client, server_config)]
-        self.events.put({
-            "kind": "tx_log",
-            "text": (
-                "TXITY config request: "
-                f"rfHz={server_config.get('rfHz')}, "
-                f"mode={server_config.get('mode')}, "
-                f"allowOverlapVisitors={server_config.get('allowOverlapVisitors')}."
-            ),
-        })
+        control_endpoints = [("TXITY", self.client, server_config)] if txity_enabled else []
+        if txity_enabled:
+            self.events.put({
+                "kind": "tx_log",
+                "text": (
+                    "TXITY config request: "
+                    f"rfHz={server_config.get('rfHz')}, "
+                    f"mode={server_config.get('mode')}, "
+                    f"allowOverlapVisitors={server_config.get('allowOverlapVisitors')}."
+                ),
+            })
         control_wait_reported = False
 
         def wait_for_control_connection() -> bool:
             nonlocal control_wait_reported
+            if not txity_enabled:
+                return not self._stop_event.is_set()
             while not self._stop_event.is_set():
                 if self.client.control_connected():
                     if control_wait_reported:
@@ -1385,7 +1409,8 @@ class TxityTransmitter:
                             description=str(config.get("stationDescription") or ""),
                             listener_password=str(icecast_server_settings.get("listener_password") or ""),
                             max_listeners=int(icecast_server_settings.get("max_listeners", 25)),
-                            bitrate_kbps=icecast_bitrate_kbps,
+                            audio_format=str(icecast_server_settings.get("audio_format") or "ogg_opus"),
+                            bitrate_kbps=int(icecast_server_settings.get("bitrate_kbps", icecast_bitrate_kbps)),
                             events=self.events,
                         )
                     icecast_broadcaster = IcecastBroadcaster(
@@ -1774,105 +1799,106 @@ class TxityTransmitter:
                 "playlist": "playlist audio",
             }.get(audio_source, "microphone audio")
             while not self._stop_event.is_set():
-                if not self.client.control_connected():
-                    if not control_disconnect_reported:
+                if txity_enabled:
+                    if not self.client.control_connected():
+                        if not control_disconnect_reported:
+                            self.events.put({
+                                "kind": "tx_log",
+                                "text": "TXITY control connection interrupted; holding the audio stream until it reconnects.",
+                            })
+                            control_disconnect_reported = True
+                        control_configured = False
+                        self._stop_event.wait(0.25)
+                        continue
+
+                    if control_disconnect_reported:
                         self.events.put({
                             "kind": "tx_log",
-                            "text": "TXITY control connection interrupted; holding the audio stream until it reconnects.",
+                            "text": "TXITY control connection restored; restoring transmission.",
                         })
-                        control_disconnect_reported = True
-                    control_configured = False
-                    self._stop_event.wait(0.25)
-                    continue
+                        control_disconnect_reported = False
 
-                if control_disconnect_reported:
-                    self.events.put({
-                        "kind": "tx_log",
-                        "text": "TXITY control connection restored; restoring transmission.",
-                    })
-                    control_disconnect_reported = False
+                    current_generation = getattr(self.client, "control_generation", None)
+                    if (
+                        current_generation is not None
+                        and last_control_generation is not None
+                        and current_generation != last_control_generation
+                    ):
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": "TXITY control session reconnected; rebuilding the audio connection.",
+                        })
+                        control_configured = False
+                        if needs_audio:
+                            close_audio_connection()
 
-                current_generation = getattr(self.client, "control_generation", None)
-                if (
-                    current_generation is not None
-                    and last_control_generation is not None
-                    and current_generation != last_control_generation
-                ):
-                    self.events.put({
-                        "kind": "tx_log",
-                        "text": "TXITY control session reconnected; rebuilding the audio connection.",
-                    })
-                    control_configured = False
-                    if needs_audio:
+                    if needs_audio and not audio_connection_is_open(audio_socket):
+                        if audio_socket is not None:
+                            self.events.put({
+                                "kind": "tx_log",
+                                "text": "TXITY audio WebSocket closed; reopening the connection.",
+                            })
                         close_audio_connection()
+                        audio_socket = open_audio_connection(self.client, "TXITY")
+                        if audio_socket is None:
+                            break
+                        audio_reconnect_attempt = 0
+                        control_configured = False
 
-                if needs_audio and not audio_connection_is_open(audio_socket):
-                    if audio_socket is not None:
-                        self.events.put({
-                            "kind": "tx_log",
-                            "text": "TXITY audio WebSocket closed; reopening the connection.",
-                        })
-                    close_audio_connection()
-                    audio_socket = open_audio_connection(self.client, "TXITY")
-                    if audio_socket is None:
-                        break
-                    audio_reconnect_attempt = 0
-                    control_configured = False
-
-                if not control_configured:
-                    try:
-                        for label, target_client, endpoint_config in control_endpoints:
+                    if not control_configured:
+                        try:
+                            for label, target_client, endpoint_config in control_endpoints:
+                                self.events.put({
+                                    "kind": "tx_log",
+                                    "text": (
+                                        f"Sending {label} configuration: mode={endpoint_config.get('mode')}, "
+                                        f"rfHz={endpoint_config.get('rfHz')}, "
+                                        f"allowOverlapVisitors={endpoint_config.get('allowOverlapVisitors')}."
+                                    ),
+                                })
+                                target_client.send_control_message(endpoint_config)
+                            if self._stop_event.is_set():
+                                break
+                            for label, target_client, _endpoint_config in control_endpoints:
+                                self.events.put({
+                                    "kind": "tx_log",
+                                    "text": f"Sending {label} PTT ON request.",
+                                })
+                                target_client.send_control_message({"type": "ptt", "ptt": True})
+                        except Exception as exc:
+                            control_configured = False
                             self.events.put({
                                 "kind": "tx_log",
                                 "text": (
-                                    f"Sending {label} configuration: mode={endpoint_config.get('mode')}, "
-                                    f"rfHz={endpoint_config.get('rfHz')}, "
-                                    f"allowOverlapVisitors={endpoint_config.get('allowOverlapVisitors')}."
+                                    f"Could not restore TXITY transmission control ({_safe_error(exc)}); "
+                                    "retrying."
                                 ),
                             })
-                            target_client.send_control_message(endpoint_config)
-                        if self._stop_event.is_set():
-                            break
-                        for label, target_client, _endpoint_config in control_endpoints:
+                            self._stop_event.wait(0.5)
+                            continue
+
+                        ptt_sent = True
+                        control_configured = True
+                        last_control_generation = getattr(
+                            self.client, "control_generation", None
+                        )
+                        with self._lock:
+                            self._ptt_sent = True
+                            self._ptt_requested_at = time.monotonic()
+                            self._active = True
+                            self._starting = False
+                        if not transmission_announced:
+                            self.events.put({
+                                "kind": "tx_state",
+                                "state": "transmitting",
+                                "text": "PTT requested; waiting for TXITY status confirmation.",
+                            })
+                            transmission_announced = True
+                        else:
                             self.events.put({
                                 "kind": "tx_log",
-                                "text": f"Sending {label} PTT ON request.",
+                                "text": "TXITY transmission state restored.",
                             })
-                            target_client.send_control_message({"type": "ptt", "ptt": True})
-                    except Exception as exc:
-                        control_configured = False
-                        self.events.put({
-                            "kind": "tx_log",
-                            "text": (
-                                f"Could not restore TXITY transmission control ({_safe_error(exc)}); "
-                                "retrying."
-                            ),
-                        })
-                        self._stop_event.wait(0.5)
-                        continue
-
-                    ptt_sent = True
-                    control_configured = True
-                    last_control_generation = getattr(
-                        self.client, "control_generation", None
-                    )
-                    with self._lock:
-                        self._ptt_sent = True
-                        self._ptt_requested_at = time.monotonic()
-                        self._active = True
-                        self._starting = False
-                    if not transmission_announced:
-                        self.events.put({
-                            "kind": "tx_state",
-                            "state": "transmitting",
-                            "text": "PTT requested; waiting for TXITY status confirmation.",
-                        })
-                        transmission_announced = True
-                    else:
-                        self.events.put({
-                            "kind": "tx_log",
-                            "text": "TXITY transmission state restored.",
-                        })
 
                 if audio_thread_error:
                     raise RuntimeError(audio_thread_error[0])
@@ -2010,30 +2036,31 @@ class TxityTransmitter:
                     if self._stop_event.is_set():
                         break
 
-                try:
-                    audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
-                except Exception as exc:
-                    if self._stop_event.is_set():
-                        break
-                    pending_frame = queued_frame
-                    audio_reconnect_attempt += 1
-                    delay = reconnect_delay(audio_reconnect_attempt)
-                    self.events.put({
-                        "kind": "tx_log",
-                        "text": (
-                            f"TXITY audio stream disconnected ({_safe_error(exc)}). "
-                            f"Reconnecting in {delay:.0f} seconds."
-                        ),
-                    })
-                    close_audio_connection()
-                    control_configured = False
-                    self._stop_event.wait(delay)
-                    continue
-                pending_frame = None
-                audio_reconnect_attempt = 0
+                if txity_enabled:
+                    try:
+                        audio_socket.send(frame, opcode=websocket.ABNF.OPCODE_BINARY)
+                    except Exception as exc:
+                        if self._stop_event.is_set():
+                            break
+                        pending_frame = queued_frame
+                        audio_reconnect_attempt += 1
+                        delay = reconnect_delay(audio_reconnect_attempt)
+                        self.events.put({
+                            "kind": "tx_log",
+                            "text": (
+                                f"TXITY audio stream disconnected ({_safe_error(exc)}). "
+                                f"Reconnecting in {delay:.0f} seconds."
+                            ),
+                        })
+                        close_audio_connection()
+                        control_configured = False
+                        self._stop_event.wait(delay)
+                        continue
+                    pending_frame = None
+                    audio_reconnect_attempt = 0
                 audio_frames_sent += 1
                 progress_now = time.monotonic()
-                if audio_frames_sent == 1:
+                if txity_enabled and audio_frames_sent == 1:
                     self.events.put({
                         "kind": "tx_log",
                         "text": (
@@ -2043,7 +2070,7 @@ class TxityTransmitter:
                         ),
                     })
                     last_audio_progress_at = progress_now
-                elif progress_now - last_audio_progress_at >= 30.0:
+                elif txity_enabled and progress_now - last_audio_progress_at >= 30.0:
                     audio_duration = audio_frames_sent * AUDIO_FRAME_INTERVAL_SECONDS
                     self.events.put({
                         "kind": "tx_log",
