@@ -1529,18 +1529,29 @@ class TxityTransmitter:
                         **drm_metadata,
                     )
 
-            self.client.transmission_credentials()
-
-            if not wait_for_control_connection():
-                return
-            last_control_generation = getattr(
-                self.client, "control_generation", None
-            )
+            if txity_enabled:
+                self.client.transmission_credentials()
+                if not wait_for_control_connection():
+                    return
+                last_control_generation = getattr(
+                    self.client, "control_generation", None
+                )
+            else:
+                with self._lock:
+                    self._active = True
+                    self._starting = False
+                self.events.put({
+                    "kind": "tx_state",
+                    "state": "transmitting",
+                    "text": "Icecast output is active.",
+                })
+                transmission_announced = True
 
             if needs_audio:
-                audio_socket = open_audio_connection(self.client, "TXITY")
-                if audio_socket is None:
-                    return
+                if txity_enabled:
+                    audio_socket = open_audio_connection(self.client, "TXITY")
+                    if audio_socket is None:
+                        return
 
                 if audio_source == "loopback" and not drm_mode:
                     if input_device is None:
