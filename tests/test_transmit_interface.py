@@ -137,7 +137,10 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
 
     def test_icecast_destination_management_is_available_on_transmit_page(self):
         self.assertIn('icecast_card = make_card(page, padding=16)', self.source)
-        self.assertIn('"Icecast outputs"', self.source)
+        self.assertIn('"Output destinations"', self.source)
+        self.assertIn('"TXITY virtual transmitter"', self.source)
+        self.assertIn('"Remote Icecast servers"', self.source)
+        self.assertIn('"Audio input"', self.source)
         self.assertIn('def edit_icecast_destination(', self.source)
         self.assertIn('def add_icecast_destination(', self.source)
         self.assertIn('def remove_selected_icecast_destination(', self.source)
