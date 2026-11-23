@@ -21,7 +21,7 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         transmitter_source = (MAIN_FILE.parent / "transmitter.py").read_text(encoding="utf-8")
         self.assertNotIn("DRM [EXPERIMENTAL]", self.source)
         self.assertNotIn("DRM [EXPERIMENTAL]", transmitter_source)
-        self.assertNotIn("DRM mode supports", self.source)
+        self.assertIn("Desktop audio loopback is unavailable with DRM", self.source)
         self.assertIn('"DRM": "DRM digital radio mode."', self.source)
 
     def test_drain_events_declares_frequency_retry_context_nonlocal(self):
