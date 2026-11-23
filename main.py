@@ -2609,26 +2609,15 @@ def build_app() -> None:
             color=palette["onSurfaceVariant"],
             background=palette["surfaceContainerLow"],
         ).pack(anchor="w", pady=(0, 6))
-        power_scale = tk.Scale(
+        power_scale = ttk.Scale(
             power_frame,
             variable=tx_power_var,
             from_=-140,
             to=53,
-            resolution=1,
             orient="horizontal",
-            showvalue=True,
-            highlightthickness=2,
-            highlightbackground=palette["surfaceContainerLow"],
-            highlightcolor=palette["primary"],
+            command=lambda value: tx_power_var.set(str(round(float(value)))),
             cursor="hand2",
             takefocus=True,
-            borderwidth=0,
-            relief="flat",
-            bg=palette["surfaceContainerLow"],
-            fg=palette["onSurface"],
-            troughcolor=palette["surfaceContainerHighest"],
-            activebackground=palette["primary"],
-            font=("Segoe UI", 9),
         )
         power_scale.pack(fill="x", expand=True, pady=(1, 0))
         make_label(
@@ -2797,26 +2786,23 @@ def build_app() -> None:
                     value_var.set("Invalid value")
             variable.trace_add("write", update_readout)
             update_readout()
-            scale = tk.Scale(
+
+            def snap_scale(value: str) -> None:
+                try:
+                    snapped = minimum + round((float(value) - minimum) / step) * step
+                    variable.set(f"{snapped:.12g}")
+                except (TypeError, ValueError, ZeroDivisionError):
+                    return
+
+            scale = ttk.Scale(
                 wrapper,
                 variable=variable,
                 from_=minimum,
                 to=maximum,
-                resolution=step,
                 orient="horizontal",
-                showvalue=False,
-                highlightthickness=2,
-                highlightbackground=palette["surfaceContainerLow"],
-                highlightcolor=palette["primary"],
+                command=snap_scale,
                 cursor="hand2",
                 takefocus=True,
-                borderwidth=0,
-                relief="flat",
-                bg=palette["surfaceContainerLow"],
-                fg=palette["onSurface"],
-                troughcolor=palette["surfaceContainerHighest"],
-                activebackground=palette["primary"],
-                font=("Segoe UI", 9),
             )
             scale.pack(fill="x", pady=(1, 0))
             make_label(
