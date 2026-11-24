@@ -32,7 +32,7 @@ def _multiv_palette(mode: str) -> dict[str, str]:
 
 def register_ttkbootstrap_themes(style) -> None:
     """Register separate light and dark themes with the exact MultiV color roles."""
-    from ttkbootstrap import Colors, ThemeDefinition
+    from ttkbootstrap.style import Colors, ThemeDefinition
 
     for mode in ("light", "dark"):
         palette = _multiv_palette(mode)
