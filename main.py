@@ -106,8 +106,9 @@ def _system_theme_mode() -> str:
 
 def build_app() -> None:
     import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox
-    from sun_valley_theme import apply_tk_theme
+    import ttkbootstrap as ttk
+    from tkinter import filedialog, messagebox
+    from multiv_theme import apply_ttkbootstrap_theme, register_ttkbootstrap_themes
     client = TxityClient()
     auth_manager = DiscordAuthManager(client.events)
     transmitter = TxityTransmitter(client, client.events)
@@ -115,12 +116,14 @@ def build_app() -> None:
     theme_mode = "dark"
 
     root = tk.Tk()
+    theme_style = ttk.Style(master=root)
+    register_ttkbootstrap_themes(theme_style)
     try:
         root._multiv_icon = tk.PhotoImage(file=str(asset_path("logo.png")))
         root.iconphoto(True, root._multiv_icon)
     except (tk.TclError, OSError):
         pass
-    palette = apply_tk_theme(root, theme_mode)
+    palette = apply_ttkbootstrap_theme(root, theme_style, theme_mode)
     root.title("MultiV")
     root.geometry("1180x790")
     root.minsize(900, 650)
@@ -527,7 +530,7 @@ def build_app() -> None:
 
     tx_power_var.trace_add("write", update_tx_power_readout)
     update_tx_power_readout()
-    tx_transmit_button: tk.Button | None = None
+    tx_transmit_button: ttk.Button | None = None
 
     discord_authenticated = False
     auth_restore_started = False
@@ -544,7 +547,7 @@ def build_app() -> None:
     frequency_retry_context: dict[str, Any] | None = None
     station_search_var = tk.StringVar(root, "")
     station_cards_frame: ttk.Frame | None = None
-    station_directory_window: tk.Toplevel | None = None
+    station_directory_window: ttk.Toplevel | None = None
     selected_station_id = ""
     image_cache: dict[tuple[str, int], Any] = {}
     image_loading: set[str] = set()
@@ -555,14 +558,14 @@ def build_app() -> None:
     nav_frame: ttk.Frame | None = None
     theme_button: Any = None
     page_frames: dict[str, ttk.Frame] = {}
-    page_canvases: dict[str, tk.Canvas | None] = {}
+    page_canvases: dict[str, ttk.Canvas | None] = {}
     nav_buttons: dict[str, Any] = {}
     shell_built = False
-    active_scroll_canvas: tk.Canvas | None = None
+    active_scroll_canvas: ttk.Canvas | None = None
     SCROLL_PIXELS_PER_NOTCH = 96
     SCROLL_UNIT_PIXELS = 1
     SCROLL_FRAME_INTERVAL_MS = 16
-    scroll_canvases: list[tk.Canvas] = []
+    scroll_canvases: list[ttk.Canvas] = []
     pending_scroll = {
         "pixels": 0.0,
         "after_id": None,
@@ -634,7 +637,7 @@ def build_app() -> None:
 
     def apply_current_theme() -> None:
         nonlocal palette
-        palette = apply_tk_theme(root, theme_mode)
+        palette = apply_ttkbootstrap_theme(root, theme_style, theme_mode)
         root.configure(background=palette["background"])
 
     def make_label(
@@ -671,12 +674,12 @@ def build_app() -> None:
         kind: str = "primary",
         padx: int = 16,
         pady: int = 9,
-    ) -> ttk.Button:
-        return ttk.Button(
+    ) -> tttk.Button:
+        return tttk.Button(
             parent,
             text=text,
             command=command,
-            style="Accent.TButton" if kind == "primary" else "TButton",
+            style="primary.TButton" if kind == "primary" else "TButton",
             padding=(padx, pady),
             cursor="hand2",
         )
@@ -820,10 +823,7 @@ def build_app() -> None:
         if card_root:
             widget.configure(
                 takefocus=True,
-                highlightthickness=2,
-                highlightbackground=palette["outline"],
-                highlightcolor=palette["accent"],
-            )
+                        )
 
             def open_with_keyboard(_event=None, target=station_id):
                 open_station(target)
@@ -1227,11 +1227,10 @@ def build_app() -> None:
             wraplength=440,
         ).pack(anchor="w", pady=(20, 0))
 
-    def create_scrollable_page(parent: ttk.Frame) -> tuple[ttk.Frame, tk.Canvas]:
+    def create_scrollable_page(parent: ttk.Frame) -> tuple[ttk.Frame, ttk.Canvas]:
         nonlocal active_scroll_canvas
-        canvas = tk.Canvas(
+        canvas = ttk.Canvas(
             parent,
-            background=palette["background"],
             highlightthickness=0,
             borderwidth=0,
             yscrollincrement=SCROLL_UNIT_PIXELS,
@@ -1343,12 +1342,11 @@ def build_app() -> None:
                 pass
 
         previous_canvas = active_scroll_canvas
-        dialog = tk.Toplevel(root)
+        dialog = ttk.Toplevel(root)
         station_directory_window = dialog
         dialog.title("TXITY station directory")
         dialog.geometry("980x700")
         dialog.minsize(720, 480)
-        dialog.configure(background=palette["background"])
         dialog.transient(root)
         show_stations(dialog)
 
@@ -2160,8 +2158,8 @@ def build_app() -> None:
         output_rows_container.pack(fill="x")
         output_row_widgets: dict[str, ttk.LabelFrame] = {}
         output_row_bodies: dict[str, ttk.Frame] = {}
-        output_row_title_buttons: dict[str, ttk.Button] = {}
-        output_row_menus: dict[str, tk.Menu] = {}
+        output_row_title_buttons: dict[str, tttk.Button] = {}
+        output_row_menus: dict[str, ttk.Menu] = {}
         output_row_expanded = {"txity": True, "icecast": True}
 
         def refresh_output_order() -> None:
@@ -2224,8 +2222,8 @@ def build_app() -> None:
             row = ttk.LabelFrame(output_rows_container, padding=8)
             header = ttk.Frame(row)
             header.pack(fill="x")
-            menu_button = ttk.Menubutton(header, text="\u2261", direction="below")
-            menu = tk.Menu(menu_button, tearoff=False)
+            menu_button = tttk.Menubutton(header, text="\u2261", direction="below")
+            menu = ttk.Menu(menu_button, tearoff=False)
             menu.add_command(
                 label="Move up",
                 command=lambda: move_output_provider(provider_name, -1),
@@ -2238,7 +2236,7 @@ def build_app() -> None:
             menu_button.pack(side="left", padx=(0, 8))
             output_row_menus[provider_name] = menu
 
-            title_button = ttk.Button(
+            title_button = tttk.Button(
                 header,
                 text=title + "  \u25be",
                 command=lambda: toggle_output_provider_body(provider_name),
@@ -2403,18 +2401,11 @@ def build_app() -> None:
             icecast_output_body,
         )
         icecast_list_frame.pack(fill="x")
-        icecast_listbox = tk.Listbox(
+        icecast_listbox = ttk.Listbox(
             icecast_list_frame,
             height=4,
             exportselection=False,
             activestyle="none",
-            bg=palette["background"],
-            fg=palette["foreground"],
-            selectbackground=palette["selectionBackground"],
-            selectforeground=palette["selectionForeground"],
-            highlightthickness=1,
-            highlightbackground=palette["outline"],
-            highlightcolor=palette["accent"],
             relief="flat",
             borderwidth=1,
             font=("Segoe UI", 9),
@@ -2462,12 +2453,11 @@ def build_app() -> None:
                 if index is not None and 0 <= index < len(icecast_destinations)
                 else {}
             )
-            dialog = tk.Toplevel(root)
+            dialog = ttk.Toplevel(root)
             dialog.title("Edit Icecast destination" if existing else "Add Icecast destination")
             dialog.transient(root)
             dialog.resizable(False, False)
-            dialog.configure(background=palette["background"])
-            dialog.grab_set()
+                dialog.grab_set()
 
             fields = ttk.Frame(dialog, padding=(18, 16))
             fields.pack(fill="both", expand=True)
@@ -3703,19 +3693,12 @@ def build_app() -> None:
 
         playlist_list_frame = ttk.Frame(playlist_frame)
         playlist_list_frame.pack(fill="x", pady=(0, 7))
-        playlist_listbox = tk.Listbox(
+        playlist_listbox = ttk.Listbox(
             playlist_list_frame,
             height=7,
             selectmode="extended",
             exportselection=False,
             activestyle="none",
-            bg=palette["background"],
-            fg=palette["foreground"],
-            selectbackground=palette["selectionBackground"],
-            selectforeground=palette["selectionForeground"],
-            highlightthickness=2,
-            highlightbackground=palette["outlineVariant"],
-            highlightcolor=palette["accent"],
             relief="flat",
             borderwidth=1,
             font=("Segoe UI", 9),
@@ -4605,19 +4588,13 @@ def build_app() -> None:
             color=palette["mutedForeground"],
             
         ).pack(anchor="w", pady=(0, 5))
-        details_text = tk.Text(
+        details_text = ttk.Text(
             profile_card,
             height=6,
             wrap="word",
             font=("Segoe UI", 10),
-            bg=palette["background"],
-            fg=palette["foreground"],
-            insertbackground=palette["foreground"],
             relief="flat",
             borderwidth=1,
-            highlightthickness=1,
-            highlightbackground=palette["outline"],
-            highlightcolor=palette["accent"],
         )
         details_text.insert("1.0", tx_details_var.get())
         details_text.pack(fill="x", ipady=5)
@@ -4846,12 +4823,8 @@ def build_app() -> None:
 
             # Keep TXITY actions available without restoring a dedicated
             # TXITY button to the top navigation bar.
-            txity_menu_items = tk.Menu(
+            txity_menu_items = ttk.Menu(
                 topbar, tearoff=False,
-                background=palette["background"],
-                foreground=palette["foreground"],
-                activebackground=palette["selectionBackground"],
-                activeforeground=palette["selectionForeground"],
             )
             txity_menu_items.add_command(
                 label="Station directory",
@@ -4920,7 +4893,7 @@ def build_app() -> None:
         selected_nav = "transmit" if requested == "station_detail" else requested
         for destination, button in nav_buttons.items():
             try:
-                button.configure(style="Accent.TButton" if destination == selected_nav else "TButton")
+                button.configure(style="primary.TButton" if destination == selected_nav else "TButton")
             except tk.TclError:
                 pass
         if theme_button is not None:
