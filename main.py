@@ -674,8 +674,8 @@ def build_app() -> None:
         kind: str = "primary",
         padx: int = 16,
         pady: int = 9,
-    ) -> tttk.Button:
-        return tttk.Button(
+    ) -> ttk.Button:
+        return ttk.Button(
             parent,
             text=text,
             command=command,
@@ -2158,7 +2158,7 @@ def build_app() -> None:
         output_rows_container.pack(fill="x")
         output_row_widgets: dict[str, ttk.LabelFrame] = {}
         output_row_bodies: dict[str, ttk.Frame] = {}
-        output_row_title_buttons: dict[str, tttk.Button] = {}
+        output_row_title_buttons: dict[str, ttk.Button] = {}
         output_row_menus: dict[str, ttk.Menu] = {}
         output_row_expanded = {"txity": True, "icecast": True}
 
@@ -2222,7 +2222,7 @@ def build_app() -> None:
             row = ttk.LabelFrame(output_rows_container, padding=8)
             header = ttk.Frame(row)
             header.pack(fill="x")
-            menu_button = tttk.Menubutton(header, text="\u2261", direction="below")
+            menu_button = ttk.Menubutton(header, text="\u2261", direction="below")
             menu = ttk.Menu(menu_button, tearoff=False)
             menu.add_command(
                 label="Move up",
@@ -2236,7 +2236,7 @@ def build_app() -> None:
             menu_button.pack(side="left", padx=(0, 8))
             output_row_menus[provider_name] = menu
 
-            title_button = tttk.Button(
+            title_button = ttk.Button(
                 header,
                 text=title + "  \u25be",
                 command=lambda: toggle_output_provider_body(provider_name),
