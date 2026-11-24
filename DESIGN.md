@@ -20,7 +20,7 @@ MultiV is a multi-source, multi-stream client for virtual radio simulators. User
 - **Panels:** Use rectangular panels to group related controls or station records. Keep unrelated content on the page surface.
 - **Navigation:** Keep Transmit, Discord, and Settings in the signed-in top bar. Put TXITY website and station-directory actions in a TXITY dropdown menu.
 - **Station records:** Display an image with its station metadata in the separate station-directory window. If no approved image URL is available, show the station name.
-- **Output controls:** Show TXITY and Icecast as separate collapsible rows. Each row has an independent enable toggle and a hamburger menu for moving it up or down. Preserve the selected order and enabled state.
+- **Output controls:** Show TXITY and Icecast as separate collapsible rows. Each row has an independent enable toggle and a drag handle for reordering. Drag a handle to move its row; Up and Down keys provide keyboard reordering. Preserve the selected order and enabled state.
 - **Transmit page:** Keep Start transmission, Stop transmission, and the current status together in the page header. Place playlist actions beside the track list and its shuffle and loop controls.
 - **Advanced settings:** Keep signal fading and audio-processing controls in the collapsed **Advanced settings** section. Keep station, signal, and audio-source controls visible.
 - **Assets:** Use station images only when TXITY or Discord provides an approved URL. Do not invent station logos or profile images. Settings accepts PNG, JPEG, WebP, and GIF uploads.
