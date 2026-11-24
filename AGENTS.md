@@ -27,7 +27,7 @@ Call the application **MultiV**. Use **TXITY** for the service, website, station
 
 ## Interface rules
 
-- Use Sun Valley ttk for all standard interface widgets, including frames, labels, buttons, entries, checkbuttons, scales, and comboboxes. Keep classic Tk widgets only where ttk has no equivalent, such as the scroll canvas, listboxes, and multiline text editor; color those from Sun Valley's native light/dark palette.
+- Use ttkbootstrap for standard interface widgets and its themed Tk equivalents for the scroll canvas, listboxes, multiline text editor, menus, and secondary windows. Keep the existing Sun Valley-compatible light/dark color values in the custom MultiV themes. Use classic Tk widgets only where ttkbootstrap has no compatible equivalent.
 - Keep the browser panel consistent with its current layout. Add gradients, animation, activity indicators, or panels only when they serve a documented purpose.
 - Follow the ENERGY, RHYTHM, and MOTION dials in [DESIGN.md](DESIGN.md). Record the reason for any major visual change.
 - Make controls keyboard-accessible. Give each input a visible label, keep focus visible, and maintain readable contrast. Do not use color as the only status indicator.
