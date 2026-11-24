@@ -80,6 +80,19 @@ class MultiVThemeTests(unittest.TestCase):
         self.assertLess(root_creation, style_creation)
         self.assertNotIn("ttk.Style(master=root)", source)
 
+    def test_buttons_use_ttkbootstrap_rounded_variants(self):
+        source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
+        self.assertIn('bootstyle="primary round" if kind == "primary" else "secondary round"', source)
+        self.assertIn('bootstyle="secondary round"', source)
+
+    def test_mouse_wheel_uses_pixel_based_eased_scrolling(self):
+        source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
+        self.assertIn("SCROLL_PIXELS_PER_NOTCH = 48", source)
+        self.assertIn("SCROLL_EASE_FACTOR = 0.32", source)
+        self.assertIn("SCROLL_MAX_STEP_PIXELS = 36", source)
+        self.assertIn('canvas.yview_scroll(step, "units")', source)
+        self.assertNotIn("canvas.yview_scroll(units, \"units\")", source)
+
     def test_fatal_startup_errors_are_visible_and_fail_nonzero(self):
         source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
         self.assertIn('messagebox.showerror("MultiV could not start", summary)', source)
