@@ -561,7 +561,33 @@ def build_app() -> None:
     active_scroll_canvas: tk.Canvas | None = None
     SCROLL_PIXELS_PER_NOTCH = 96
     SCROLL_UNIT_PIXELS = 1
+    SCROLL_FRAME_INTERVAL_MS = 16
     scroll_canvases: list[tk.Canvas] = []
+    pending_scroll = {
+        "pixels": 0.0,
+        "after_id": None,
+        "canvas": None,
+    }
+
+    def apply_pending_scroll() -> None:
+        # Apply accumulated wheel input at most once per frame. Let Tk process
+        # the resulting paint naturally instead of forcing a synchronous redraw.
+        canvas = pending_scroll["canvas"]
+        scroll_delta = pending_scroll["pixels"]
+        pending_scroll["canvas"] = None
+        pending_scroll["pixels"] = 0.0
+        pending_scroll["after_id"] = None
+
+        if canvas is None or not scroll_delta:
+            return
+
+        try:
+            if canvas.winfo_exists():
+                units = int(round(scroll_delta / SCROLL_UNIT_PIXELS))
+                if units:
+                    canvas.yview_scroll(units, "units")
+        except tk.TclError:
+            return
 
     def scroll_active_canvas(event, direction: int | None = None):
         canvas = active_scroll_canvas
@@ -588,15 +614,17 @@ def build_app() -> None:
                 return
             scroll_delta = -(float(delta) / 120.0) * SCROLL_PIXELS_PER_NOTCH
 
-        units = int(round(scroll_delta / SCROLL_UNIT_PIXELS))
-        if units:
+        pending_scroll["pixels"] += scroll_delta
+        pending_scroll["canvas"] = canvas
+        if pending_scroll["after_id"] is None:
             try:
-                canvas.yview_scroll(units, "units")
-                # Tk batches Canvas redraws as idle work. Flush that work after
-                # each wheel event so a continuous event stream cannot starve
-                # the visible scroll update.
-                canvas.update_idletasks()
+                pending_scroll["after_id"] = root.after(
+                    SCROLL_FRAME_INTERVAL_MS,
+                    apply_pending_scroll,
+                )
             except tk.TclError:
+                pending_scroll["pixels"] = 0.0
+                pending_scroll["canvas"] = None
                 return
         return "break"
 
