@@ -2457,7 +2457,7 @@ def build_app() -> None:
             dialog.title("Edit Icecast destination" if existing else "Add Icecast destination")
             dialog.transient(root)
             dialog.resizable(False, False)
-                dialog.grab_set()
+            dialog.grab_set()
 
             fields = ttk.Frame(dialog, padding=(18, 16))
             fields.pack(fill="both", expand=True)
