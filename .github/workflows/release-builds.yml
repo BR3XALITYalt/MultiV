@@ -29,6 +29,7 @@ jobs:
     outputs:
       app_version: ${{ steps.version.outputs.app_version }}
       release_version: ${{ steps.version.outputs.release_version }}
+      release_title: ${{ steps.version.outputs.release_title }}
     steps:
       - uses: actions/checkout@v7
       - name: Resolve version
