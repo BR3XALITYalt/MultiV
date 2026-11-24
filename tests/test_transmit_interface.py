@@ -59,8 +59,9 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
 
 
     def test_topbar_has_no_txity_dropdown_button(self):
+        # The station-directory context menu is allowed; only a dedicated
+        # TXITY dropdown button in the top bar is prohibited.
         self.assertNotIn('ttk.Menubutton(topbar, text="TXITY', self.source)
-        self.assertNotIn("txity_menu_items", self.source)
 
     def test_scroll_uses_pixel_granularity_and_flushes_idle_redraws(self):
         self.assertIn("SCROLL_UNIT_PIXELS = 1", self.source)
