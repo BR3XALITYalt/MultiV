@@ -5517,6 +5517,21 @@ if __name__ == "__main__":
             f"Exception: {type(exc).__name__}: {safe_error_text(exc)}\n\n"
             f"Traceback:\n{details}"
         )
+        summary = (
+            f"{type(exc).__name__}: {safe_error_text(exc)}\n\n"
+            "MultiV could not open its main window."
+        )
         if log_path is not None:
+            summary += f"\n\nDiagnostic log: {log_path}"
             message += f"\n\nFull diagnostic log: {log_path}"
-        print(message, file=sys.stderr, flush=True)
+
+        # Packaged Windows builds have no console, so stderr alone is not a
+        # useful way to report a startup failure to the person launching it.
+        try:
+            from tkinter import messagebox
+            messagebox.showerror("MultiV could not start", summary)
+        except Exception:
+            if sys.stderr is not None:
+                print(message, file=sys.stderr, flush=True)
+
+        raise SystemExit(1) from exc

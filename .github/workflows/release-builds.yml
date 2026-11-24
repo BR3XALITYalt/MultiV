@@ -293,12 +293,15 @@ jobs:
           }
           Start-Sleep -Seconds 8
           $app.Refresh()
-          if ($app.HasExited -and $app.ExitCode -ne 0) {
-              throw "The installed Windows application exited with code $($app.ExitCode)."
+          $startupLog = Join-Path $installTest "data\logs\application-errors.log"
+          if (Test-Path $startupLog) {
+              Get-Content $startupLog -Tail 100
+              throw "MultiV wrote a startup diagnostic during the launch test."
           }
-          if (-not $app.HasExited) {
-              Stop-Process -Id $app.Id -Force
+          if ($app.HasExited) {
+              throw "MultiV exited during startup with code $($app.ExitCode)."
           }
+          Stop-Process -Id $app.Id -Force
 
           $uninstaller = Join-Path $installTest "unins000.exe"
           if (Test-Path $uninstaller) {
