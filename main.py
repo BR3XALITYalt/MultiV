@@ -117,7 +117,7 @@ def build_app() -> None:
 
     root = tk.Tk()
     theme_style = ttk.Style(master=root)
-    register_ttkbootstrap_themes(theme_style)
+    register_ttkbootstrap_themes()
     try:
         root._multiv_icon = tk.PhotoImage(file=str(asset_path("logo.png")))
         root.iconphoto(True, root._multiv_icon)
@@ -679,7 +679,7 @@ def build_app() -> None:
             parent,
             text=text,
             command=command,
-            style="primary.TButton" if kind == "primary" else "TButton",
+            bootstyle="primary" if kind == "primary" else "secondary",
             padding=(padx, pady),
             cursor="hand2",
         )
@@ -2134,7 +2134,7 @@ def build_app() -> None:
 
         def style_tx_combobox(widget: ttk.Combobox) -> None:
             # Keep the native Sun Valley combobox layout and states.
-            widget.configure(style="TCombobox", font=("Segoe UI", 10))
+            widget.configure(font=("Segoe UI", 10))
             widget.bind("<MouseWheel>", scroll_active_canvas)
             widget.bind("<Button-4>", lambda event: scroll_active_canvas(event, -1))
             widget.bind("<Button-5>", lambda event: scroll_active_canvas(event, 1))
@@ -4893,7 +4893,7 @@ def build_app() -> None:
         selected_nav = "transmit" if requested == "station_detail" else requested
         for destination, button in nav_buttons.items():
             try:
-                button.configure(style="primary.TButton" if destination == selected_nav else "TButton")
+                button.configure(bootstyle="primary" if destination == selected_nav else "secondary")
             except tk.TclError:
                 pass
         if theme_button is not None:
