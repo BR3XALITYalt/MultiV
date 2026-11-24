@@ -594,17 +594,17 @@ def build_app() -> None:
                 return
 
             if abs(remaining) <= 1.0:
-                step = int(round(remaining))
+                units = int(round(remaining))
             else:
                 magnitude = min(
                     SCROLL_MAX_STEP_PIXELS,
                     max(1, int(round(abs(remaining) * SCROLL_EASE_FACTOR))),
                 )
-                step = magnitude if remaining > 0 else -magnitude
+                units = magnitude if remaining > 0 else -magnitude
 
-            if step:
-                canvas.yview_scroll(step, "units")
-                pending_scroll["pixels"] -= step
+            if units:
+                canvas.yview_scroll(units, "units")
+                pending_scroll["pixels"] -= units
         except tk.TclError:
             pending_scroll["pixels"] = 0.0
             pending_scroll["canvas"] = None
