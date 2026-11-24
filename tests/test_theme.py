@@ -73,6 +73,13 @@ class MultiVThemeTests(unittest.TestCase):
         self.assertEqual(root.options["background"], "#1c1c1c")
         self.assertEqual(palette["accent"], "#57c8ff")
 
+    def test_ttkbootstrap_style_uses_its_supported_constructor(self):
+        source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
+        root_creation = source.index("root = tk.Tk()")
+        style_creation = source.index("theme_style = ttk.Style()")
+        self.assertLess(root_creation, style_creation)
+        self.assertNotIn("ttk.Style(master=root)", source)
+
     def test_fatal_startup_errors_are_visible_and_fail_nonzero(self):
         source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
         self.assertIn('messagebox.showerror("MultiV could not start", summary)', source)

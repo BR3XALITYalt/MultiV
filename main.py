@@ -116,7 +116,7 @@ def build_app() -> None:
     theme_mode = "dark"
 
     root = tk.Tk()
-    theme_style = ttk.Style(master=root)
+    theme_style = ttk.Style()
     register_ttkbootstrap_themes()
     try:
         root._multiv_icon = tk.PhotoImage(file=str(asset_path("logo.png")))
