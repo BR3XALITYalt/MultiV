@@ -156,6 +156,8 @@ class UpdateManagerTests(unittest.TestCase):
         self.assertIn("CloseApplications=force", source)
         self.assertIn("CloseApplicationsFilter=*.*", source)
         self.assertIn("RestartApplications=no", source)
+        self.assertIn("Check: ShouldLaunchMultiV", source)
+        self.assertIn("CmdLineParamExists('NOAUTOLAUNCH')", source)
 
     def test_windows_handoff_waits_for_app_exit_then_runs_installer(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -193,6 +195,7 @@ class UpdateManagerTests(unittest.TestCase):
             self.assertIn("$InstallerArguments = ", script)
             self.assertIn("/NORESTART /SP- /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS", script)
             self.assertIn("/NORESTARTAPPLICATIONS /LOGCLOSEAPPLICATIONS", script)
+            self.assertIn("/NOAUTOLAUNCH", script)
             self.assertNotIn("/VERYSILENT", script)
             self.assertNotIn("/SUPPRESSMSGBOXES", script)
             self.assertIn("UPDATE FAILED:", script)
