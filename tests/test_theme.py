@@ -90,8 +90,8 @@ class MultiVThemeTests(unittest.TestCase):
         self.assertIn("SCROLL_PIXELS_PER_NOTCH = 48", source)
         self.assertIn("SCROLL_EASE_FACTOR = 0.32", source)
         self.assertIn("SCROLL_MAX_STEP_PIXELS = 36", source)
-        self.assertIn('canvas.yview_scroll(step, "units")', source)
-        self.assertNotIn("canvas.yview_scroll(units, \"units\")", source)
+        self.assertIn('canvas.yview_scroll(units, "units")', source)
+        self.assertNotIn("canvas.yview_scroll(step, \"units\")", source)
 
     def test_fatal_startup_errors_are_visible_and_fail_nonzero(self):
         source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
