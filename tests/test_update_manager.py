@@ -157,7 +157,11 @@ class UpdateManagerTests(unittest.TestCase):
         self.assertIn("CloseApplicationsFilter=*.*", source)
         self.assertIn("RestartApplications=no", source)
         self.assertIn("Check: ShouldLaunchMultiV", source)
-        self.assertIn("CmdLineParamExists('NOAUTOLAUNCH')", source)
+        self.assertIn("function HasCommandLineParam", source)
+        self.assertIn("for I := 1 to ParamCount do", source)
+        self.assertIn("ParamStr(I)", source)
+        self.assertIn("HasCommandLineParam('NOAUTOLAUNCH')", source)
+        self.assertNotIn("CmdLineParamExists", source)
 
     def test_windows_handoff_waits_for_app_exit_then_runs_installer(self):
         with tempfile.TemporaryDirectory() as temporary:

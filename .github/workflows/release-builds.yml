@@ -10,6 +10,11 @@ on:
         required: false
         type: string
         default: ""
+      release_title:
+        description: "Release title (defaults to MultiV <version>)."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -33,7 +38,9 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           RUN_NUMBER: ${{ github.run_number }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
-          REQUESTED_VERSION: ${{ inputs.version }}
+          REQUESTED_VERSION: ${{ inputs.version || '' }}
+          REQUESTED_TITLE: ${{ inputs.release_title || '' }}
+          RELEASE_COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -47,39 +54,64 @@ jobs:
               match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", tag.strip())
               if match:
                   versions.append(tuple(map(int, match.groups())))
-          manual = os.environ["EVENT_NAME"] == "workflow_dispatch"
+
+          event_name = os.environ["EVENT_NAME"]
+          release_requested = event_name == "workflow_dispatch"
+          requested_version = os.environ.get("REQUESTED_VERSION", "").strip()
+          release_title = os.environ.get("REQUESTED_TITLE", "").strip()
+
+          # A push whose commit title follows this format can request a numbered
+          # release without turning ordinary main-branch pushes into releases.
+          if event_name == "push":
+              commit_title = os.environ.get("RELEASE_COMMIT_MESSAGE", "").splitlines()[0].strip()
+              release_match = re.fullmatch(
+                  r"Release:\s*v?((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))\s*\|\s*(.+)",
+                  commit_title,
+              )
+              if release_match:
+                  release_requested = True
+                  requested_version = release_match.group(1)
+                  release_title = release_match.group(2).strip()
+
           run_number = int(os.environ["RUN_NUMBER"])
           run_attempt = int(os.environ["RUN_ATTEMPT"])
           latest = max(
               versions,
-              default=(0, 1, -1) if manual else (0, 1, 0),
+              default=(0, 1, -1) if release_requested else (0, 1, 0),
           )
-          if manual:
-              requested = os.environ.get("REQUESTED_VERSION", "").strip()
-              if requested:
-                  match = re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", requested)
+
+          if release_requested:
+              if requested_version:
+                  match = re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", requested_version)
                   if not match:
                       raise SystemExit("Release version must use MAJOR.MINOR.PATCH, for example 2.0.0.")
                   selected = tuple(map(int, match.groups()))
                   if selected <= latest:
                       raise SystemExit(
-                          f"Requested version {requested} must be newer than the latest release "
+                          f"Requested version {requested_version} must be newer than the latest release "
                           f"{'.'.join(map(str, latest))}."
                       )
-                  version = requested
+                  version = requested_version
               else:
                   version = f"{latest[0]}.{latest[1]}.{latest[2] + 1}"
               release_version = f"v{version}"
+              if not release_title:
+                  release_title = f"MultiV {version}"
           else:
               # Every rolling build gets a distinct patch component. The
               # workflow run number is monotonic across pushes and reruns.
               rolling_patch = latest[2] + run_number * 1000 + run_attempt
               version = f"{latest[0]}.{latest[1]}.{rolling_patch}-dev"
               release_version = ""
+              release_title = ""
+
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"app_version={version}\n")
               output.write(f"release_version={release_version}\n")
+              output.write(f"release_title={release_title}\n")
           print(f"Build version: {version}")
+          print(f"Release requested: {bool(release_version)}")
+          print(f"Release title: {release_title}")
           PY
 
   test:
@@ -429,19 +461,20 @@ jobs:
             fi
           done
 
-      - name: Publish numbered release for manual runs
-        if: github.event_name == 'workflow_dispatch'
+      - name: Publish numbered release
+        if: needs.prepare.outputs.release_version != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+          RELEASE_TITLE: ${{ needs.prepare.outputs.release_title }}
           APP_VERSION: ${{ needs.prepare.outputs.app_version }}
           BUILD_NUMBER: ${{ github.run_number }}
           COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
           gh release create "$RELEASE_VERSION" --repo "$REPOSITORY" \
-            --title "MultiV $APP_VERSION" \
+            --title "$RELEASE_TITLE" \
             --notes "MultiV $APP_VERSION. Build $BUILD_NUMBER from commit $COMMIT." \
             --target "$COMMIT" \
             release-out/MultiV-windows-x86_64.exe \

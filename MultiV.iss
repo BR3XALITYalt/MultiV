@@ -49,9 +49,25 @@ Name: "{userdesktop}\MultiV"; Filename: "{app}\MultiV.exe"; IconFilename: "{app}
 Filename: "{app}\MultiV.exe"; Description: "Launch MultiV"; Flags: nowait postinstall skipifsilent; Check: ShouldLaunchMultiV
 
 [Code]
+function HasCommandLineParam(const Param: String): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+  begin
+    if (LowerCase(ParamStr(I)) = LowerCase('/' + Param)) or
+       (LowerCase(ParamStr(I)) = LowerCase('-' + Param)) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
 function ShouldLaunchMultiV: Boolean;
 begin
   { The updater launches the new build after setup exits. Avoid starting a
     second copy from the installer's Finish page during an automatic update. }
-  Result := not CmdLineParamExists('NOAUTOLAUNCH');
+  Result := not HasCommandLineParam('NOAUTOLAUNCH');
 end;
