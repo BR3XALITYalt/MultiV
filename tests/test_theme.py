@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from multiv_theme import (
     _multiv_palette,
@@ -10,11 +11,7 @@ from multiv_theme import (
 
 class RecordingStyle:
     def __init__(self):
-        self.themes = {}
         self.active_theme = None
-
-    def register_theme(self, definition):
-        self.themes[definition.name] = definition
 
     def theme_use(self, name):
         self.active_theme = name
@@ -48,21 +45,25 @@ class MultiVThemeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             apply_ttkbootstrap_theme(None, RecordingStyle(), "automatic")
 
-    def test_registers_exact_light_and_dark_color_roles(self):
-        style = RecordingStyle()
-        register_ttkbootstrap_themes(style)
-        self.assertEqual(set(style.themes), {"multiv-light", "multiv-dark"})
+    def test_registers_sun_valley_compatible_light_dark_theme_family(self):
+        theme = Mock()
+        with patch("ttkbootstrap.Theme", return_value=theme) as theme_factory:
+            result = register_ttkbootstrap_themes()
 
-        light = style.themes["multiv-light"].colors
-        dark = style.themes["multiv-dark"].colors
-        self.assertEqual(light.bg, "#fafafa")
-        self.assertEqual(light.fg, "#1c1c1c")
-        self.assertEqual(light.primary, "#005fb8")
-        self.assertEqual(light.selectbg, "#2f60d8")
-        self.assertEqual(dark.bg, "#1c1c1c")
-        self.assertEqual(dark.fg, "#fafafa")
-        self.assertEqual(dark.primary, "#57c8ff")
-        self.assertEqual(dark.selectbg, "#2f60d8")
+        theme_factory.assert_called_once_with(
+            name="multiv",
+            primary="#57c8ff",
+            secondary="#595959",
+            success="#107c10",
+            info="#57c8ff",
+            warning="#ffb900",
+            danger="#d13438",
+            neutral="#595959",
+            light={"background": "#fafafa", "foreground": "#1c1c1c"},
+            dark={"background": "#1c1c1c", "foreground": "#fafafa"},
+        )
+        theme.register.assert_called_once_with()
+        self.assertIs(result, theme.register.return_value)
 
     def test_apply_switches_theme_and_sets_root_surface(self):
         style = RecordingStyle()
@@ -82,7 +83,7 @@ class MultiVThemeTests(unittest.TestCase):
             "ttk.Toplevel(", "ttk.Menu(",
         ):
             self.assertIn(widget, source)
-        self.assertIn('style="primary.TButton"', source)
+        self.assertIn('bootstyle="primary"', source)
         self.assertNotIn("sv_ttk", source)
         self.assertNotIn("sun_valley_theme", source)
 
@@ -92,7 +93,7 @@ class MultiVThemeTests(unittest.TestCase):
         self.assertIn("tk.StringVar(", source)
         self.assertIn("tk.BooleanVar(", source)
         for widget in ("Canvas", "Listbox", "Text", "Toplevel", "Menu"):
-            self.assertNotRegex(source, rf"(?<!t)tk\.{widget}\(")
+            self.assertNotRegex(source, rf"(?<!t)tk\\.{widget}\\(")
 
     def test_image_labels_use_ttkbootstrap(self):
         source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
