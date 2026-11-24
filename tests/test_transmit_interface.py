@@ -63,21 +63,36 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         # TXITY dropdown button in the top bar is prohibited.
         self.assertNotIn('ttk.Menubutton(topbar, text="TXITY', self.source)
 
-    def test_scroll_uses_pixel_granularity_and_flushes_idle_redraws(self):
+    def test_scroll_coalesces_wheel_events_without_forcing_redraws(self):
         self.assertIn("SCROLL_UNIT_PIXELS = 1", self.source)
+        self.assertIn("SCROLL_FRAME_INTERVAL_MS = 16", self.source)
         scroll_handler = next(
             node
             for node in ast.walk(self.tree)
             if isinstance(node, ast.FunctionDef)
             and node.name == "scroll_active_canvas"
         )
-        calls = {
+        handler_calls = {
             node.func.attr
             for node in ast.walk(scroll_handler)
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
         }
-        self.assertIn("yview_scroll", calls)
-        self.assertIn("update_idletasks", calls)
+        self.assertIn("after", handler_calls)
+        self.assertNotIn("yview_scroll", handler_calls)
+        self.assertNotIn("update_idletasks", handler_calls)
+
+        apply_scroll = next(
+            node
+            for node in ast.walk(self.tree)
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "apply_pending_scroll"
+        )
+        apply_calls = {
+            node.func.attr
+            for node in ast.walk(apply_scroll)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        }
+        self.assertIn("yview_scroll", apply_calls)
 
     def test_start_stop_button_stays_in_transmit_header(self):
         assignment = next(
