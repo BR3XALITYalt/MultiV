@@ -193,7 +193,7 @@ class UpdateManagerTests(unittest.TestCase):
             self.assertIn("Start-Process -FilePath $Installer", script)
             self.assertIn("-Verb RunAs -Wait -PassThru", script)
             self.assertIn("$InstallerArguments = ", script)
-            self.assertIn("/NORESTART /SP- /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS", script)
+            self.assertIn("/NORESTART /SP- /NOAUTOLAUNCH /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS", script)
             self.assertIn("/NORESTARTAPPLICATIONS /LOGCLOSEAPPLICATIONS", script)
             self.assertIn("/NOAUTOLAUNCH", script)
             self.assertNotIn("/VERYSILENT", script)
