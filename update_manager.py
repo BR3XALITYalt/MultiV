@@ -306,7 +306,7 @@ try {{
 
     # Force-close processes holding files that the installer must replace.
     # Do not let Restart Manager relaunch browser helpers against mixed old/new files.
-    $InstallerArguments = '/NORESTART /SP- /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /LOGCLOSEAPPLICATIONS /DIR="' + $InstallDir + '"'
+    $InstallerArguments = '/NORESTART /SP- /NOAUTOLAUNCH /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /LOGCLOSEAPPLICATIONS /DIR="' + $InstallDir + '"'
     $InstallerProcess = Start-Process -FilePath $Installer -ArgumentList $InstallerArguments -Verb RunAs -Wait -PassThru
     if ($null -eq $InstallerProcess -or $InstallerProcess.ExitCode -ne 0) {{
         $ExitCode = if ($null -eq $InstallerProcess) {{ 'unknown' }} else {{ $InstallerProcess.ExitCode }}
