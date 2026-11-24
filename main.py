@@ -562,9 +562,11 @@ def build_app() -> None:
     nav_buttons: dict[str, Any] = {}
     shell_built = False
     active_scroll_canvas: ttk.Canvas | None = None
-    SCROLL_PIXELS_PER_NOTCH = 96
+    SCROLL_PIXELS_PER_NOTCH = 48
     SCROLL_UNIT_PIXELS = 1
     SCROLL_FRAME_INTERVAL_MS = 16
+    SCROLL_EASE_FACTOR = 0.32
+    SCROLL_MAX_STEP_PIXELS = 36
     scroll_canvases: list[ttk.Canvas] = []
     pending_scroll = {
         "pixels": 0.0,
@@ -573,24 +575,54 @@ def build_app() -> None:
     }
 
     def apply_pending_scroll() -> None:
-        # Apply accumulated wheel input at most once per frame. Let Tk process
-        # the resulting paint naturally instead of forcing a synchronous redraw.
+        # Ease toward the accumulated wheel position over several frames.
+        # One canvas unit is one pixel, avoiding the large jumps of Tk's
+        # default multi-line wheel scrolling.
         canvas = pending_scroll["canvas"]
-        scroll_delta = pending_scroll["pixels"]
-        pending_scroll["canvas"] = None
-        pending_scroll["pixels"] = 0.0
+        remaining = pending_scroll["pixels"]
         pending_scroll["after_id"] = None
 
-        if canvas is None or not scroll_delta:
+        if canvas is None or abs(remaining) < 0.5:
+            pending_scroll["pixels"] = 0.0
+            pending_scroll["canvas"] = None
             return
 
         try:
-            if canvas.winfo_exists():
-                units = int(round(scroll_delta / SCROLL_UNIT_PIXELS))
-                if units:
-                    canvas.yview_scroll(units, "units")
+            if not canvas.winfo_exists():
+                pending_scroll["pixels"] = 0.0
+                pending_scroll["canvas"] = None
+                return
+
+            if abs(remaining) <= 1.0:
+                step = int(round(remaining))
+            else:
+                magnitude = min(
+                    SCROLL_MAX_STEP_PIXELS,
+                    max(1, int(round(abs(remaining) * SCROLL_EASE_FACTOR))),
+                )
+                step = magnitude if remaining > 0 else -magnitude
+
+            if step:
+                canvas.yview_scroll(step, "units")
+                pending_scroll["pixels"] -= step
         except tk.TclError:
+            pending_scroll["pixels"] = 0.0
+            pending_scroll["canvas"] = None
             return
+
+        if abs(pending_scroll["pixels"]) < 0.5:
+            pending_scroll["pixels"] = 0.0
+            pending_scroll["canvas"] = None
+            return
+
+        try:
+            pending_scroll["after_id"] = root.after(
+                SCROLL_FRAME_INTERVAL_MS,
+                apply_pending_scroll,
+            )
+        except tk.TclError:
+            pending_scroll["pixels"] = 0.0
+            pending_scroll["canvas"] = None
 
     def scroll_active_canvas(event, direction: int | None = None):
         canvas = active_scroll_canvas
@@ -617,8 +649,11 @@ def build_app() -> None:
                 return
             scroll_delta = -(float(delta) / 120.0) * SCROLL_PIXELS_PER_NOTCH
 
+        if pending_scroll["canvas"] is not canvas:
+            pending_scroll["pixels"] = 0.0
+            pending_scroll["canvas"] = canvas
         pending_scroll["pixels"] += scroll_delta
-        pending_scroll["canvas"] = canvas
+
         if pending_scroll["after_id"] is None:
             try:
                 pending_scroll["after_id"] = root.after(
@@ -679,7 +714,7 @@ def build_app() -> None:
             parent,
             text=text,
             command=command,
-            bootstyle="primary" if kind == "primary" else "secondary",
+            bootstyle="primary round" if kind == "primary" else "secondary round",
             padding=(padx, pady),
             cursor="hand2",
         )
@@ -2240,6 +2275,7 @@ def build_app() -> None:
                 header,
                 text=title + "  \u25be",
                 command=lambda: toggle_output_provider_body(provider_name),
+                bootstyle="secondary round",
             )
             title_button.pack(side="left", fill="x", expand=True)
             output_row_title_buttons[provider_name] = title_button
