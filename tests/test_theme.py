@@ -93,7 +93,7 @@ class MultiVThemeTests(unittest.TestCase):
         self.assertIn("tk.StringVar(", source)
         self.assertIn("tk.BooleanVar(", source)
         for widget in ("Canvas", "Listbox", "Text", "Toplevel", "Menu"):
-            self.assertNotRegex(source, rf"(?<!t)tk\\.{widget}\\(")
+            self.assertNotRegex(source, rf"(?<!t)tk\.{widget}\(")
 
     def test_image_labels_use_ttkbootstrap(self):
         source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
