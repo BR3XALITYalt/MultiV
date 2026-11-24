@@ -14,7 +14,7 @@ MultiV is a multi-source, multi-stream client for virtual radio simulators. User
 
 ### Visual system
 
-- **Theme:** Use the official Sun Valley ttk theme for all standard controls. Use its native light/dark colors for the Tk canvas, listboxes, and multiline editor, which do not have ttk equivalents in this interface.
+- **Theme:** Use ttkbootstrap for standard controls and its themed Canvas, Listbox, Text, Menu, and Toplevel classes. Keep the existing Sun Valley light/dark color values in MultiV's custom ttkbootstrap themes.
 - **Dark theme:** Keep the layout and information hierarchy the same in both themes. Change surface and text colors, not page structure.
 - **Typography:** Use Segoe UI. Use size and weight to establish hierarchy.
 - **Panels:** Use rectangular panels to group related controls or station records. Keep unrelated content on the page surface.
