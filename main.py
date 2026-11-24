@@ -2194,40 +2194,58 @@ def build_app() -> None:
         output_row_widgets: dict[str, ttk.LabelFrame] = {}
         output_row_bodies: dict[str, ttk.Frame] = {}
         output_row_title_buttons: dict[str, ttk.Button] = {}
-        output_row_menus: dict[str, ttk.Menu] = {}
+        output_row_drag_handles: dict[str, ttk.Button] = {}
         output_row_expanded = {"txity": True, "icecast": True}
+        output_drag_state: dict[str, Any] = {
+            "provider": None,
+            "changed": False,
+        }
 
         def refresh_output_order() -> None:
             for provider_name in output_order:
                 output_row_widgets[provider_name].pack_forget()
             for provider_name in output_order:
                 output_row_widgets[provider_name].pack(fill="x", pady=(0, 8))
-            for provider_name, menu in output_row_menus.items():
-                menu.entryconfigure(
-                    0,
-                    state="disabled" if output_order.index(provider_name) == 0 else "normal",
-                )
-                menu.entryconfigure(
-                    1,
-                    state=(
-                        "disabled"
-                        if output_order.index(provider_name) == len(output_order) - 1
-                        else "normal"
-                    ),
-                )
 
-        def move_output_provider(provider_name: str, offset: int) -> None:
+        def move_output_provider(provider_name: str, target_index: int) -> None:
             current_index = output_order.index(provider_name)
-            target_index = current_index + offset
-            if not 0 <= target_index < len(output_order):
+            target_index = max(0, min(target_index, len(output_order) - 1))
+            if current_index == target_index:
                 return
-            output_order[current_index], output_order[target_index] = (
-                output_order[target_index],
-                output_order[current_index],
-            )
+            output_order.pop(current_index)
+            output_order.insert(target_index, provider_name)
+            output_drag_state["changed"] = True
             refresh_output_order()
-            schedule_tx_settings_save()
-            schedule_live_reconfigure()
+
+        def begin_output_drag(provider_name: str, _event: Any = None) -> str:
+            output_drag_state["provider"] = provider_name
+            output_drag_state["changed"] = False
+            output_row_drag_handles[provider_name].configure(cursor="fleur")
+            return "break"
+
+        def drag_output_provider(provider_name: str, event: Any) -> str:
+            if output_drag_state["provider"] != provider_name:
+                return "break"
+            other_names = [name for name in output_order if name != provider_name]
+            if not other_names:
+                return "break"
+            other_row = output_row_widgets[other_names[0]]
+            pointer_y = event.y_root
+            other_midpoint = other_row.winfo_rooty() + other_row.winfo_height() / 2
+            target_index = 0 if pointer_y < other_midpoint else len(output_order) - 1
+            move_output_provider(provider_name, target_index)
+            return "break"
+
+        def end_output_drag(provider_name: str, _event: Any = None) -> str:
+            if output_drag_state["provider"] != provider_name:
+                return "break"
+            output_drag_state["provider"] = None
+            output_row_drag_handles[provider_name].configure(cursor="fleur")
+            if output_drag_state["changed"]:
+                schedule_tx_settings_save()
+                schedule_live_reconfigure()
+            output_drag_state["changed"] = False
+            return "break"
 
         def toggle_output_provider_body(provider_name: str) -> None:
             body = output_row_bodies[provider_name]
@@ -2257,19 +2275,46 @@ def build_app() -> None:
             row = ttk.LabelFrame(output_rows_container, padding=8)
             header = ttk.Frame(row)
             header.pack(fill="x")
-            menu_button = ttk.Menubutton(header, text="\u2261", direction="below")
-            menu = ttk.Menu(menu_button, tearoff=False)
-            menu.add_command(
-                label="Move up",
-                command=lambda: move_output_provider(provider_name, -1),
+            drag_handle = ttk.Button(
+                header,
+                text="\u2261",
+                bootstyle="secondary",
+                padding=(9, 5),
+                cursor="fleur",
+                takefocus=True,
             )
-            menu.add_command(
-                label="Move down",
-                command=lambda: move_output_provider(provider_name, 1),
+            drag_handle.pack(side="left", padx=(0, 8))
+            drag_handle.bind(
+                "<ButtonPress-1>",
+                lambda event, name=provider_name: begin_output_drag(name, event),
             )
-            menu_button.configure(menu=menu)
-            menu_button.pack(side="left", padx=(0, 8))
-            output_row_menus[provider_name] = menu
+            drag_handle.bind(
+                "<B1-Motion>",
+                lambda event, name=provider_name: drag_output_provider(name, event),
+            )
+            drag_handle.bind(
+                "<ButtonRelease-1>",
+                lambda event, name=provider_name: end_output_drag(name, event),
+            )
+            drag_handle.bind(
+                "<Up>",
+                lambda _event, name=provider_name: (
+                    move_output_provider(name, output_order.index(name) - 1),
+                    schedule_tx_settings_save(),
+                    schedule_live_reconfigure(),
+                    "break",
+                )[-1],
+            )
+            drag_handle.bind(
+                "<Down>",
+                lambda _event, name=provider_name: (
+                    move_output_provider(name, output_order.index(name) + 1),
+                    schedule_tx_settings_save(),
+                    schedule_live_reconfigure(),
+                    "break",
+                )[-1],
+            )
+            output_row_drag_handles[provider_name] = drag_handle
 
             title_button = ttk.Button(
                 header,

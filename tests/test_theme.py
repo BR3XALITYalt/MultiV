@@ -53,12 +53,12 @@ class MultiVThemeTests(unittest.TestCase):
         theme_factory.assert_called_once_with(
             name="multiv",
             primary="#57c8ff",
-            secondary="#595959",
+            secondary="#404040",
             success="#107c10",
             info="#57c8ff",
             warning="#ffb900",
             danger="#d13438",
-            neutral="#595959",
+            neutral="#404040",
             light={"background": "#fafafa", "foreground": "#1c1c1c"},
             dark={"background": "#1c1c1c", "foreground": "#fafafa"},
         )
@@ -84,6 +84,15 @@ class MultiVThemeTests(unittest.TestCase):
         source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
         self.assertIn('bootstyle="primary round" if kind == "primary" else "secondary round"', source)
         self.assertIn('bootstyle="secondary round"', source)
+
+    def test_output_provider_rows_use_drag_handles_not_dropdown_menus(self):
+        source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
+        self.assertIn('"<ButtonPress-1>"', source)
+        self.assertIn('"<B1-Motion>"', source)
+        self.assertIn('"<ButtonRelease-1>"', source)
+        self.assertIn("drag_output_provider", source)
+        self.assertNotIn("output_row_menus", source)
+        self.assertNotIn("ttk.Menubutton(header, text=", source)
 
     def test_mouse_wheel_uses_pixel_based_eased_scrolling(self):
         source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")

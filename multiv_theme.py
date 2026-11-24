@@ -37,12 +37,12 @@ def register_ttkbootstrap_themes():
     theme = ttk.Theme(
         name="multiv",
         primary="#57c8ff",
-        secondary="#595959",
+        secondary="#404040",
         success="#107c10",
         info="#57c8ff",
         warning="#ffb900",
         danger="#d13438",
-        neutral="#595959",
+        neutral="#404040",
         light={
             "background": "#fafafa",
             "foreground": "#1c1c1c",
