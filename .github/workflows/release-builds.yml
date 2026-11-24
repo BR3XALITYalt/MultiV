@@ -90,7 +90,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test dependencies
-        run: python -m pip install "Pillow>=10.0.0" "numpy>=1.26" "soundfile>=0.14.0" "av>=14.0.0" "sv-ttk>=2.6.1"
+        run: python -m pip install "Pillow>=10.0.0" "numpy>=1.26" "soundfile>=0.14.0" "av>=14.0.0" "ttkbootstrap>=2.2.7"
       - name: Compile Python files
         run: python -m compileall -q .
       - name: Run unit tests
@@ -164,7 +164,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
               throw "Could not generate the Windows icon from assets/logo.png."
           }
-          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --collect-all sv_ttk --icon "assets/logo.ico" --add-data "assets;assets" --collect-all webview --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL --collect-all pyaudiowpatch --collect-all pystray --collect-all clr_loader --collect-all pythonnet --hidden-import clr main.py
+          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --collect-all ttkbootstrap --icon "assets/logo.ico" --add-data "assets;assets" --collect-all webview --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL --collect-all pyaudiowpatch --collect-all pystray --collect-all clr_loader --collect-all pythonnet --hidden-import clr main.py
           pyinstaller --noconfirm --clean --console --onefile --name MultiVBrowserHelper --icon "assets/logo.ico" --distpath "dist/MultiV" --workpath "build/MultiVBrowserHelper" --collect-all webview --collect-all clr_loader --collect-all pythonnet --hidden-import clr discord_auth_browser.py
 
           $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
@@ -278,7 +278,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --collect-all sv_ttk --add-data "assets:assets" --collect-all webview --collect-all qtpy --collect-all PyQt6 --collect-all PyQt6.QtWebEngineCore --collect-all PyQt6.QtWebEngineWidgets --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL main.py
+          pyinstaller --noconfirm --clean --windowed --onedir --name MultiV --collect-all ttkbootstrap --add-data "assets:assets" --collect-all webview --collect-all qtpy --collect-all PyQt6 --collect-all PyQt6.QtWebEngineCore --collect-all PyQt6.QtWebEngineWidgets --collect-all av --collect-all numpy --collect-all soundfile --collect-all sounddevice --collect-all PIL main.py
 
           APPDIR="$PWD/AppDir"
           mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
