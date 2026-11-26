@@ -1,4 +1,6 @@
 import socket
+import threading
+import time
 import unittest
 
 from icecast_server import EmbeddedIcecastServer, _Listener
@@ -36,6 +38,26 @@ class EmbeddedIcecastServerTests(unittest.TestCase):
         self.assertTrue(server._authorized("Basic " + valid))
         self.assertFalse(server._authorized("Basic " + invalid))
         self.assertFalse(server._authorized("Bearer " + valid))
+
+    def test_stop_does_not_block_forever_if_server_shutdown_stalls(self):
+        server = self.make_server()
+        blocked = threading.Event()
+
+        class StalledServer:
+            def shutdown(self):
+                blocked.wait(5.0)
+
+            def server_close(self):
+                return None
+
+        server._server = StalledServer()
+        server._thread = None
+        started = time.monotonic()
+        try:
+            server.stop()
+            self.assertLess(time.monotonic() - started, 2.0)
+        finally:
+            blocked.set()
 
     def test_server_starts_and_stops_http_listener(self):
         server = self.make_server()
