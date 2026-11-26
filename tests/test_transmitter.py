@@ -84,7 +84,8 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(queued[1]["state"], "stopped")
 
     def test_ptt_sent_reflects_worker_state_and_stop_request(self):
-        transmitter = TxityTransmitter(object(), queue.Queue())
+        events = queue.Queue()
+        transmitter = TxityTransmitter(object(), events)
         transmitter._active = True
         transmitter._ptt_sent = True
         self.assertTrue(transmitter.ptt_sent)
@@ -92,13 +93,21 @@ class TransmitterProtocolTests(unittest.TestCase):
         transmitter.stop()
         self.assertFalse(transmitter.ptt_sent)
         self.assertTrue(transmitter.is_busy)
+        self.assertTrue(transmitter._stop_event.is_set())
+        stopping = events.get_nowait()
+        self.assertEqual(stopping["kind"], "tx_state")
+        self.assertEqual(stopping["state"], "stopping")
 
-    def test_icecast_pcm_marks_transmission_active_before_txity_ptt(self):
+    def test_icecast_pcm_queueing_does_not_mark_transmission_active(self):
         source = (Path(__file__).resolve().parents[1] / "transmitter.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn('announce_transmission_active("Icecast audio output is active.")', source)
-        self.assertIn("icecast_broadcaster.send_pcm(", source)
+        start = source.index("        def enqueue_pcm_samples(")
+        end = source.index("        def report_audio_warning(", start)
+        enqueue_body = source[start:end]
+        self.assertIn("icecast_broadcaster.send_pcm(", enqueue_body)
+        self.assertNotIn("announce_transmission_active(", enqueue_body)
+        self.assertIn("on_activity=lambda: announce_transmission_active(", source)
 
     def test_icecast_only_start_does_not_require_txity_credentials(self):
         events = queue.Queue()

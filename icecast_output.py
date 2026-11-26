@@ -9,6 +9,7 @@ import socket
 import ssl
 import threading
 import time
+import traceback
 from dataclasses import dataclass, field
 from fractions import Fraction
 from typing import Any
@@ -169,6 +170,8 @@ class _Destination:
     socket_lock: threading.Lock = field(default_factory=threading.Lock)
     active_socket: socket.socket | ssl.SSLSocket | None = None
     stop_event: threading.Event = field(default_factory=threading.Event)
+    on_activity: Any = None
+    activity_reported: bool = False
 
     @property
     def name(self) -> str:
@@ -311,6 +314,10 @@ class _Destination:
                         self.emit("Disconnected")
                         return
                     connection.sendall(payload)
+                    if not self.activity_reported:
+                        self.activity_reported = True
+                        if callable(self.on_activity):
+                            self.on_activity()
             except (OSError, ssl.SSLError, ConnectionError, TimeoutError) as exc:
                 if not self.stop_event.is_set():
                     self.emit("Reconnecting", f"{str(exc)[:180]}; retry in {delay:.0f}s")
@@ -357,6 +364,8 @@ class _EncoderGroup:
         default_factory=lambda: queue.Queue(maxsize=INPUT_QUEUE_BLOCKS)
     )
     thread: threading.Thread | None = None
+    error: str | None = None
+    traceback_text: str = ""
 
 
 class IcecastBroadcaster:
@@ -372,6 +381,8 @@ class IcecastBroadcaster:
         events: Any,
         sample_rate: int = ICECAST_SAMPLE_RATE,
         local_server: Any = None,
+        on_activity: Any = None,
+        fatal_on_encoder_failure: bool = False,
     ) -> None:
         if sample_rate != ICECAST_SAMPLE_RATE:
             raise ValueError("Icecast audio input must use 48 kHz PCM.")
@@ -388,10 +399,22 @@ class IcecastBroadcaster:
         self.bitrate = default_bitrate * 1_000
         self.sample_rate = sample_rate
         self.events = events
+        self.on_activity = on_activity
+        self.fatal_on_encoder_failure = bool(fatal_on_encoder_failure)
+        self._activity_lock = threading.Lock()
+        self._activity_reported = False
+        self._encoder_failure_lock = threading.Lock()
+        self._all_encoders_failed_reported = False
         self._closing = threading.Event()
         self._stopped = threading.Event()
         self._destinations = [
-            _Destination(item, events, _safe_header(station_name), _safe_header(station_description))
+            _Destination(
+                item,
+                events,
+                _safe_header(station_name),
+                _safe_header(station_description),
+                on_activity=self._announce_activity,
+            )
             for item in normalized
         ]
 
@@ -420,6 +443,36 @@ class IcecastBroadcaster:
             )
             for (audio_format, bitrate), items in grouped.items()
         ]
+
+    def _announce_activity(self) -> None:
+        """Report activity once, after an encoded packet reaches an output."""
+        with self._activity_lock:
+            if self._activity_reported:
+                return
+            self._activity_reported = True
+        if callable(self.on_activity):
+            self.on_activity()
+
+    def _report_encoder_failure(self) -> None:
+        """Report when every configured encoder group has failed."""
+        if not self._groups or not all(group.error for group in self._groups):
+            return
+        with self._encoder_failure_lock:
+            if self._all_encoders_failed_reported:
+                return
+            self._all_encoders_failed_reported = True
+        failed_groups = [group for group in self._groups if group.error]
+        summary = "; ".join(group.error or "Unknown encoder error" for group in failed_groups)
+        details = "\n\n".join(
+            group.traceback_text for group in failed_groups if group.traceback_text
+        )
+        self.events.put({
+            "kind": "tx_worker_error",
+            "stage": "icecast-encoder",
+            "text": f"All Icecast encoder groups failed: {summary}",
+            "traceback": details[-16_000:],
+            "fatal": self.fatal_on_encoder_failure,
+        })
 
     def start(self) -> None:
         local_server = self.local_server
@@ -660,14 +713,17 @@ class IcecastBroadcaster:
                 container.close()
                 container = None
         except Exception as exc:
+            group.error = f"{spec['label']} encoder error: {str(exc)[:220]}"
+            group.traceback_text = traceback.format_exc()[-16_000:]
             for destination in group.destinations:
                 destination.emit("Encoder error", str(exc)[:180])
             self.events.put({
                 "kind": "tx_icecast_state",
                 "name": "Built-in server" if group.local_server else "Icecast",
                 "state": "Encoder error",
-                "text": f"{spec['label']} encoder error: {str(exc)[:220]}",
+                "text": group.error,
             })
+            self._report_encoder_failure()
         finally:
             if container is not None:
                 try:

@@ -27,6 +27,7 @@ from discord_auth import (
     is_auth_token,
     safe_error_text,
     write_diagnostic,
+    write_diagnostic_text,
 )
 from drm_support import (
     DRM_LANGUAGES,
@@ -117,14 +118,20 @@ def build_app() -> None:
 
     root = tk.Tk()
 
-    def show_uncaught_error(stage: str, error: BaseException) -> None:
+    def show_uncaught_error(
+        stage: str,
+        error: BaseException,
+        *,
+        log_path: Path | None = None,
+    ) -> None:
         """Persist an uncaught exception and show its details in a native dialog."""
         details = format_exception_details(error)
-        log_path = write_diagnostic(
-            stage,
-            error,
-            filename="application-errors.log",
-        )
+        if log_path is None:
+            log_path = write_diagnostic(
+                stage,
+                error,
+                filename="application-errors.log",
+            )
         summary = (
             f"{type(error).__name__}: {safe_error_text(error, 1_000)}"
             "\n\nMultiV encountered an unexpected error."
@@ -146,18 +153,22 @@ def build_app() -> None:
 
     def report_thread_exception(args) -> None:
         error = args.exc_value.with_traceback(args.exc_traceback)
+        stage = f"thread-{args.thread.name if args.thread else 'unknown'}"
+        details = format_exception_details(error)
+        log_path = write_diagnostic(
+            stage,
+            error,
+            filename="application-errors.log",
+        )
 
         def display() -> None:
-            show_uncaught_error(
-                f"thread-{args.thread.name if args.thread else 'unknown'}",
-                error,
-            )
+            show_uncaught_error(stage, error, log_path=log_path)
 
         try:
             root.after(0, display)
         except Exception:
             if sys.stderr is not None:
-                print(format_exception_details(error), file=sys.stderr, flush=True)
+                print(details, file=sys.stderr, flush=True)
 
     root.report_callback_exception = report_tk_callback_exception
     threading.excepthook = report_thread_exception
@@ -406,6 +417,7 @@ def build_app() -> None:
     )
 
     tx_status_var = tk.StringVar(root, "Not transmitting")
+    tx_terminal_error_message: str | None = None
     tx_audio_device_ids: dict[str, int | None] = {"System default": None}
     tx_profile_initialized = bool(saved_text("station_name", "").strip())
 
@@ -5032,8 +5044,15 @@ def build_app() -> None:
         nonlocal tx_ptt_confirmed, tx_terminal_server_message, frequency_retry_context
         nonlocal tx_last_status_signature
         low, high = data.get("bandMinHz"), data.get("bandMaxHz")
+        active_request = live_reconfigure_state.get("active_request")
+        txity_output_active = (
+            transmitter.is_busy
+            and not live_reconfigure_state["stopping"]
+            and isinstance(active_request, dict)
+            and bool(active_request.get("txity_enabled", True))
+        )
 
-        if transmitter.is_busy:
+        if txity_output_active:
             status_signature = tuple(
                 data.get(key)
                 for key in (
@@ -5071,14 +5090,14 @@ def build_app() -> None:
             server_band_max_hz = None
         update_frequency_check()
 
-        if transmitter.is_busy and data.get("ptt") is True:
+        if txity_output_active and data.get("ptt") is True:
             frequency_retry_context = None
             if not tx_ptt_confirmed:
                 tx_ptt_confirmed = True
             tx_negative_status_reason = None
             tx_negative_status_count = 0
             tx_status_var.set("TXITY confirms that the station is transmitting.")
-        elif transmitter.is_busy and data.get("ptt") is False:
+        elif txity_output_active and data.get("ptt") is False:
             if frequency_retry_context is not None and frequency_retry_context.get("pending"):
                 candidate = frequency_retry_context.get("queued_candidate")
                 if isinstance(candidate, tuple) and len(candidate) == 2:
@@ -5200,6 +5219,12 @@ def build_app() -> None:
         nonlocal users_listing_received, frequency_retry_context
         nonlocal tx_negative_status_reason, tx_negative_status_count
         nonlocal tx_ptt_confirmed, tx_terminal_server_message, tx_last_status_signature
+        nonlocal tx_terminal_error_message
+        # Reschedule first so one event-handler exception cannot stop polling.
+        try:
+            root.after(250, drain_events)
+        except tk.TclError:
+            return
         while True:
             try:
                 event = client.events.get_nowait()
@@ -5244,6 +5269,7 @@ def build_app() -> None:
                     tx_negative_status_count = 0
                     tx_ptt_confirmed = False
                     tx_terminal_server_message = None
+                    tx_terminal_error_message = None
                 elif state == "stopped":
                     tx_negative_status_reason = None
                     tx_negative_status_count = 0
@@ -5261,7 +5287,9 @@ def build_app() -> None:
                         tx_status_var.set("Transmission stopped.")
                 elif state == "stopped":
                     live_reconfigure_state["active_request"] = None
-                    if tx_terminal_server_message:
+                    if tx_terminal_error_message:
+                        tx_status_var.set(tx_terminal_error_message)
+                    elif tx_terminal_server_message:
                         tx_status_var.set(tx_terminal_server_message)
                     else:
                         tx_status_var.set(state_text)
@@ -5285,20 +5313,47 @@ def build_app() -> None:
                 cancel_pending_live_reconfigure()
                 details = safe_error_text(str(event.get("text") or "Transmission failed."), 800)
                 traceback_text = str(event.get("traceback") or "").strip()
-                tx_status_var.set(f"Transmission error: {details}")
-                if traceback_text:
-                    print(
-                        "\n[MultiV transmission error]\n"
-                        + traceback_text,
-                        file=sys.stderr,
-                        flush=True,
-                    )
-                else:
-                    print(
-                        f"\n[MultiV transmission error] {details}\n",
-                        file=sys.stderr,
-                        flush=True,
-                    )
+                tx_terminal_error_message = f"Transmission error: {details}"
+                tx_status_var.set(tx_terminal_error_message)
+                log_path = write_diagnostic_text(
+                    "transmitter-worker",
+                    traceback_text or details,
+                    filename="application-errors.log",
+                )
+                dialog_text = f"{details}\n\nMultiV encountered a transmission error."
+                if log_path is not None:
+                    dialog_text += f"\n\nFull details were saved to:\n{log_path}"
+                try:
+                    messagebox.showerror("MultiV error", dialog_text, parent=root)
+                except Exception:
+                    if sys.stderr is not None:
+                        print(traceback_text or details, file=sys.stderr, flush=True)
+                update_transmit_button()
+
+            elif kind == "tx_worker_error":
+                details = safe_error_text(
+                    str(event.get("text") or "A background audio worker failed."),
+                    1_000,
+                )
+                traceback_text = str(event.get("traceback") or "").strip()
+                fatal = bool(event.get("fatal"))
+                if fatal:
+                    tx_terminal_error_message = f"Transmission error: {details}"
+                    tx_status_var.set(tx_terminal_error_message)
+                    transmitter.stop()
+                log_path = write_diagnostic_text(
+                    str(event.get("stage") or "background-worker"),
+                    traceback_text or details,
+                    filename="application-errors.log",
+                )
+                dialog_text = f"{details}\n\nMultiV encountered a background audio error."
+                if log_path is not None:
+                    dialog_text += f"\n\nFull details were saved to:\n{log_path}"
+                try:
+                    messagebox.showerror("MultiV error", dialog_text, parent=root)
+                except Exception:
+                    if sys.stderr is not None:
+                        print(traceback_text or details, file=sys.stderr, flush=True)
                 update_transmit_button()
 
             elif kind == "tx_icecast_state":
@@ -5561,8 +5616,6 @@ def build_app() -> None:
                 )
                 if not auth_enabled:
                     auth_status_var.set(details)
-
-        root.after(250, drain_events)
 
     def periodic_station_refresh() -> None:
         if discord_authenticated:

@@ -417,6 +417,7 @@ class FreeDVRadeEncoder:
         samples: np.ndarray,
         *,
         wait_for_space: bool = False,
+        cancel_event: threading.Event | None = None,
     ) -> None:
         source = np.asarray(samples, dtype=np.float32).reshape(-1)
         if source.size == 0:
@@ -442,7 +443,11 @@ class FreeDVRadeEncoder:
                     32767,
                 ).astype("<i2", copy=False)
                 if wait_for_space:
-                    while self._accepting and self._process.poll() is None:
+                    while (
+                        self._accepting
+                        and self._process.poll() is None
+                        and not (cancel_event is not None and cancel_event.is_set())
+                    ):
                         try:
                             self._input_queue.put(pcm.tobytes(), timeout=0.25)
                             break

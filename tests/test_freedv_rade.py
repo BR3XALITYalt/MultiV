@@ -1,4 +1,6 @@
 import io
+import queue
+import threading
 import unittest
 from unittest import mock
 
@@ -9,6 +11,7 @@ from freedv_rade import (
     RADE_CHANNEL_BANDWIDTH_HZ,
     RADE_INPUT_FRAME_SAMPLES,
     RADE_MODEM_SAMPLE_RATE,
+    FreeDVRadeEncoder,
     RADE_PREROLL_FRAMES,
     RADE_SPEECH_SAMPLE_RATE,
     StreamingDecimator3,
@@ -67,6 +70,53 @@ class FreeDVRadePipelineTests(unittest.TestCase):
         ]
         actual = np.concatenate(blocks)
         np.testing.assert_allclose(actual, expected, atol=2e-6)
+
+    def test_feed_releases_input_lock_when_stop_cancels_queue_wait(self):
+        encoder = object.__new__(FreeDVRadeEncoder)
+        encoder._input_lock = threading.Lock()
+        encoder._accepting = True
+        encoder._process = mock.Mock()
+        encoder._process.poll.return_value = None
+        encoder._decimator = mock.Mock()
+        encoder._decimator.process.return_value = np.ones(
+            RADE_INPUT_FRAME_SAMPLES,
+            dtype=np.float32,
+        )
+        encoder._speech_buffer = np.empty(0, dtype=np.float32)
+        entered_put = threading.Event()
+
+        class SignallingQueue(queue.Queue):
+            def put(self, item, block=True, timeout=None):
+                if timeout is not None:
+                    entered_put.set()
+                return super().put(item, block=block, timeout=timeout)
+
+        encoder._input_queue = SignallingQueue(maxsize=1)
+        encoder._input_queue.put_nowait(b"already queued")
+        cancel_event = threading.Event()
+        errors = []
+
+        def feed():
+            try:
+                encoder.feed(
+                    np.ones(480, dtype=np.float32),
+                    wait_for_space=True,
+                    cancel_event=cancel_event,
+                )
+            except Exception as exc:
+                errors.append(exc)
+
+        worker = threading.Thread(target=feed, daemon=True)
+        worker.start()
+        self.assertTrue(entered_put.wait(1))
+        cancel_event.set()
+        worker.join(timeout=1)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(len(errors), 1)
+        self.assertRegex(str(errors[0]), "stopped while queuing audio")
+        self.assertTrue(encoder._input_lock.acquire(blocking=False))
+        encoder._input_lock.release()
 
     def test_read_exact_handles_short_reads(self):
         class ShortReader(io.BytesIO):

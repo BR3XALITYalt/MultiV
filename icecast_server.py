@@ -67,6 +67,7 @@ class EmbeddedIcecastServer:
         audio_format: str = "mp3",
         bitrate_kbps: int = 128,
         events: Any = None,
+        on_activity: Any = None,
     ) -> None:
         self.host = str(host or "0.0.0.0").strip()
         self.port = int(port)
@@ -92,6 +93,7 @@ class EmbeddedIcecastServer:
             if self.audio_format == "ogg_opus" and self.bitrate_kbps < 48:
                 raise ValueError("Ogg Opus bitrate must be at least 48 kbps.")
         self.events = events
+        self.on_activity = on_activity
         if not 1 <= self.port <= 65535:
             raise ValueError("Embedded Icecast port must be between 1 and 65535.")
         if len(self.mount) > 200 or any(c.isspace() or ord(c) < 32 for c in self.mount):
@@ -184,6 +186,8 @@ class EmbeddedIcecastServer:
                             break
                         self.wfile.write(packet)
                         self.wfile.flush()
+                        if callable(owner.on_activity):
+                            owner.on_activity()
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     pass
                 finally:

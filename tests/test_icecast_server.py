@@ -59,6 +59,35 @@ class EmbeddedIcecastServerTests(unittest.TestCase):
         finally:
             blocked.set()
 
+    def test_activity_is_reported_only_after_listener_receives_stream_packet(self):
+        activity = threading.Event()
+        server = self.make_server(on_activity=activity.set)
+        server.start()
+        connection = None
+        try:
+            connection = socket.create_connection(
+                ("127.0.0.1", server.port),
+                timeout=2,
+            )
+            connection.settimeout(2)
+            connection.sendall(
+                b"GET /station.mp3 HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n"
+            )
+            response = bytearray()
+            while b"\\r\\n\\r\\n" not in response:
+                response.extend(connection.recv(4096))
+            self.assertFalse(activity.is_set())
+            server.publish(b"encoded-stream-packet")
+            received = bytearray(response)
+            while b"encoded-stream-packet" not in received:
+                received.extend(connection.recv(4096))
+            self.assertTrue(activity.wait(1))
+            self.assertIn(b"encoded-stream-packet", received)
+        finally:
+            if connection is not None:
+                connection.close()
+            server.stop()
+
     def test_server_starts_and_stops_http_listener(self):
         server = self.make_server()
         server.start()

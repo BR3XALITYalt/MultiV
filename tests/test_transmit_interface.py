@@ -31,6 +31,40 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIn("Desktop audio loopback is unavailable with DRM", self.source)
         self.assertIn('"DRM": "DRM digital radio mode."', self.source)
 
+    def test_drain_events_reschedules_before_processing_queued_events(self):
+        drain_events = next(
+            node for node in ast.walk(self.tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "drain_events"
+        )
+        after_calls = [
+            node for node in ast.walk(drain_events)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "after"
+        ]
+        loops = [
+            node for node in ast.walk(drain_events)
+            if isinstance(node, ast.While)
+        ]
+        self.assertTrue(after_calls)
+        self.assertTrue(loops)
+        self.assertLess(min(node.lineno for node in after_calls), min(node.lineno for node in loops))
+
+    def test_txity_status_is_scoped_to_the_active_txity_output(self):
+        apply_status = next(
+            node for node in ast.walk(self.tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "apply_status"
+        )
+        source = ast.get_source_segment(self.source, apply_status)
+        self.assertIn('active_request.get("txity_enabled", True)', source)
+        self.assertIn('not live_reconfigure_state["stopping"]', source)
+
+    def test_worker_errors_write_diagnostics_and_show_native_dialogs(self):
+        self.assertIn('filename="application-errors.log"', self.source)
+        self.assertIn('messagebox.showerror("MultiV error"', self.source)
+        self.assertIn('elif kind == "tx_worker_error":', self.source)
+        self.assertIn('elif kind == "tx_error":', self.source)
+
     def test_drain_events_declares_frequency_retry_context_nonlocal(self):
         drain_events = next(
             node

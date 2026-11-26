@@ -1146,7 +1146,7 @@ class TxityTransmitter:
         def announce_transmission_active(status_text: str) -> None:
             nonlocal transmission_announced
             with transmission_announcement_lock:
-                if transmission_announced:
+                if transmission_announced or self._stop_event.is_set():
                     return
                 transmission_announced = True
                 with self._lock:
@@ -1236,13 +1236,16 @@ class TxityTransmitter:
                     pcm,
                     wait_for_space=wait_for_space,
                 )
-                announce_transmission_active("Icecast audio output is active.")
             if rade_encoder is not None:
                 if playlist_info is not None:
                     with rade_playlist_info_lock:
                         rade_playlist_info = playlist_info
                 if pcm.size:
-                    rade_encoder.feed(pcm, wait_for_space=wait_for_space)
+                    rade_encoder.feed(
+                        pcm,
+                        wait_for_space=wait_for_space,
+                        cancel_event=self._stop_event,
+                    )
                 return
 
             if pcm.size and nfm_modulator is not None:
@@ -1523,6 +1526,9 @@ class TxityTransmitter:
                                 audio_format=str(icecast_server_settings.get("audio_format") or "ogg_opus"),
                                 bitrate_kbps=int(icecast_server_settings.get("bitrate_kbps", icecast_bitrate_kbps)),
                                 events=self.events,
+                                on_activity=lambda: announce_transmission_active(
+                                    "Transmission output is active."
+                                ),
                             )
                         icecast_broadcaster = IcecastBroadcaster(
                             icecast_destinations,
@@ -1532,6 +1538,10 @@ class TxityTransmitter:
                             events=self.events,
                             sample_rate=SAMPLE_RATE_HZ,
                             local_server=local_icecast_server,
+                            on_activity=lambda: announce_transmission_active(
+                                "Transmission output is active."
+                            ),
+                            fatal_on_encoder_failure=not txity_enabled,
                         )
                         icecast_broadcaster.start()
                         if (
@@ -2254,9 +2264,12 @@ class TxityTransmitter:
             if rade_encoder is not None:
                 if input_stream is not None:
                     try:
-                        input_stream.stop()
+                        input_stream.abort()
                     except Exception:
-                        pass
+                        try:
+                            input_stream.stop()
+                        except Exception:
+                            pass
                     try:
                         input_stream.close()
                     except Exception:
@@ -2265,7 +2278,10 @@ class TxityTransmitter:
 
                 if loopback_stream is not None:
                     try:
-                        if loopback_stream.is_active():
+                        abort = getattr(loopback_stream, "abort", None)
+                        if callable(abort):
+                            abort()
+                        elif loopback_stream.is_active():
                             loopback_stream.stop_stream()
                     except Exception:
                         pass

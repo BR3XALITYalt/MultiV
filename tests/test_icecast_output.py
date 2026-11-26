@@ -1,5 +1,6 @@
 import base64
 import queue
+import threading
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -191,7 +192,63 @@ class IcecastDestinationTests(unittest.TestCase):
         self.assertEqual(destination.packets.get_nowait(), b"second")
         self.assertEqual(destination.packets.get_nowait(), b"third")
 
-    def test_encoded_packet_is_fanned_out_to_every_destination(self):
+    def test_destination_activity_is_reported_only_after_successful_packet_send(self):
+        events = queue.Queue()
+        destination = _Destination(
+            normalize_icecast_destination({
+                "url": "http://radio.example/live",
+                "password": "secret",
+            }),
+            events,
+            "MultiV",
+            "",
+        )
+        activity = mock.Mock()
+        destination.on_activity = activity
+        connection = FakeSocket()
+        destination.connect = lambda: connection
+
+        def send_packet(payload):
+            connection.sent.extend(payload)
+            destination.stop_event.set()
+
+        connection.sendall = send_packet
+
+        def emit_and_queue(state, detail=""):
+            events.put({"kind": "test-state", "state": state})
+            if state == "Connected":
+                destination.packets.put_nowait(b"encoded-audio")
+        destination.emit = emit_and_queue
+
+        self.assertEqual(activity.call_count, 0)
+        worker = threading.Thread(target=destination.run, daemon=True)
+        worker.start()
+        worker.join(timeout=2.0)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(activity.call_count, 1)
+        self.assertIn(b"encoded-audio", connection.sent)
+
+    def test_encoder_pool_failure_is_reported_once(self):
+        events = queue.Queue()
+        broadcaster = IcecastBroadcaster(
+            [{"url": "http://radio.example/live", "password": "secret"}],
+            events=events,
+            fatal_on_encoder_failure=True,
+        )
+        for group in broadcaster._groups:
+            group.error = "MP3 encoder failed"
+            group.traceback_text = "RuntimeError: encoder failed"
+        broadcaster._report_encoder_failure()
+        broadcaster._report_encoder_failure()
+
+        event = events.get_nowait()
+        self.assertEqual(event["kind"], "tx_worker_error")
+        self.assertTrue(event["fatal"])
+        self.assertEqual(event["traceback"], "RuntimeError: encoder failed")
+        self.assertTrue(events.empty())
+
+    def test_encoded_packet_is_fanned_out_to_every_destination):
         broadcaster = IcecastBroadcaster(
             [
                 {"url": "http://radio-one.example/live", "password": "one"},
