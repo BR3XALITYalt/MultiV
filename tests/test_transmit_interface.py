@@ -12,6 +12,13 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         cls.source = MAIN_FILE.read_text(encoding="utf-8")
         cls.tree = ast.parse(cls.source)
 
+    def test_transmitter_status_recovers_from_stale_startup_text(self):
+        self.assertIn("if transmitter.ptt_sent:", self.source)
+        self.assertIn("TXITY PTT is active. Transmission is underway.", self.source)
+        transmitter_source = (MAIN_FILE.parent / "transmitter.py").read_text(encoding="utf-8")
+        self.assertIn('state": "ptt_off_requested"', transmitter_source)
+        self.assertIn("def ptt_sent(self)", transmitter_source)
+
     def test_connection_status_uses_plain_connected_label(self):
         client_source = (MAIN_FILE.parent / "txity_client.py").read_text(encoding="utf-8")
         self.assertNotIn("receiving live TXITY status", client_source)
