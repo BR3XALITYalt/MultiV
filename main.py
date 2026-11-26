@@ -5516,6 +5516,16 @@ def build_app() -> None:
                 if not auth_enabled:
                     auth_status_var.set(details)
 
+        # A status snapshot can lag behind the transmitter worker. If PTT has
+        # already been requested, never leave the UI displaying startup text.
+        if transmitter.ptt_sent:
+            current_status = tx_status_var.get()
+            if current_status.startswith((
+                "Preparing the TXITY transmission connection",
+                "Waiting for TXITY to confirm the transmission request",
+            )):
+                tx_status_var.set("TXITY PTT is active. Transmission is underway.")
+
         root.after(250, drain_events)
 
     def periodic_station_refresh() -> None:
