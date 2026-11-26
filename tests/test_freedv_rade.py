@@ -74,6 +74,9 @@ class FreeDVRadePipelineTests(unittest.TestCase):
     def test_feed_releases_input_lock_when_stop_cancels_queue_wait(self):
         encoder = object.__new__(FreeDVRadeEncoder)
         encoder._input_lock = threading.Lock()
+        encoder._error_lock = threading.Lock()
+        encoder._error_text = ""
+        encoder._stderr_lines = []
         encoder._accepting = True
         encoder._process = mock.Mock()
         encoder._process.poll.return_value = None
