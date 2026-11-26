@@ -97,8 +97,8 @@ class MultiVThemeTests(unittest.TestCase):
     def test_mouse_wheel_uses_pixel_based_eased_scrolling(self):
         source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
         self.assertIn("SCROLL_PIXELS_PER_NOTCH = 48", source)
-        self.assertIn("SCROLL_EASE_FACTOR = 0.32", source)
-        self.assertIn("SCROLL_MAX_STEP_PIXELS = 36", source)
+        self.assertIn("SCROLL_EASE_FACTOR = 0.72", source)
+        self.assertIn("SCROLL_MAX_STEP_PIXELS = 72", source)
         self.assertIn('canvas.yview_scroll(units, "units")', source)
         self.assertNotIn("canvas.yview_scroll(step, \"units\")", source)
 

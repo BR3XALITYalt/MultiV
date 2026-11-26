@@ -565,8 +565,8 @@ def build_app() -> None:
     SCROLL_PIXELS_PER_NOTCH = 48
     SCROLL_UNIT_PIXELS = 1
     SCROLL_FRAME_INTERVAL_MS = 16
-    SCROLL_EASE_FACTOR = 0.32
-    SCROLL_MAX_STEP_PIXELS = 36
+    SCROLL_EASE_FACTOR = 0.72
+    SCROLL_MAX_STEP_PIXELS = 72
     scroll_canvases: list[ttk.Canvas] = []
     pending_scroll = {
         "pixels": 0.0,
