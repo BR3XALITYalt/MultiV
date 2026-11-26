@@ -1023,11 +1023,7 @@ class TxityTransmitter:
             self.events.put({
                 "kind": "tx_state",
                 "state": "starting",
-                "text": (
-                    "Preparing connections..."
-                    if selected_txity_enabled
-                    else "Preparing Icecast output..."
-                ),
+                "text": "Preparing connections...",
             })
             self._thread.start()
 
