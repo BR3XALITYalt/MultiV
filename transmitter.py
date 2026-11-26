@@ -853,6 +853,19 @@ class TxityTransmitter:
             return self._starting or self._active
 
     @property
+    def ptt_sent(self) -> bool:
+        """Return whether TXITY PTT is currently requested by this worker."""
+        with self._lock:
+            return bool(self._ptt_sent and not self._stop_event.is_set())
+
+    @property
+    def worker_alive(self) -> bool:
+        """Report whether the transmission worker is still running."""
+        with self._lock:
+            thread = self._thread
+        return bool(thread is not None and thread.is_alive())
+
+    @property
     def server_rejection_ready(self) -> bool:
         """Ignore stale negative status snapshots immediately after sending PTT."""
         with self._lock:
