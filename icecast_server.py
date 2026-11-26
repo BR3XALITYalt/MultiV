@@ -243,11 +243,26 @@ class EmbeddedIcecastServer:
             self._listeners.clear()
         for listener in listeners:
             listener.close()
-        server.shutdown()
+        # shutdown() waits for serve_forever() to exit. If stop races server
+        # startup or the serving thread has failed, calling it inline can hang
+        # the transmitter's entire cleanup path.
+        shutdown_thread = threading.Thread(
+            target=server.shutdown,
+            name="multiv-icecast-shutdown",
+            daemon=True,
+        )
+        shutdown_thread.start()
+        shutdown_thread.join(timeout=1.0)
+        if shutdown_thread.is_alive():
+            self._emit(
+                "Shutdown timeout",
+                "Icecast server did not acknowledge shutdown promptly.",
+            )
+
         server.server_close()
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
-            thread.join(timeout=3.0)
+            thread.join(timeout=1.5)
         self._server = None
         self._thread = None
         self._started.clear()
