@@ -1,5 +1,6 @@
 import queue
 import threading
+import time
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -44,6 +45,27 @@ from transmitter import (
 
 
 class TransmitterProtocolTests(unittest.TestCase):
+
+    def test_control_send_timeout_does_not_block_transmitter(self):
+        release = threading.Event()
+
+        class BlockedClient:
+            def send_control_message(self, _message):
+                release.wait(1.0)
+
+        from transmitter import send_control_message_bounded
+
+        started = time.monotonic()
+        try:
+            with self.assertRaises(TimeoutError):
+                send_control_message_bounded(
+                    BlockedClient(),
+                    {"type": "ptt", "ptt": False},
+                    timeout=0.15,
+                )
+            self.assertLess(time.monotonic() - started, 0.5)
+        finally:
+            release.set()
 
     def test_early_worker_failure_cannot_leave_transmitter_busy(self):
         events = queue.Queue()
