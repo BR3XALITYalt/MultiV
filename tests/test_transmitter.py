@@ -60,6 +60,16 @@ class TransmitterProtocolTests(unittest.TestCase):
         self.assertEqual(queued[0]["kind"], "tx_error")
         self.assertEqual(queued[1]["state"], "stopped")
 
+    def test_ptt_sent_reflects_worker_state_and_stop_request(self):
+        transmitter = TxityTransmitter(object(), queue.Queue())
+        transmitter._active = True
+        transmitter._ptt_sent = True
+        self.assertTrue(transmitter.ptt_sent)
+
+        transmitter.stop()
+        self.assertFalse(transmitter.ptt_sent)
+        self.assertTrue(transmitter.is_busy)
+
     def test_icecast_only_start_does_not_require_txity_credentials(self):
         events = queue.Queue()
         transmitter = TxityTransmitter(object(), events)
