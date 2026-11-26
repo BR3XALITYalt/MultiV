@@ -116,6 +116,52 @@ def build_app() -> None:
     theme_mode = "dark"
 
     root = tk.Tk()
+
+    def show_uncaught_error(stage: str, error: BaseException) -> None:
+        """Persist an uncaught exception and show its details in a native dialog."""
+        details = format_exception_details(error)
+        log_path = write_diagnostic(
+            stage,
+            error,
+            filename="application-errors.log",
+        )
+        summary = (
+            f"{type(error).__name__}: {safe_error_text(error, 1_000)}"
+            "\n\nMultiV encountered an unexpected error."
+        )
+        if log_path is not None:
+            summary += f"\n\nFull details were saved to:\n{log_path}"
+        try:
+            messagebox.showerror("MultiV error", summary, parent=root)
+        except Exception:
+            try:
+                messagebox.showerror("MultiV error", summary)
+            except Exception:
+                if sys.stderr is not None:
+                    print(details, file=sys.stderr, flush=True)
+
+    def report_tk_callback_exception(exc_type, exc_value, exc_traceback) -> None:
+        error = exc_value.with_traceback(exc_traceback)
+        show_uncaught_error("tk-callback", error)
+
+    def report_thread_exception(args) -> None:
+        error = args.exc_value.with_traceback(args.exc_traceback)
+
+        def display() -> None:
+            show_uncaught_error(
+                f"thread-{args.thread.name if args.thread else 'unknown'}",
+                error,
+            )
+
+        try:
+            root.after(0, display)
+        except Exception:
+            if sys.stderr is not None:
+                print(format_exception_details(error), file=sys.stderr, flush=True)
+
+    root.report_callback_exception = report_tk_callback_exception
+    threading.excepthook = report_thread_exception
+
     theme_style = ttk.Style()
     register_ttkbootstrap_themes()
     try:
