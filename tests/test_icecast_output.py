@@ -248,7 +248,7 @@ class IcecastDestinationTests(unittest.TestCase):
         self.assertEqual(event["traceback"], "RuntimeError: encoder failed")
         self.assertTrue(events.empty())
 
-    def test_encoded_packet_is_fanned_out_to_every_destination):
+    def test_encoded_packet_is_fanned_out_to_every_destination(self):
         broadcaster = IcecastBroadcaster(
             [
                 {"url": "http://radio-one.example/live", "password": "one"},
