@@ -307,6 +307,7 @@ def build_app() -> None:
     playlist_watch_signature = tx_playlist_signature
     playlist_watch_stop = threading.Event()
     playlist_ui_refresh_callback: Any = None
+    icecast_ui_refresh_callback: Any = None
     tx_playlist_shuffle_var = tk.BooleanVar(root, saved_bool("playlist_shuffle", False))
     tx_playlist_loop_var = tk.BooleanVar(root, saved_bool("playlist_loop", False))
     tx_playlist_status_var = tk.StringVar(
@@ -2159,7 +2160,7 @@ def build_app() -> None:
         update_transmit_button()
 
     def show_transmit(parent: ttk.Frame) -> None:
-        nonlocal tx_transmit_button, playlist_ui_refresh_callback
+        nonlocal tx_transmit_button, playlist_ui_refresh_callback, icecast_ui_refresh_callback
 
         page, _canvas = create_scrollable_page(parent)
 
@@ -2585,6 +2586,8 @@ def build_app() -> None:
                 )
             else:
                 tx_icecast_status_var.set("No Icecast destinations enabled.")
+
+        icecast_ui_refresh_callback = refresh_icecast_list
 
         def edit_icecast_destination(index: int | None = None) -> None:
             existing = (
@@ -5365,7 +5368,8 @@ def build_app() -> None:
                 )
                 if destination_name != "Icecast":
                     tx_icecast_states[destination_name] = destination_state
-                    refresh_icecast_list()
+                    if icecast_ui_refresh_callback is not None:
+                        icecast_ui_refresh_callback()
                 tx_icecast_status_var.set(destination_text)
 
             elif kind == "tx_audio_warning":
