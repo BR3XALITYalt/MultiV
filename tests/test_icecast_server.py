@@ -71,10 +71,10 @@ class EmbeddedIcecastServerTests(unittest.TestCase):
             )
             connection.settimeout(2)
             connection.sendall(
-                b"GET /station.mp3 HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n"
+                b"GET /station.mp3 HTTP/1.0\r\nHost: localhost\r\n\r\n"
             )
             response = bytearray()
-            while b"\\r\\n\\r\\n" not in response:
+            while b"\r\n\r\n" not in response:
                 response.extend(connection.recv(4096))
             self.assertFalse(activity.is_set())
             server.publish(b"encoded-stream-packet")
