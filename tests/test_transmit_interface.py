@@ -380,5 +380,42 @@ class TransmitInterfaceRegressionTests(unittest.TestCase):
         self.assertIn('return app_data_path("transmit-settings.json")', self.source)
 
 
+    def test_icecast_state_events_refresh_list_through_registered_callback(self):
+        drain_events = next(
+            node for node in ast.walk(self.tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "drain_events"
+        )
+        drain_source = ast.get_source_segment(self.source, drain_events)
+        self.assertIn("if icecast_ui_refresh_callback is not None:", drain_source)
+        self.assertIn("icecast_ui_refresh_callback()", drain_source)
+        self.assertNotIn("refresh_icecast_list()", drain_source)
+
+        show_transmit = next(
+            node for node in ast.walk(self.tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "show_transmit"
+        )
+        nonlocal_names = {
+            name
+            for node in ast.walk(show_transmit)
+            if isinstance(node, ast.Nonlocal)
+            for name in node.names
+        }
+        self.assertIn("icecast_ui_refresh_callback", nonlocal_names)
+        self.assertTrue(
+            any(
+                isinstance(node, ast.Assign)
+                and any(
+                    isinstance(target, ast.Name)
+                    and target.id == "icecast_ui_refresh_callback"
+                    for target in node.targets
+                )
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "refresh_icecast_list"
+                for node in ast.walk(show_transmit)
+            )
+        )
+
+
+
 if __name__ == "__main__":
     unittest.main()
