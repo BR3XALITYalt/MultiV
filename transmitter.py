@@ -2278,9 +2278,11 @@ class TxityTransmitter:
                         time.sleep(AUDIO_FRAME_INTERVAL_SECONDS)
 
             if ptt_sent:
+                ptt_off_sent = False
                 for label, target_client, _endpoint_config in control_endpoints:
                     try:
                         target_client.send_control_message({"type": "ptt", "ptt": False})
+                        ptt_off_sent = True
                         self.events.put({
                             "kind": "tx_log",
                             "text": f"Sent {label} PTT OFF request.",
@@ -2290,6 +2292,15 @@ class TxityTransmitter:
                             "kind": "tx_log",
                             "text": f"Could not send {label} PTT OFF request: {_safe_error(exc)}",
                         })
+                self.events.put({
+                    "kind": "tx_state",
+                    "state": "ptt_off_requested",
+                    "text": (
+                        "PTT OFF request sent. Finishing transmitter cleanup..."
+                        if ptt_off_sent
+                        else "PTT OFF request failed. Finishing transmitter cleanup..."
+                    ),
+                })
 
             if drm_stop_path is not None:
                 try:
