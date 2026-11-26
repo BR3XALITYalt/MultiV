@@ -2,6 +2,7 @@ import queue
 import threading
 import time
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
@@ -91,6 +92,13 @@ class TransmitterProtocolTests(unittest.TestCase):
         transmitter.stop()
         self.assertFalse(transmitter.ptt_sent)
         self.assertTrue(transmitter.is_busy)
+
+    def test_icecast_pcm_marks_transmission_active_before_txity_ptt(self):
+        source = (Path(__file__).resolve().parents[1] / "transmitter.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('announce_transmission_active("Icecast audio output is active.")', source)
+        self.assertIn("icecast_broadcaster.send_pcm(", source)
 
     def test_icecast_only_start_does_not_require_txity_credentials(self):
         events = queue.Queue()
