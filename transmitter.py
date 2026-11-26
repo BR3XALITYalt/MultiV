@@ -1135,12 +1135,28 @@ class TxityTransmitter:
         control_disconnect_reported = False
         last_control_generation: int | None = None
         transmission_announced = False
+        transmission_announcement_lock = threading.Lock()
         audio_reconnect_attempt = 0
         pending_frame: Any = None
         carry = bytearray()
         last_callback_warning = 0.0
         audio_frames_sent = 0
         last_audio_progress_at = time.monotonic()
+
+        def announce_transmission_active(status_text: str) -> None:
+            nonlocal transmission_announced
+            with transmission_announcement_lock:
+                if transmission_announced:
+                    return
+                transmission_announced = True
+                with self._lock:
+                    self._active = True
+                    self._starting = False
+                self.events.put({
+                    "kind": "tx_state",
+                    "state": "transmitting",
+                    "text": status_text,
+                })
 
         def modulate_nfm_samples(samples):
             if nfm_modulator is None:
@@ -1220,6 +1236,7 @@ class TxityTransmitter:
                     pcm,
                     wait_for_space=wait_for_space,
                 )
+                announce_transmission_active("Icecast audio output is active.")
             if rade_encoder is not None:
                 if playlist_info is not None:
                     with rade_playlist_info_lock:
@@ -1660,15 +1677,7 @@ class TxityTransmitter:
                     self.client, "control_generation", None
                 )
             else:
-                with self._lock:
-                    self._active = True
-                    self._starting = False
-                self.events.put({
-                    "kind": "tx_state",
-                    "state": "transmitting",
-                    "text": "Icecast output is active.",
-                })
-                transmission_announced = True
+                announce_transmission_active("Icecast audio output is active.")
 
             if needs_audio:
                 if txity_enabled:
@@ -2030,16 +2039,11 @@ class TxityTransmitter:
                             self._active = True
                             self._starting = False
                         if not transmission_announced:
-                            self.events.put({
-                                "kind": "tx_state",
-                                "state": "transmitting",
-                                "text": "PTT requested; waiting for TXITY status confirmation.",
-                            })
-                            transmission_announced = True
+                            announce_transmission_active("Transmission control is active.")
                         else:
                             self.events.put({
                                 "kind": "tx_log",
-                                "text": "TXITY transmission state restored.",
+                                "text": "Transmission control state restored.",
                             })
 
                 if audio_thread_error:
