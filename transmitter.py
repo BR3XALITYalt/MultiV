@@ -79,6 +79,50 @@ def reconnect_delay(attempt: int) -> float:
     )
 
 
+def send_control_message_bounded(
+    target_client: Any,
+    message: dict[str, Any],
+    *,
+    timeout: float = 2.0,
+    cancel_event: threading.Event | None = None,
+) -> None:
+    """Send a control message without letting a stalled socket wedge TX cleanup."""
+    result: queue.Queue[tuple[bool, BaseException | None]] = queue.Queue(maxsize=1)
+
+    def send() -> None:
+        try:
+            target_client.send_control_message(message)
+            result.put((True, None))
+        except BaseException as exc:
+            result.put((False, exc))
+
+    worker = threading.Thread(
+        target=send,
+        daemon=True,
+        name="transmitter-control-send",
+    )
+    worker.start()
+    deadline = time.monotonic() + max(0.1, float(timeout))
+    while True:
+        try:
+            succeeded, error = result.get_nowait()
+        except queue.Empty:
+            if cancel_event is not None and cancel_event.is_set():
+                raise InterruptedError("Transmission stopped while sending control.")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Timed out sending transmission control message.")
+            if cancel_event is not None:
+                cancel_event.wait(min(0.05, remaining))
+            else:
+                time.sleep(min(0.05, remaining))
+            continue
+        if succeeded:
+            return
+        assert error is not None
+        raise error
+
+
 def playlist_frame_wait_seconds(next_frame_deadline: float | None, now: float) -> float:
     """Return the time remaining before the next playlist packet should be sent."""
     if next_frame_deadline is None:
@@ -980,7 +1024,7 @@ class TxityTransmitter:
                 "kind": "tx_state",
                 "state": "starting",
                 "text": (
-                    "Preparing the TXITY transmission connection..."
+                    "Preparing connections..."
                     if selected_txity_enabled
                     else "Preparing Icecast output..."
                 ),
@@ -1950,7 +1994,11 @@ class TxityTransmitter:
                                         f"allowOverlapVisitors={endpoint_config.get('allowOverlapVisitors')}."
                                     ),
                                 })
-                                target_client.send_control_message(endpoint_config)
+                                send_control_message_bounded(
+                                    target_client,
+                                    endpoint_config,
+                                    cancel_event=self._stop_event,
+                                )
                             if self._stop_event.is_set():
                                 break
                             for label, target_client, _endpoint_config in control_endpoints:
@@ -1958,7 +2006,11 @@ class TxityTransmitter:
                                     "kind": "tx_log",
                                     "text": f"Sending {label} PTT ON request.",
                                 })
-                                target_client.send_control_message({"type": "ptt", "ptt": True})
+                                send_control_message_bounded(
+                                    target_client,
+                                    {"type": "ptt", "ptt": True},
+                                    cancel_event=self._stop_event,
+                                )
                         except Exception as exc:
                             control_configured = False
                             self.events.put({
@@ -2281,7 +2333,11 @@ class TxityTransmitter:
                 ptt_off_sent = False
                 for label, target_client, _endpoint_config in control_endpoints:
                     try:
-                        target_client.send_control_message({"type": "ptt", "ptt": False})
+                        send_control_message_bounded(
+                            target_client,
+                            {"type": "ptt", "ptt": False},
+                            timeout=1.5,
+                        )
                         ptt_off_sent = True
                         self.events.put({
                             "kind": "tx_log",
@@ -2296,9 +2352,9 @@ class TxityTransmitter:
                     "kind": "tx_state",
                     "state": "ptt_off_requested",
                     "text": (
-                        "PTT OFF request sent. Finishing transmitter cleanup..."
+                        "Transmission stopped. Finishing audio cleanup..."
                         if ptt_off_sent
-                        else "PTT OFF request failed. Finishing transmitter cleanup..."
+                        else "PTT OFF could not be confirmed. Finishing audio cleanup..."
                     ),
                 })
 
